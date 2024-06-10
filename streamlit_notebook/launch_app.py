@@ -6,7 +6,7 @@ def main():
     script_directory = os.path.dirname(os.path.abspath(__file__))
 
     # Command to run the Streamlit app
-    command = f"streamlit run {os.path.join(script_directory, 'pandora_app.py')}"
+    command = f"streamlit run {os.path.join(script_directory, 'main.py')}"
 
     # Execute the command
     subprocess.run(command, shell=True)
