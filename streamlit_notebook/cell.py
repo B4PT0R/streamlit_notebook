@@ -78,7 +78,6 @@ class Cell:
         if self.has_run:
             c2.write("✅")
 
-
     def switch_auto_run(self):
         self.auto_run=not self.auto_run
 
@@ -90,7 +89,7 @@ class Cell:
             del state.cells[self.key]
 
     def run(self):
-        pass
+        raise NotImplementedError("Subclasses of Cell should implement a run method.")
             
 class CodeCell(Cell):
 
