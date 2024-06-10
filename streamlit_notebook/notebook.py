@@ -123,3 +123,4 @@ def st_notebook():
     if not 'notebook' in state:
         state.notebook=Notebook()
     state.notebook.show()
+
