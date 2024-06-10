@@ -1,7 +1,7 @@
 import streamlit as st
-from .state import state
-from .editor import editor, editor_output_parser
-from .utils import format
+from state import state
+from editor import editor, editor_output_parser
+from utils import format
 
 class Cell:
 

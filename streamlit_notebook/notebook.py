@@ -1,5 +1,5 @@
-from .state import state, init_state
-from .cell import CodeCell,MarkdownCell
+from state import state, init_state
+from cell import CodeCell,MarkdownCell
 import streamlit as st 
 import os
 
