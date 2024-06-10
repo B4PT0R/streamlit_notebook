@@ -1,1 +1,1 @@
-from notebook import st_notebook
+from .notebook import st_notebook
