@@ -2,6 +2,10 @@ import subprocess
 import os
 
 def main():
+    """
+    Runs the streamlit app by calling 'streamlit run .../main.py'
+    """
+
     # Get the directory of the current script
     script_directory = os.path.dirname(os.path.abspath(__file__))
 

@@ -11,7 +11,7 @@ def root_join(*args):
 class Notebook:
 
     """
-    A Streamlit notebook object.
+    The Streamlit notebook object.
     """
 
     def __init__(self):
@@ -26,6 +26,9 @@ class Notebook:
         st.notebook=self
 
     def __getattr__(self,name):
+        """
+        Delegate attribute access to state
+        """
         if name in state:
             return state[name]
         else:
@@ -51,6 +54,9 @@ class Notebook:
             st.rerun()
     
     def sidebar(self):
+        """
+        Renders the notebook's sidebar
+        """
         with st.sidebar:
             st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
             st.divider()
@@ -74,12 +80,18 @@ class Notebook:
 
 
     def logo(self):
+        """
+        Renders the app's logo
+        """
         if state.show_logo:
             _,c,_=st.columns([40,40,40])
             c.image(root_join("app_images","st_notebook.png"),use_column_width=True)
 
 
     def control_bar(self):
+        """
+        Renders the notebooks "new code cell" and "new markdown cell" buttons
+        """
         if not state.hide_code_cells:
             c1,c2=st.columns(2)
 
@@ -92,11 +104,17 @@ class Notebook:
                 self.add_mkdwn_cell()
 
     def clear_cells(self):
+        """
+        Deletes all cells
+        """
         state.cells={}
         state.current_cell_key=0
         state.rerun=True
 
     def run_all_cells(self):
+        """
+        (Re)Run all the cells
+        """
         for cell in state.cells.values():
             cell.has_run=False
             cell.run()
@@ -120,6 +138,9 @@ class Notebook:
 
 
 def st_notebook():
+    """
+    Initializes and renders the notebook
+    """
     if not 'notebook' in state:
         state.notebook=Notebook()
     state.notebook.show()

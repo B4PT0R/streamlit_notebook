@@ -21,6 +21,9 @@ class Cell:
         self.type="code"
 
     def show(self):
+        """
+        Renders the cell's layout
+        """
         self.has_run=False
         self.container=st.container()
         self.output_area=st.empty()
@@ -46,10 +49,16 @@ class Cell:
 
     @property
     def rank(self):
+        """
+        Gets the current rank of the cell in the cells dict
+        """
         return list(state.cells.keys()).index(self.key)
 
 
     def rerank(self,rank):
+        """
+        Moves the cell to a new rank
+        """
         if 0<=rank<len(state.cells) and not rank==self.rank:
             keys=list(state.cells.keys())
             del keys[self.rank]
@@ -57,13 +66,22 @@ class Cell:
             state.cells={k:state.cells[k] for k in keys}
 
     def move_up(self):
+        """
+        Moves the cell up
+        """
         self.rerank(self.rank-1)
 
     def move_down(self):
+        """
+        Moves the cell down
+        """
         self.rerank(self.rank+1)
 
 
     def menu_bar(self):
+        """
+        Renders the cell's menu bar
+        """
         c1,c2,c3,_,c4,c5,c6=st.columns([7,30,30,20,5,5,5])
         c1.text(f"[{self.key}]")
         c2.toggle("Auto-Rerun",value=self.auto_rerun,on_change=self.switch_auto_rerun,key=f"cell_auto_rerun_{self.key}")
@@ -73,18 +91,24 @@ class Cell:
         c6.button("❌",on_click=self.delete,key=f"cell_close_{self.key}",use_container_width=True)
 
     def status_bar(self):
+        """
+        Renders the cell's status bar
+        """
         c1,_,c2=st.columns([15,85,5])
         c1.caption(self.type)
         if self.has_run:
             c2.write("✅")
 
-    def switch_auto_run(self):
-        self.auto_run=not self.auto_run
-
     def switch_auto_rerun(self):
+        """
+        Toggle auto_rerun attribute 
+        """
         self.auto_rerun=not self.auto_rerun
 
     def delete(self):
+        """
+        Deletes the cell
+        """
         if self.key in state.cells:
             del state.cells[self.key]
 
@@ -127,16 +151,25 @@ class CodeCell(Cell):
             self.has_run=True
     
     def switch_fragment(self):
+        """
+        Toggle 'Run as fragment' 
+        """
         self.fragment=not self.fragment
 
     @st.experimental_fragment
     def exec_as_fragment(self):
+        """
+        Executes the cell as a fragment 
+        """
         try:
             exec(self.submitted_code,globals())
         except Exception as e:
             st.exception(e)
 
     def exec(self):
+        """
+        Executes the cell normally
+        """
         try:
             exec(self.submitted_code,globals())
         except Exception as e:
@@ -150,6 +183,9 @@ class MarkdownCell(Cell):
         self.type="markdown"
 
     def run(self):
+        """
+        Runs the markdown cell (renders it)
+        """
         if not self.has_run and self.submitted_code:
             self.output=self.output_area.container()
             with self.output:
@@ -157,6 +193,10 @@ class MarkdownCell(Cell):
             self.has_run=True
 
     def exec(self):
+        """
+        Executes the markdown cell by running a st.markdown command with the content
+        The content is preformatted with evaluated expressions enclosed in <<expr>> tags.
+        """
         try:
             formatted_code=format(self.submitted_code,**state,**globals())
             code=f'st.markdown(r"""{formatted_code}""")'

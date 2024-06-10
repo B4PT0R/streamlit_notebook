@@ -1,6 +1,12 @@
 from code_editor import code_editor
 
 class editor_output_parser:
+    """
+    Class used to parse the raw output of the editor widget.
+    Keeps track of outputs ids
+    returns a pair (event, content) if a new output is received
+    otherwise event is None
+    """
     def __init__(self):
         self.last_id=None
 
@@ -18,7 +24,12 @@ class editor_output_parser:
 
 
 def editor(*args,**kwargs):
+    """
+    Custom code editor widget used in cells
+    Based on streamlit-code-editor
+    """
 
+    # setup the run button
     buttons=[
         {
             "name": "Run",
@@ -37,7 +48,7 @@ def editor(*args,**kwargs):
         }
     ]
 
-
+    # default params
     params=dict(
         theme='default',
         buttons=buttons,

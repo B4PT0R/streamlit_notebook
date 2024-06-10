@@ -1,3 +1,7 @@
+"""
+Main streamlit script of the notebook app
+"""
+
 import streamlit as st
 from streamlit_notebook import st_notebook
 
