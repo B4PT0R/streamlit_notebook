@@ -50,7 +50,7 @@ and run it using `streamlit run notebook.py` from the terminal.
 
 The `st_notebook()` function imported from the package is a complete app in itself rather than a single component, and only serves as an entry point.
 
-The app is also available online [here]()
+The app is also available online [here](https://st-notebook.streamlit.app/)
 
 ## Contribution
 
