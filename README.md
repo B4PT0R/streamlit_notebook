@@ -23,10 +23,10 @@ I hope users already familiar with Streamlit will have great fun with this noteb
 
 ## Screenshot
 
-![In notebook mode](./streamlit_notebook/app_images/st_notebook_demo.jpg)
+![In notebook mode](./streamlit_notebook/app_images/st_notebook_demo.png)
 
 
-![In app mode](./streamlit_notebook/app_images/st_notebook_demo_2.jpg)
+![In app mode](./streamlit_notebook/app_images/st_notebook_demo_2.png)
 
 ## Installation
 

@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit.errors import DuplicateWidgetID
 from .state import state
 from .editor import editor, editor_output_parser
 from .utils import format
@@ -115,6 +116,9 @@ class Cell:
         """
         if self.key in state.cells:
             del state.cells[self.key]
+
+    def submit(self):
+        self.submitted_code=self.code
 
     def run(self):
         """

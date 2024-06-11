@@ -67,6 +67,8 @@ class Notebook:
             if st.button("Upload notebook",use_container_width=True,key="button_upload_notebook"):
                 self.upload_notebook()
             self.download_notebook()
+            if st.button("Demo notebooks",use_container_width=True,key="button_load_demo"):
+                self.load_demo()
             st.divider()
             def on_change():
                 state.hide_code_cells=not state.hide_code_cells
@@ -85,8 +87,6 @@ class Notebook:
                 self.run_all_cells()
             st.button("Run all cells",on_click=on_click,use_container_width=True,key="button_run_all_cells")       
 
-
-
     def logo(self):
         """
         Renders the app's logo
@@ -94,7 +94,6 @@ class Notebook:
         if state.show_logo:
             _,c,_=st.columns([40,40,40])
             c.image(root_join("app_images","st_notebook.png"),use_column_width=True)
-
 
     def control_bar(self):
         """
@@ -121,13 +120,18 @@ class Notebook:
         state.cells={}
         state.rerun=True
 
+    def submit_all_cells(self):
+        """
+        Submit all cells
+        """
+        for cell in state.cells.values():
+            cell.submit()
+
     def run_all_cells(self):
         """
         (Re)Run all the cells
         """
         for cell in state.cells.values():
-            cell.has_run=False
-            cell.submitted_code=cell.code
             cell.run()
 
     def gen_cell_key(self):
@@ -151,6 +155,15 @@ class Notebook:
         if key in state.cells:
             state.cells[key].delete()
 
+    def load_demo(self):
+        demo_folder=root_join("demo_notebooks")
+        demos=list(os.listdir(demo_folder))
+        def on_change():
+            if state.demo_choice:
+                with open(os.path.join(demo_folder,state.demo_choice)) as f:
+                    self.from_json(f.read())
+        st.selectbox("Choose a demo notebook.",options=demos,index=None,on_change=on_change,key="demo_choice")
+
     def to_json(self):
         data=dict(
             name=state.name,
@@ -163,7 +176,6 @@ class Notebook:
     
     def from_json(self,json_string):
         data=AttrDict(**json.loads(json_string))
-        st.write(data)
         state.name=data.name
         state.hide_code_cells=data.hide_code_cells
         state.show_logo=data.show_logo
@@ -172,6 +184,7 @@ class Notebook:
         for cell in data.cells.values():
             cell=AttrDict(**cell)
             state.cells[cell.key]=new_cell(cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
+        self.submit_all_cells()
         state.rerun=True
 
     def upload_notebook(self):
