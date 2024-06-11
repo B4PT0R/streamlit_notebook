@@ -1,12 +1,15 @@
 from .state import state, init_state
-from .cell import CodeCell,MarkdownCell
+from .cell import new_cell
+from .attrdict import AttrDict
 import streamlit as st 
 import os
+import json
+from io import StringIO
 
-os.environ['APP_ROOT_PATH']=os.path.dirname(os.path.abspath(__file__))
+os.environ['ROOT_PACKAGE_FOLDER']=os.path.dirname(os.path.abspath(__file__))
 
 def root_join(*args):
-    return os.path.join(os.getenv('APP_ROOT_PATH'),*args)
+    return os.path.join(os.getenv('ROOT_PACKAGE_FOLDER'),*args)
 
 class Notebook:
 
@@ -16,8 +19,8 @@ class Notebook:
 
     def __init__(self):
         init_state(
+            name="new_notebook",
             cells={},
-            current_cell_key=0,
             hide_code_cells=False,
             run_on_submit=True,
             show_logo=True,
@@ -60,6 +63,11 @@ class Notebook:
         with st.sidebar:
             st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
             st.divider()
+            state.name=st.text_input("Notebook title:",value=state.name)
+            if st.button("Upload notebook",use_container_width=True,key="button_upload_notebook"):
+                self.upload_notebook()
+            self.download_notebook()
+            st.divider()
             def on_change():
                 state.hide_code_cells=not state.hide_code_cells
             st.toggle("App mode",value=state.hide_code_cells,on_change=on_change, key="toggle_hide_cells")
@@ -75,7 +83,7 @@ class Notebook:
             st.button("Clear all cells",on_click=on_click,use_container_width=True,key="button_clear_cells")
             def on_click():
                 self.run_all_cells()
-            st.button("Run all cells",on_click=on_click,use_container_width=True,key="button_run_all_cells")
+            st.button("Run all cells",on_click=on_click,use_container_width=True,key="button_run_all_cells")       
 
 
 
@@ -93,22 +101,24 @@ class Notebook:
         Renders the notebooks "new code cell" and "new markdown cell" buttons
         """
         if not state.hide_code_cells:
-            c1,c2=st.columns(2)
+            c1,c2,c3=st.columns(3)
 
             code_button=c1.button("New code cell",use_container_width=True,key="new_code_cell_button")
             mkdwn_button=c2.button("New Markdown cell",use_container_width=True,key="new_mkdwn_cell_button")
+            html_button=c3.button("New HTML cell",use_container_width=True,key="new_html_cell_button")
             
             if code_button:
-                self.add_code_cell()
+                self.add_new_cell(type="code")
             if mkdwn_button:
-                self.add_mkdwn_cell()
+                self.add_new_cell(type="markdown")
+            if html_button:
+                self.add_new_cell(type="html")
 
     def clear_cells(self):
         """
         Deletes all cells
         """
         state.cells={}
-        state.current_cell_key=0
         state.rerun=True
 
     def run_all_cells(self):
@@ -117,25 +127,68 @@ class Notebook:
         """
         for cell in state.cells.values():
             cell.has_run=False
+            cell.submitted_code=cell.code
             cell.run()
 
+    def gen_cell_key(self):
+        """
+        Generates a unique key for the cell 
+        """
+        i=0
+        while i in state.cells:
+            i+=1
+        return i
 
-    def add_code_cell(self,code=""):
+    def add_new_cell(self,type="code",code="",auto_rerun=True,fragment=False):
         """
-        Adds a new code cell at the bottom of the notebook.
+        Adds a new cell of the chosen type at the bottom of the notebook
         """
-        state.cells[state.current_cell_key]=CodeCell(code,state.current_cell_key)
-        state.current_cell_key+=1
+        key=self.gen_cell_key()
+        state.cells[key]=new_cell(key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
         state.rerun=True
 
-    def add_mkdwn_cell(self,code=""):
-        """
-        Adds a new  Markdown cell at the bottom of the notebook.
-        """
-        state.cells[state.current_cell_key]=MarkdownCell(code,state.current_cell_key)
-        state.current_cell_key+=1
+    def delete_cell(self,key):
+        if key in state.cells:
+            state.cells[key].delete()
+
+    def to_json(self):
+        data=dict(
+            name=state.name,
+            hide_code_cells=state.hide_code_cells,
+            show_logo=state.show_logo,
+            run_on_submit=state.run_on_submit,
+            cells={k:state.cells[k].to_dict() for k in state.cells}
+        )
+        return json.dumps(data)
+    
+    def from_json(self,json_string):
+        data=AttrDict(**json.loads(json_string))
+        st.write(data)
+        state.name=data.name
+        state.hide_code_cells=data.hide_code_cells
+        state.show_logo=data.show_logo
+        state.run_on_submit=data.run_on_submit
+        state.cells={}
+        for cell in data.cells.values():
+            cell=AttrDict(**cell)
+            state.cells[cell.key]=new_cell(cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
         state.rerun=True
 
+    def upload_notebook(self):
+        def on_change():
+            if state.uploaded_file is not None:
+                sio=StringIO(state.uploaded_file.getvalue().decode("utf-8"))
+                self.from_json(sio.read())
+        st.file_uploader("Upload a notebook file from your local drive.",on_change=on_change,key="uploaded_file")
+
+    def download_notebook(self):
+        st.download_button(
+            label="Download notebook",
+            data=self.to_json(),
+            file_name=f"{state.name}.json",
+            mime="application/json",
+            use_container_width=True
+        )
 
 def st_notebook():
     """
