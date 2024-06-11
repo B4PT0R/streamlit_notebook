@@ -3,7 +3,7 @@
 
 `streamlit_notebook` is a reactive notebook interface for Streamlit.
 
-Pretty much like a Jupyter notebook, you can create and run Code cells (supporting Streamlit commands) or Markdown cells. These cells will be executed dynamically and rendered under each cell box.
+Pretty much like a Jupyter notebook, you can create and run Code cells (supporting Streamlit commands) or Markdown/HTML cells. These cells will be executed dynamically and rendered under each cell box.
 
 The main difference with a Jupyter notebook is that the notebook is reactive: Any UI event modifying the value of a variable gets immediately reflected in the python code and vice versa. 
 
@@ -17,7 +17,8 @@ I hope users already familiar with Streamlit will have great fun with this noteb
 
 - Switch to "App" mode by hiding code cells and notebook specific controls.
 - Create and delete cells easily, move cells up and down, control how they execute.
-- Create reactive Markdown cells by adding formatting tags `<<my_expression>>` that let you insert the current value of any global / state variable or evaluated expression into the text.
+- Create reactive Markdown or HTML cells by adding formatting tags `<<my_expression>>` that let you insert the current value of any global / state variable or evaluated expression into the text/code.
+- Easily download / upload your notebooks as json files.
 - The whole notebook UI can be controled dynamically from code cells. You can refer to the notebook object as `st.notebook` from within the session.
 
 ## Screenshot
