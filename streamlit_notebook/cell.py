@@ -128,6 +128,7 @@ class Cell:
         Runs the cell's code
         """
         if not self.has_run and self.submitted_code:
+            state.current_code=self.submitted_code
             self.output=self.output_area.container()
             with self.output:
                 self.exec()

@@ -1,6 +1,7 @@
 from .state import state, init_state
 from .cell import new_cell
 from .attrdict import AttrDict
+from .echo import echo
 import streamlit as st 
 import os
 import json
@@ -24,9 +25,15 @@ class Notebook:
             hide_code_cells=False,
             run_on_submit=True,
             show_logo=True,
-            rerun=False
+            rerun=False,
+            current_code=""
         )
         st.notebook=self
+        # Override st.echo to fit the notebook environment
+        st.echo=echo(self.get_current_code).__call__
+
+    def get_current_code(self):
+        return state.current_code
 
     def __getattr__(self,name):
         """

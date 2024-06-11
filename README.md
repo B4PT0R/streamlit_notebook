@@ -3,11 +3,11 @@
 
 `streamlit_notebook` is a reactive notebook interface for Streamlit.
 
-Pretty much like a Jupyter notebook, you can create and run Code cells (supporting Streamlit commands) or Markdown/HTML cells. These cells will be executed dynamically and rendered under each cell box.
+Pretty much like a Jupyter notebook, you can create and run Code cells (supporting Streamlit commands) or Markdown/HTML cells. These cells will be executed dynamically and their output will be rendered under each cell box.
 
 The main difference with a Jupyter notebook is that the notebook is reactive: Any UI event modifying the value of a variable gets immediately reflected in the python code and vice versa. 
 
-The execution flow follows the same logic as a Streamlit script, where each cell gets re-executed in order each time the UI triggers an event. Most notably, the python session gets reinitialized every new loop and all variables/objects that have not been saved in st.session_state will be lost at the end of the current run, and redefined in the next which is somewhat different from what one would expect in a persistent Python session.
+The execution flow follows the same logic as a Streamlit script, where each cell gets re-executed from top to bottom each time the UI triggers an event. Most notably, the python session gets reinitialized every new loop and all variables/objects that have not been saved in `st.session_state` will be lost at the end of the current run, and redefined in the next, which is somewhat different from what one would expect in a persistent Python session.
 
 This notebook is meant to be fully compatible with Streamlit and doesn't introduce any specific logic beyond standard Streamlit functionning. All Streamlit commands should work out of the box. If it's not the case, it should be reported as a bug.
 
@@ -72,3 +72,11 @@ If you wish to contribute to this project, please follow these instructions:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Changelog
+
+- june 11th 2024:
+    - Added HTML cells
+    - Enabled uploading / downloading the notebook as a json file
+    - Added a demo notebook (more to come)
+    - Fixed st.echo that didn't work in an interactive environment 
