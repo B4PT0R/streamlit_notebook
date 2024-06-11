@@ -4,8 +4,10 @@ class editor_output_parser:
     """
     Class used to parse the raw output of the editor widget.
     Keeps track of outputs ids
-    returns a pair (event, content) if a new output is received
-    otherwise event is None
+    returns a pair (event, content) 
+    if a new output is received, event is set to output['type']
+    otherwise event is returned as None
+    This way we make sure that an event is processed only once
     """
     def __init__(self):
         self.last_id=None

@@ -1,4 +1,7 @@
 class AttrDict(dict):
+    """
+    A simple subclass of dict enabling attribute style access to items
+    """
     def __getattr__(self, key):
         try:
             return self[key]

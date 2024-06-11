@@ -100,7 +100,7 @@ class Cell:
 
     def toggle_auto_rerun(self):
         """
-        Toggle auto_rerun attribute 
+        Toggle 'Auto-Rerun'
         """
         self.auto_rerun=not self.auto_rerun
 
@@ -118,11 +118,14 @@ class Cell:
             del state.cells[self.key]
 
     def submit(self):
+        """
+        Submits the content of the cell
+        """
         self.submitted_code=self.code
 
     def run(self):
         """
-        Runs the cell (renders it)
+        Runs the cell's code
         """
         if not self.has_run and self.submitted_code:
             self.output=self.output_area.container()
@@ -161,6 +164,9 @@ class CodeCell(Cell):
         self.type="code"
 
     def exec(self):
+        """
+        Executes the cell code, either as a fragment or normally depending on its setting
+        """
         if self.fragment:
             self.exec_code_as_fragment()
         else:
@@ -200,8 +206,8 @@ class MarkdownCell(Cell):
         The content is preformatted with evaluated expressions enclosed in <<expr>> tags.
         """
         try:
-            formatted_code=format(self.submitted_code,**state,**globals())
-            code=f'st.markdown(r"""{formatted_code}""")'
+            formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
+            code=f"st.markdown(r'''{formatted_code}''')"
             exec(code,globals())
         except Exception as e:
             st.exception(e)
@@ -220,8 +226,8 @@ class HTMLCell(Cell):
         The content is preformatted with evaluated expressions enclosed in <<expr>> tags.
         """
         try:
-            formatted_code=format(self.submitted_code,**state,**globals())
-            code=f'st.html(r"""{formatted_code}""")'
+            formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
+            code=f"st.html(r'''{formatted_code}''')"
             exec(code,globals())
         except Exception as e:
             st.exception(e)

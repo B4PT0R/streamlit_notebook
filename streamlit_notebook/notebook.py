@@ -152,10 +152,16 @@ class Notebook:
         state.rerun=True
 
     def delete_cell(self,key):
+        """
+        Deletes a cell given its key
+        """
         if key in state.cells:
             state.cells[key].delete()
 
     def load_demo(self):
+        """
+        Loads a demo notebook found in the package folder at 'streamlit_notebook/demo_notebooks'
+        """
         demo_folder=root_join("demo_notebooks")
         demos=list(os.listdir(demo_folder))
         def on_change():
@@ -165,6 +171,9 @@ class Notebook:
         st.selectbox("Choose a demo notebook.",options=demos,index=None,on_change=on_change,key="demo_choice")
 
     def to_json(self):
+        """
+        Converts the whole notebook to a json strings
+        """
         data=dict(
             name=state.name,
             hide_code_cells=state.hide_code_cells,
@@ -175,6 +184,9 @@ class Notebook:
         return json.dumps(data)
     
     def from_json(self,json_string):
+        """
+        Loads a new notebook from a json string
+        """
         data=AttrDict(**json.loads(json_string))
         state.name=data.name
         state.hide_code_cells=data.hide_code_cells
@@ -188,13 +200,18 @@ class Notebook:
         state.rerun=True
 
     def upload_notebook(self):
+        """
+        Let the user upload a notebook from a json file and loads it.
+        """
         def on_change():
             if state.uploaded_file is not None:
-                sio=StringIO(state.uploaded_file.getvalue().decode("utf-8"))
-                self.from_json(sio.read())
+                self.from_json(StringIO(state.uploaded_file.getvalue().decode("utf-8")).read())
         st.file_uploader("Upload a notebook file from your local drive.",on_change=on_change,key="uploaded_file")
 
     def download_notebook(self):
+        """
+        Let the user download the current notebook as a json file
+        """
         st.download_button(
             label="Download notebook",
             data=self.to_json(),
