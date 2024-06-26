@@ -1,6 +1,8 @@
 # Custom exclusions
 .tmp/
 .documents/
+compil.py
+all.txt
 
 
 # Byte-compiled / optimized / DLL files
