@@ -133,8 +133,7 @@ class Cell:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
         #if self.stderr:
-        #    with self.stderr_area:
-        #        st.text("[stderr]:")       
+        #    with self.stderr_area:     
         #        st.code(self.stderr,language="text")
         if self.results:
             with self.output:
@@ -266,7 +265,7 @@ class MarkdownCell(Cell):
 
     def get_exec_code(self):
         formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
-        code=f"st.markdown(r'''{formatted_code}''')"
+        code=f"st.markdown(r'''{formatted_code}''');"
         return code
 
 class HTMLCell(Cell):
@@ -279,7 +278,7 @@ class HTMLCell(Cell):
 
     def get_exec_code(self):
         formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
-        code=f"st.html(r'''{formatted_code}''')"
+        code=f"st.html(r'''{formatted_code}''');"
         return code
 
 def type_to_class(cell_type):
