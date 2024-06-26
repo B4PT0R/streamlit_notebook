@@ -145,10 +145,10 @@ class Shell:
         if isinstance(node, ast.Expr):
             # Compile and evaluate expression nodes.
             compiled_code = compile(ast.Expression(node.value), filename="<ast>", mode='eval')
-            result = eval(compiled_code, self.namespace)
+            self.last_result = eval(compiled_code, self.namespace)
             # Only invoke the result hook if output is not suppressed.
             if self.result_hook and not suppress_result:
-                self.result_hook(result)
+                self.result_hook(self.last_result)
         else:
             # Compile and execute all other types of statements.
             compiled_code = compile(ast.Module([node], []), filename="<ast>", mode='exec')
@@ -164,10 +164,10 @@ class Shell:
         collector = Collector(stdout_hook=self.stdout_hook, stderr_hook=self.stderr_hook, exception_hook=self.exception_hook)
         with collector:
             try:
-                source_tokens = ASTTokens(processed_code, parse=True)
-                for node in source_tokens.tree.body:
+                source = ASTTokens(processed_code, parse=True)
+                for node in source.tree.body:
                     # Check the next token after the current node to see if it's a semicolon.
-                    next_token = source_tokens.next_token(node.last_token)
+                    next_token = source.next_token(node.last_token)
                     startpos = node.first_token.startpos
                     if next_token.string == ";":
                         endpos = node.last_token.endpos + 1
@@ -176,7 +176,7 @@ class Shell:
                         endpos = node.last_token.endpos
                         suppress_result = False
                     # Extract the block of code associated with the current node.
-                    code_block = source_tokens.text[startpos:endpos]
+                    code_block = source.text[startpos:endpos]
                     if self.code_hook:
                         self.code_hook(code_block)
                     self.execute(node, suppress_result)
