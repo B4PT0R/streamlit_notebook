@@ -54,9 +54,11 @@ class Stream(io.IOBase):
             data_to_flush = self.buffer
             self.buffer = ""
 
+        self.cache_buffer += data_to_flush
+
         if self.hook:
             self.hook(data_to_flush,self.cache_buffer)
-        self.cache_buffer += data_to_flush
+        
 
     def get_value(self):
         """
@@ -91,15 +93,21 @@ class Collector:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        # Flush streams
         self.stdout_stream.flush()
         self.stderr_stream.flush()
+        # Restore standard streams
         sys.stdout = self.saved_stdout
         sys.stderr = self.saved_stderr
+        # Deal with any unhandled exception
         if exc_type is not None:
+            # Save the exception
             self.exception = exc_value
+            # Send the traceback to stderr_stream and flush
             error_message = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.stderr_stream.write(error_message)
             self.stderr_stream.flush()
+            # Send the exception to the exception hook
             if self.exception_hook:
                 self.exception_hook(exc_value)
             return True  # Suppress exception propagation
@@ -125,13 +133,13 @@ class Shell:
     def __init__(self, namespace=None, stdout_hook=None, stderr_hook=None, input_hook=None, result_hook=None, exception_hook=None, preprocess_hook=None, code_hook=None):
         # Initialize the shell with optional namespace and hooks for various stages of code execution.
         self.namespace = namespace or {"__builtins__": builtins}
-        self.stdout_hook = stdout_hook
-        self.stderr_hook = stderr_hook
         self.input_hook = input_hook
-        self.result_hook = result_hook
-        self.exception_hook = exception_hook
         self.preprocess_hook = preprocess_hook
         self.code_hook = code_hook
+        self.stdout_hook = stdout_hook
+        self.stderr_hook = stderr_hook
+        self.result_hook = result_hook
+        self.exception_hook = exception_hook
 
     def preprocess(self, code):
         # Apply preprocessing to the code if a preprocess hook is provided; otherwise, return the code unchanged.
@@ -195,7 +203,7 @@ class Shell:
     def reset_namespace(self):
         """
         Clears the namespace, retaining only built-in functions and classes.
-        This method is useful for resetting the state between executions to avoid cross-contamination of run contexts.
+        This method is useful for resetting the shell or avoid cross-contamination of run contexts.
         """
         self.namespace.clear()
         self.namespace["__builtins__"] = builtins

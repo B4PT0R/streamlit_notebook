@@ -101,7 +101,6 @@ class Cell:
         Runs the cell's code
         """
         if not self.has_run and self.submitted_code:
-            self.notebook.current_code=self.submitted_code
             self.results=[]
             self.prepare_output_area()
             with self.output:
