@@ -38,7 +38,12 @@ class Notebook:
         self.init_shell()
 
     def init_shell(self):
-        self.shell=Shell(stdout_hook=self.stdout_hook,result_hook=self.display_hook,exception_hook=self.exception_hook, code_hook=self.code_hook)
+        self.shell=Shell(
+            stdout_hook=self.stdout_hook,
+            display_hook=self.display_hook,
+            exception_hook=self.exception_hook, 
+            code_hook=self.code_hook
+        )
         self.shell.update_namespace(
             st=st,
             display=self.display_hook
@@ -129,6 +134,10 @@ class Notebook:
             def on_change():
                 self.show_logo=not self.show_logo
             st.toggle("Show logo",value=self.show_logo,on_change=on_change,key="toggle_show_logo")
+            def on_change():
+                self.shell.display_mode=state.select_display_mode
+            options=['all','last','none']
+            st.selectbox("Display mode", options=options,index=options.index(self.shell.display_mode),on_change=on_change,key="select_display_mode")
             st.divider()
             def on_click():
                 self.clear_cells()

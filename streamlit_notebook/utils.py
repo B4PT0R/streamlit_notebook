@@ -1,4 +1,19 @@
 import re
+import streamlit as st
+
+state=st.session_state
+
+def init_state(**kwargs):
+    if not 'rerun' in state:
+        state.rerun=False
+    for key,value in kwargs.items():
+        if not key in state:
+            state[key]=value
+
+def check_rerun():
+    if state.rerun:
+        state.rerun=False
+        st.rerun()
 
 def format(string, **kwargs):
     """

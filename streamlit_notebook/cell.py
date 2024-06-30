@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit.errors import DuplicateWidgetID
-from .editor import editor, editor_output_parser
 from .utils import format
+from .cell_ui import CellUI
 
 state=st.session_state
 
@@ -18,7 +18,6 @@ class Cell:
 
     def __init__(self,notebook,key,code="",auto_rerun=False,fragment=False):
         self.notebook=notebook
-        self.parser=editor_output_parser()
         self.container=None
         self.output=None
         self.output_area=None
@@ -38,19 +37,23 @@ class Cell:
         self.language=None
         self.type=None
         self.fragment=fragment
+        self.prepare_ui()
 
-    def menu_bar(self):
-        """
-        Renders the cell's menu bar
-        """
-        c1,c2,c3,_,c4,c5,c6=st.columns([7,30,30,20,5,5,5])
-        c1.text(f"[{self.key}]")
-        c2.toggle("Auto-Rerun",value=self.auto_rerun,on_change=self.toggle_auto_rerun,key=f"cell_auto_rerun_{self.key}")
-        if self.has_fragment_toggle:
-            c3.toggle("Run as fragment",value=self.fragment,on_change=self.toggle_fragment,key=f"cell_fragment_{self.key}")
-        c4.button("🔺",on_click=self.move_up,key=f"cell_move_up_{self.key}",use_container_width=True)
-        c5.button("🔻",on_click=self.move_down,key=f"cell_move_down_{self.key}",use_container_width=True)
-        c6.button("❌",on_click=self.delete,key=f"cell_close_{self.key}",use_container_width=True)
+    def prepare_ui(self):
+        self.ui=CellUI(code=self.code,lang=self.language,key=f"cell_ui_{self.key}")
+        self.ui.submit_callback=self.submit
+        self.ui.buttons["Auto_rerun"]._callback=self.toggle_auto_rerun
+        self.ui.buttons["Auto_rerun"].toggled=self.auto_rerun
+        self.ui.buttons["Fragment"]._callback=self.toggle_fragment
+        self.ui.buttons["Fragment"].toggled=self.fragment
+        self.ui.buttons["Up"]._callback=self.move_up
+        self.ui.buttons["Down"]._callback=self.move_down
+        self.ui.buttons["Close"]._callback=self.delete
+        self.ui.buttons["Run"]._callback=self.run_button_callback
+
+    def update_ui(self):
+        self.ui.lang=self.language
+        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="12px",width="100%")))
 
     def prepare_output_area(self):
         self.output=self.output_area.container()
@@ -76,16 +79,9 @@ class Cell:
             self.run()
 
         if not self.notebook.hide_code_cells and self.visible:
-            with self.container.container(border=True):
-                self.menu_bar()
-                event,new_code=self.parser(editor(self.code,lang=self.language,key=f"cell_editor_{self.key}"))
-                if event=="submit" or event=="run":
-                    self.has_run=False
-                    self.code=new_code
-                    self.submitted_code=self.code
-                    if self.notebook.run_on_submit or event=="run":
-                        self.run()
-                self.status_bar()
+            with self.container.container():
+                self.update_ui()
+                self.ui.show()
                 
         if not self.has_run:
             self.show_previous_output()
@@ -94,7 +90,16 @@ class Cell:
         """
         Submits the content of the cell
         """
-        self.submitted_code=self.code
+        self.submitted_code=self.ui.code
+        if self.notebook.run_on_submit:
+            self.has_run=False
+            self.run()
+
+    def run_button_callback(self):
+        self.has_run=False
+        self.submit()
+        if not self.has_run:
+            self.run()
 
     def run(self):
         """
@@ -142,16 +147,6 @@ class Cell:
             with self.output:
                 st.exception(self.exception)
 
-    def status_bar(self):
-        """
-        Renders the cell's status bar
-        """
-        c1,_,c2=st.columns([15,85,5])
-        c1.caption(self.type)
-        if self.has_run:
-            c2.write("✅")
-
-
     @property
     def rank(self):
         """
@@ -168,12 +163,14 @@ class Cell:
             del keys[self.rank]
             keys.insert(rank,self.key)
             self.notebook.cells={k:self.notebook.cells[k] for k in keys}
+            st.rerun()
 
     def move_up(self):
         """
         Moves the cell up
         """
         self.rerank(self.rank-1)
+        
 
     def move_down(self):
         """
@@ -186,13 +183,13 @@ class Cell:
         """
         Toggle 'Auto-Rerun'
         """
-        self.auto_rerun=not self.auto_rerun
+        self.auto_rerun=self.ui.buttons["Auto_rerun"].toggled
 
     def toggle_fragment(self):
         """
         Toggle 'Run as fragment' 
         """
-        self.fragment=not self.fragment
+        self.fragment=self.ui.buttons["Fragment"].toggled
 
     def delete(self):
         """
@@ -200,6 +197,7 @@ class Cell:
         """
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
+            st.rerun()
     
     def to_dict(self):
         """
