@@ -37,11 +37,21 @@ class Cell:
         self.language=None
         self.type=None
         self.fragment=fragment
+        self.needs_to_run=False
         self.prepare_ui()
 
+    def __enter__(self):
+        self.saved_cell=self.notebook.current_cell
+        self.notebook.current_cell=self
+        return self
+    
+    def __exit__(self,exc_type,exc_value,exc_tb):
+        self.notebook.current_cell=self.saved_cell
+
+
     def prepare_ui(self):
-        self.ui=CellUI(code=self.code,lang=self.language,key=f"cell_ui_{self.key}")
-        self.ui.submit_callback=self.submit
+        self.ui=CellUI(code=self.code,lang=self.language,key=f"cell_ui_{self.key}",response_mode="blur")
+        self.ui.submit_callback=self.submit_callback
         self.ui.buttons["Auto_rerun"]._callback=self.toggle_auto_rerun
         self.ui.buttons["Auto_rerun"].toggled=self.auto_rerun
         self.ui.buttons["Fragment"]._callback=self.toggle_fragment
@@ -77,22 +87,27 @@ class Cell:
 
         self.has_run=False
 
-        if self.auto_rerun:
-            self.run()
-
         if not self.notebook.hide_code_cells and self.visible:
             with self.container.container():
                 self.update_ui()
                 self.ui.show()
+
+        if self.auto_rerun or self.needs_to_run:
+            self.run()
                 
         if not self.has_run:
             self.show_previous_output()
 
     def submit(self):
+        if self.ui.code:
+            self.code=self.ui.code
+        self.submitted_code=self.code
+        
+    def submit_callback(self):
         """
         Submits the content of the cell
         """
-        self.submitted_code=self.ui.code
+        self.submit()
         if self.notebook.run_on_submit:
             self.has_run=False
             self.run()
@@ -100,19 +115,22 @@ class Cell:
     def run_button_callback(self):
         self.has_run=False
         self.submit()
-        if not self.has_run:
-            self.run()
+        self.run()
 
     def run(self):
         """
         Runs the cell's code
         """
+        self.needs_to_run=False
         if not self.has_run and self.submitted_code:
             self.results=[]
-            self.prepare_output_area()
-            with self.output:
-                self.exec()
-            self.has_run=True
+            try:
+                self.prepare_output_area()
+                with self.output:
+                    self.exec()
+                self.has_run=True
+            except:
+                self.needs_to_run=True
 
     def get_exec_code(self):
         """
@@ -125,8 +143,8 @@ class Cell:
         """
         Executes the code returned by self.get_exec_code()
         """
-        self.notebook.current_cell=self
-        response=self.notebook.shell.run(self.get_exec_code())
+        with self:
+            response=self.notebook.shell.run(self.get_exec_code())
         self.set_output(response)       
 
     def set_output(self,response):
@@ -165,7 +183,7 @@ class Cell:
             del keys[self.rank]
             keys.insert(rank,self.key)
             self.notebook.cells={k:self.notebook.cells[k] for k in keys}
-            st.rerun()
+            state.rerun=True
 
     def move_up(self):
         """
@@ -199,7 +217,7 @@ class Cell:
         """
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
-            st.rerun()
+            state.rerun=True
     
     def to_dict(self):
         """
@@ -242,16 +260,16 @@ class CodeCell(Cell):
         """
         Executes the cell as a fragment 
         """
-        self.notebook.current_cell=self
-        response=self.notebook.shell.run(self.get_exec_code())
+        with self:
+            response=self.notebook.shell.run(self.get_exec_code())
         self.set_output(response)
 
     def exec_code(self):
         """
         Executes the cell normally
         """
-        self.notebook.current_cell=self
-        response=self.notebook.shell.run(self.get_exec_code())
+        with self:
+            response=self.notebook.shell.run(self.get_exec_code())
         self.set_output(response)
 
 class MarkdownCell(Cell):

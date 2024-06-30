@@ -311,7 +311,7 @@ class Editor:
         if self.key in state:
             return state[self.key]
         else:
-            return None
+            return output
             
 
     def component(self):
@@ -335,14 +335,11 @@ class Editor:
         with self.container:
             self.component()
         self.process_event()
+        return self.event,self.code
     
     def refresh(self):
-        st.rerun()
+        state.rerun=True
         
-        
-
-
-
 class CellUI(Editor):
 
     def __init__(self,**kwargs):

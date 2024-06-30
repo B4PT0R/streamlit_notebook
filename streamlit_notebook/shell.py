@@ -272,11 +272,14 @@ class Shell:
 
     def __init__(self, namespace=None, stdout_hook=None, stderr_hook=None, input_hook=None, 
                  display_hook=None, exception_hook=None, preprocess_hook=None, code_hook=None, 
-                 display_mode='all', pre_run_hook=None, post_run_hook=None, 
+                 display_mode='last', pre_run_hook=None, post_run_hook=None, 
                  pre_execute_hook=None, post_execute_hook=None, 
                  namespace_change_hook=None):
         
         self.namespace = namespace or {"__builtins__": builtins}
+        self.update_namespace(
+            display=self.display
+        )
         self.display_mode = display_mode
 
         self.input_hook = input_hook
@@ -403,6 +406,12 @@ class Shell:
             response=self.post_run_hook(response)
 
         return response
+    
+    def display(self,obj):
+        if self.display_hook:
+            self.display_hook(obj)
+        else:
+            print(repr(obj))
 
     def reset_namespace(self):
         """
@@ -411,6 +420,9 @@ class Shell:
         """
         self.namespace.clear()
         self.namespace["__builtins__"] = builtins
+        self.update_namespace(
+            display=self.display
+        )
 
     def update_namespace(self, *args, **kwargs):
         """

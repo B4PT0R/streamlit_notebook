@@ -1,7 +1,7 @@
 from .cell import new_cell, display
 from .attrdict import AttrDict
 from .echo import echo
-from .utils import format
+from .utils import format,check_rerun
 from .shell import Shell
 import streamlit as st 
 import os
@@ -30,7 +30,6 @@ class Notebook:
         self.hide_code_cells=False
         self.run_on_submit=True
         self.show_logo=True
-        self.rerun=False
         self.current_code=None
         st.notebook=self
         # Override st.echo to fit the notebook environment
@@ -42,11 +41,10 @@ class Notebook:
             stdout_hook=self.stdout_hook,
             display_hook=self.display_hook,
             exception_hook=self.exception_hook, 
-            code_hook=self.code_hook
+            input_hook=self.input_hook
         )
         self.shell.update_namespace(
             st=st,
-            display=self.display_hook
         )
 
     @property
@@ -57,7 +55,7 @@ class Notebook:
     def current_cell(self,value):
         self._current_cell=value
 
-    def code_hook(self,code):
+    def input_hook(self,code):
         self.current_code=code
 
     def get_current_code(self):
@@ -97,6 +95,7 @@ class Notebook:
         Renders the notebook's UI 
         """
 
+
         self.logo()        
 
         self.sidebar()
@@ -106,9 +105,9 @@ class Notebook:
 
         self.control_bar()
 
-        if self.rerun:
-            self.rerun=False
-            st.rerun()
+        check_rerun()
+
+
     
     def sidebar(self):
         """
@@ -118,7 +117,7 @@ class Notebook:
             st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
             st.divider()
             self.notebook_title=st.text_input("Notebook title:",value=self.notebook_title)
-            if st.button("Upload notebook",use_container_width=True,key="button_upload_notebook"):
+            if st.button("Upload notebook", use_container_width=True,key="button_upload_notebook"):
                 self.upload_notebook()
             self.download_notebook()
             #self.download_python()
@@ -139,12 +138,9 @@ class Notebook:
             options=['all','last','none']
             st.selectbox("Display mode", options=options,index=options.index(self.shell.display_mode),on_change=on_change,key="select_display_mode")
             st.divider()
-            def on_click():
-                self.clear_cells()
-            st.button("Clear all cells",on_click=on_click,use_container_width=True,key="button_clear_cells")
-            def on_click():
-                self.run_all_cells()
-            st.button("Run all cells",on_click=on_click,use_container_width=True,key="button_run_all_cells")
+            st.button("Clear all cells",on_click=self.clear_cells,use_container_width=True,key="button_clear_cells")
+            st.button("Restart shell",on_click=self.init_shell,use_container_width=True,key="button_restart_shell")
+            st.button("Run all cells",on_click=self.run_all_cells,use_container_width=True,key="button_run_all_cells")
 
     def logo(self):
         """
@@ -166,11 +162,11 @@ class Notebook:
             html_button=c3.button("New HTML cell",use_container_width=True,key="new_html_cell_button")
             
             if code_button:
-                self.add_new_cell(type="code")
+                self.new_cell(type="code")
             if mkdwn_button:
-                self.add_new_cell(type="markdown")
+                self.new_cell(type="markdown")
             if html_button:
-                self.add_new_cell(type="html")
+                self.new_cell(type="html")
 
     def load_demo(self):
         """
@@ -222,7 +218,7 @@ class Notebook:
         Deletes all cells
         """
         self.cells={}
-        self.rerun=True
+        state.rerun=True
 
     def submit_all_cells(self):
         """
@@ -247,13 +243,16 @@ class Notebook:
             i+=1
         return i
 
-    def add_new_cell(self,type="code",code="",auto_rerun=False,fragment=False):
+    def new_cell(self,type="code",code="",auto_rerun=False,fragment=False):
         """
         Adds a new cell of the chosen type at the bottom of the notebook
         """
         key=self.gen_cell_key()
-        self.cells[key]=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
-        self.rerun=True
+        cell=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
+        self.cells[key]=cell
+        cell.submit()
+        state.rerun=True
+        return cell
 
     def delete_cell(self,key):
         """
@@ -309,7 +308,7 @@ class Notebook:
             cell=AttrDict(**cell)
             self.cells[cell.key]=new_cell(self,cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
         self.submit_all_cells()
-        self.rerun=True
+        state.rerun=True
 
 
 def st_notebook():
@@ -318,5 +317,7 @@ def st_notebook():
     """
     if not 'notebook' in state:
         state.notebook=Notebook()
+    if not 'rerun' in state:
+        state.rerun=False
     state.notebook.show()
 
