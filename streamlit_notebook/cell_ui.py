@@ -345,7 +345,7 @@ class CellUI(Editor):
         super().__init__(**kwargs)
         self.add_toggle(name="Auto_rerun",caption="Auto-rerun",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
         self.add_toggle(name="Fragment",caption="Run as fragment",style=dict(top="0px",left="100px",fontSize="14px"),has_caption=True)
-        self.add_button(name="Run",caption="Run",icon="Play",style=dict(bottom="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px",submits=True)
+        self.add_button(name="Run",caption="Run",icon="Play",style=dict(bottom="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="Close",caption="Close",icon="X",style=dict(top="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="Up",caption="Up",icon="ChevronUp",style=dict(top="0px",right="60px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="Down",caption="Down",icon="ChevronDown",style=dict(top="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px")
