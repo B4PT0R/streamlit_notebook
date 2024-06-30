@@ -50,9 +50,11 @@ class Cell:
         self.ui.buttons["Down"]._callback=self.move_down
         self.ui.buttons["Close"]._callback=self.delete
         self.ui.buttons["Run"]._callback=self.run_button_callback
+        
 
     def update_ui(self):
         self.ui.lang=self.language
+        self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="12px",width="100%")))
 
     def prepare_output_area(self):

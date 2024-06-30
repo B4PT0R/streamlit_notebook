@@ -156,7 +156,7 @@ class MenuBar:
 
 class Button:
 
-    def __init__(self,editor,name="button",caption="Click me!",icon="Play",style=None,callback=None,has_caption=False,has_icon=True,hover=True,always_on=True,icon_size="12px"):
+    def __init__(self,editor,name="button",caption="Click me!",icon="Play",style=None,callback=None,has_caption=False,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
         self.name=name
         self.editor=editor
         self.caption=caption
@@ -170,6 +170,7 @@ class Button:
         self.style=style
         self.event=short_id()
         self._callback=callback
+        self.visible=visible
     
     def callback(self):
         if self._callback:
@@ -196,7 +197,7 @@ class Button:
     
 class Toggle:
 
-    def __init__(self,editor,name="toggle",caption="toggle",icons=["Square","CheckSquare"],style=None,callback=None,has_caption=False,has_icon=True,hover=True,always_on=True,icon_size="12px"):
+    def __init__(self,editor,name="toggle",caption="toggle",icons=["Square","CheckSquare"],style=None,callback=None,has_caption=False,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
         self.name=name
         self.editor=editor
         self.caption=caption
@@ -211,6 +212,7 @@ class Toggle:
         self.style=style
         self.event=short_id()
         self._callback=callback
+        self.visible=visible
     
     def callback(self):
         self.toggled=not self.toggled
@@ -239,6 +241,8 @@ class Toggle:
 
 class Editor:
 
+    _excluded=['parser','key','container','code','event','submitted_code','submit_callback','info_bar','menu_bar','kwargs','buttons']
+
     def __init__(self,**kwargs):
         self.code=kwargs.pop('code',"")
         self.event=None
@@ -259,7 +263,7 @@ class Editor:
             return super().__getattribute__(attr)
         
     def __setattr__(self,attr,value):
-        if attr in ['parser','key','container','code','event','submitted_code','submit_callback','info_bar','menu_bar','kwargs','buttons']:
+        if attr in self.__class__._excluded:
             super().__setattr__(attr,value)
         else:
             self.kwargs[attr]=value
@@ -268,15 +272,15 @@ class Editor:
     def bindings(self):
         return {button.event:button.callback for button in self.buttons.values()}
 
-    def add_button(self,name="button",caption="Click me!",icon="Play",style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px"):
-        self.buttons[name]=Button(self,name=name,caption=caption,icon=icon,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size)
+    def add_button(self,name="button",caption="Click me!",icon="Play",style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
+        self.buttons[name]=Button(self,name=name,caption=caption,icon=icon,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size,visible=visible)
 
-    def add_toggle(self,name="toggle",caption="Toggle me!",icons=["Square","CheckSquare"],style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px"):
-        self.buttons[name]=Toggle(self,name=name,caption=caption,icons=icons,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size)
+    def add_toggle(self,name="toggle",caption="Toggle me!",icons=["Square","CheckSquare"],style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
+        self.buttons[name]=Toggle(self,name=name,caption=caption,icons=icons,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size,visible=visible)
 
     def get_params(self):
         params=dict(
-            buttons=[button.get_dict() for button in self.buttons.values()],
+            buttons=[button.get_dict() for button in self.buttons.values() if button.visible],
             options={
                 "showLineNumbers":True
             },
@@ -349,5 +353,6 @@ class CellUI(Editor):
         self.add_button(name="Close",caption="Close",icon="X",style=dict(top="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="Up",caption="Up",icon="ChevronUp",style=dict(top="0px",right="60px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="Down",caption="Down",icon="ChevronDown",style=dict(top="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px")
+    
 
     
