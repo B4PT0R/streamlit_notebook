@@ -113,3 +113,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
     - Introduced the custom shell object and redirection utilities to integrate the shell smoothly in the notebook, making the session persistent across reruns.
     - Introduced ast parsing with asttokens library to evaluate and selectively display chosen expressions on the frontend, based on the presence of a trailing semicolon.
     - Added the `display` function, used for rich display of data in the notebook (using `st.write` as a backend) in one-shot cells.
+
+- july 2nd 2024:
+    - Improved dynamic cell creation, edition, and execution.
+    - Added a couple demo notebooks to showcase these features. 
