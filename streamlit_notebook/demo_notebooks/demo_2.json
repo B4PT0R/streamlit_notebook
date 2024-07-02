@@ -1,0 +1,1 @@
+{"name": "dynamic_example_2", "hide_code_cells": false, "show_logo": true, "run_on_submit": true, "cells": {"0": {"key": 0, "type": "code", "code": "code=\"\"\"\ncell2=notebook.new_cell(code=\"print('hello')\")\ncell2.run()\n\"\"\"\n\ncell1=notebook.new_cell(code=code)\ncell1.run()\n\n#Run this cell", "auto_rerun": false, "fragment": false}}}

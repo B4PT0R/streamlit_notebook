@@ -28,10 +28,24 @@ This setting allows to get the best of both worlds. Using single-shot cells for 
 - Switch to "App" mode by hiding code cells and notebook specific controls.
 - Create and delete cells easily, move cells up and down, control how they execute.
 - Create reactive Markdown or HTML cells by adding formatting tags `<<my_expression>>` that let you insert the current value of any global / state variable or evaluated expression into the text/code.
-- Automatic evaluation of single expressions and display using `st.write` as a default backend. Can be selectively deactivated using semicolons at the end of the expression.
-- Special `display` function that you can use even in one-shot cells to display python data in a pretty manner to the frontend (uses `st.write` under the hood). 
+- Special `display` function that you can use even in one-shot cells to display python data in a pretty manner to the frontend (uses `st.write` as a default backend). 
+- Automatic evaluation and display of single expressions. Can be selectively deactivated using semicolons at the end of the expression or by switching the display mode in the sidebar menu.
 - Easily download / upload your notebooks as json files.
-- The whole notebook UI can be controled dynamically from code cells. This feature will be refined as I advance this project, but can already be played with. You can refer to the notebook object as `st.notebook` from within the session.
+- The whole notebook UI can be controled dynamically from code cells. This feature will be refined as I advance this project, but can already be played with. You can refer to the notebook object as `notebook` from within the session and call its methods programmaticaly. For instance you can programmatically create, edit and run cells:
+
+```python
+# Create a new cell and run it
+cell=notebook.new_cell(code="print('Hello!')",type="code")
+cell.run()
+```
+
+```python
+# Edit and existing cell and run it
+cell=notebook.cells[1]
+cell.code="print('Hello world!')"
+cell.run()
+```
+
 
 ## Screenshot
 

@@ -31,12 +31,14 @@ class Notebook:
         self.run_on_submit=True
         self.show_logo=True
         self.current_code=None
-        st.notebook=self
         # Override st.echo to fit the notebook environment
         st.echo=echo(self.get_current_code).__call__
         self.init_shell()
 
     def init_shell(self):
+        """
+        (Re)Initializes the shell to startup state
+        """
         self.shell=Shell(
             stdout_hook=self.stdout_hook,
             display_hook=self.display_hook,
@@ -45,10 +47,15 @@ class Notebook:
         )
         self.shell.update_namespace(
             st=st,
+            notebook=self
         )
 
     @property
     def current_cell(self):
+        """
+        The cell currently executing code
+        This property is used in the shell hooks to know where to direct outputs of execution
+        """
         return self._current_cell
     
     @current_cell.setter
@@ -56,27 +63,45 @@ class Notebook:
         self._current_cell=value
 
     def input_hook(self,code):
+        """
+        Shell hook called whenever code is inputed
+        """
         self.current_code=code
 
     def get_current_code(self):
+        """
+        Returns the code being currently executed 
+        """
         return self.current_code
 
     def stdout_hook(self,data,buffer):
+        """
+        Shell hook called whenever the shell attempts to write to stdout
+        """
         with self.current_cell.stdout_area:
             if buffer:
                 st.code(buffer,language="text")
 
     def stderr_hook(self,data,buffer):
+        """
+        Shell hook called whenever the shell attempts to write to stderr
+        """
         with self.current_cell.stderr_area:
             if buffer:
                 st.code(buffer,language="text")
 
     def display_hook(self,result):
+        """
+        Shell hook called whenever the shell attempts to display a result
+        """
         with self.current_cell.output:    
             self.current_cell.results.append(result)
             display(result)
 
     def exception_hook(self,exception):
+        """
+        Shell hook called whenever the shell catches an exception
+        """
         with self.current_cell.output: 
             st.exception(exception)
 
@@ -220,13 +245,6 @@ class Notebook:
         self.cells={}
         state.rerun=True
 
-    def submit_all_cells(self):
-        """
-        Submit all cells
-        """
-        for cell in self.cells.values():
-            cell.submit()
-
     def run_all_cells(self):
         """
         (Re)Run all the cells
@@ -250,7 +268,6 @@ class Notebook:
         key=self.gen_cell_key()
         cell=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
         self.cells[key]=cell
-        cell.submit()
         state.rerun=True
         return cell
 
@@ -307,7 +324,6 @@ class Notebook:
         for cell in data.cells.values():
             cell=AttrDict(**cell)
             self.cells[cell.key]=new_cell(self,cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
-        self.submit_all_cells()
         state.rerun=True
 
 

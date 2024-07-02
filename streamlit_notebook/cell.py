@@ -6,15 +6,49 @@ from .cell_ui import CellUI
 state=st.session_state
 
 def display(obj):
+    """
+    Display an object using st.write as a default backend
+    falls back to displaying the object's repr() in case st.write fails
+    """
     if obj is not None:
         try: 
             st.write(obj)
         except:
             st.text(repr(obj))
 
+class Code:
+
+    """
+    Code object used internally by the Cell object
+    Meant to ease and give more control on how the backend and ui communicate code updates between eachother
+    """
+
+    def __init__(self,value=""):
+        self._value=value
+        self.new_code_flag=False
+
+    def get_value(self):
+        return self._value
+    
+    def from_ui(self,value):
+        if self.new_code_flag:
+            """
+            Avoid the incoming code from ui to overwrite the code value when it has just been set to a new value by a backend callback
+            """
+            self.new_code_flag=False
+        else:
+            self._value=value
+
+    def from_backend(self,value):
+        self._value=value
+        self.new_code_flag=True
+        
+
+
+
 class Cell:
 
-    "Implements the main notebook cell from which other cell types inherit"
+    "Implements the main notebook Cell class from which other cell types inherit"
 
     def __init__(self,notebook,key,code="",auto_rerun=False,fragment=False):
         self.notebook=notebook
@@ -29,8 +63,8 @@ class Cell:
         self.results=[]
         self.exception=None
         self.has_fragment_toggle=True
-        self.code=code
-        self.submitted_code=""
+        self._code=Code(value=code)
+        self.last_code=None
         self.key=key
         self.auto_rerun=auto_rerun
         self.has_run=False
@@ -40,17 +74,49 @@ class Cell:
         self.needs_to_run=False
         self.prepare_ui()
 
+    @property
+    def code(self):
+        """
+        This property returns the code written in the cell
+        """
+        return self._code.get_value()
+    
+    @code.setter
+    def code(self,value):
+        """
+        Setter of the code property
+        """
+        self._code.from_backend(value)
+        state.rerun=True
+
+    @property
+    def has_run_once(self):
+        return self.last_code is not None and self.last_code==self.code
+
     def __enter__(self):
+        """
+        Allows to use the cell as a context manager.
+        Enables to run code in the shell and direct its outputs to the cell by switching the notebook.current_cell porperty
+        example:
+        with cell:
+            notebook.shell.run(code) # all shell outputs will be directed to the cell
+        """
         self.saved_cell=self.notebook.current_cell
         self.notebook.current_cell=self
         return self
     
     def __exit__(self,exc_type,exc_value,exc_tb):
+        """
+        Restore the notebook.current_cell property to initial value
+        """
         self.notebook.current_cell=self.saved_cell
 
 
     def prepare_ui(self):
-        self.ui=CellUI(code=self.code,lang=self.language,key=f"cell_ui_{self.key}",response_mode="blur")
+        """
+        Initializes the CellUI object
+        """
+        self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{self.key}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
         self.ui.buttons["Auto_rerun"]._callback=self.toggle_auto_rerun
         self.ui.buttons["Auto_rerun"].toggled=self.auto_rerun
@@ -59,21 +125,31 @@ class Cell:
         self.ui.buttons["Up"]._callback=self.move_up
         self.ui.buttons["Down"]._callback=self.move_down
         self.ui.buttons["Close"]._callback=self.delete
-        self.ui.buttons["Run"]._callback=self.run_button_callback
+        self.ui.buttons["Run"]._callback=self.run_callback
         
 
     def update_ui(self):
+        """
+        Updates the cell's ui
+        """
         self.ui.lang=self.language
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
-        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="12px",width="100%")))
+        #self.ui.buttons['Has_run'].visible=self.has_run_once
+        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="14px",width="100%")))
 
     def prepare_output_area(self):
+        """
+        Prepares the various containers used to display cell outputs
+        """
         self.output=self.output_area.container()
         with self.output:
             self.stdout_area=st.empty()
             self.stderr_area=st.empty()
         
     def prepare_skeleton(self):
+        """
+        Prepares the various containers used to display the cell ui and its outputs
+        """
         self.container=st.container()
         self.output_area=st.empty()
         self.prepare_output_area()
@@ -82,7 +158,7 @@ class Cell:
         """
         Renders the cell's layout
         """
-        
+
         self.prepare_skeleton()
 
         self.has_run=False
@@ -97,24 +173,22 @@ class Cell:
                 
         if not self.has_run:
             self.show_previous_output()
-
-    def submit(self):
-        if self.ui.code:
-            self.code=self.ui.code
-        self.submitted_code=self.code
         
     def submit_callback(self):
         """
-        Submits the content of the cell
+        Callback used to deal with the "submit" event from the ui
+        run it only if notebook.run_on_submit is true
         """
-        self.submit()
         if self.notebook.run_on_submit:
             self.has_run=False
             self.run()
 
-    def run_button_callback(self):
+    def run_callback(self):
+        """
+        Callback used to deal with the "run" event from the ui
+        submits the code and run it
+        """
         self.has_run=False
-        self.submit()
         self.run()
 
     def run(self):
@@ -122,7 +196,8 @@ class Cell:
         Runs the cell's code
         """
         self.needs_to_run=False
-        if not self.has_run and self.submitted_code:
+        if not self.has_run and self.code:
+            self.last_code=self.code
             self.results=[]
             try:
                 self.prepare_output_area()
@@ -137,7 +212,7 @@ class Cell:
         Get the code to execute. Defaults to the submitted code.
         Overriden by Markdown and HTML cells.
         """
-        return self.submitted_code
+        return self.code
 
     def exec(self):
         """
@@ -148,11 +223,18 @@ class Cell:
         self.set_output(response)       
 
     def set_output(self,response):
+        """
+        Assigns relevant fields of the shell response to the cell
+        """
         self.stdout=response.stdout
         self.stderr=response.stderr
         self.exception=response.exception
 
     def show_previous_output(self):
+        """
+        Called whenever a cell hasn't run in the current streamlit run
+        In which case it only displays previous results without reruning the code
+        """
         if self.stdout:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
@@ -236,7 +318,7 @@ class Cell:
 class CodeCell(Cell):
 
     """
-    The Streamlit notebook code cell object
+    Subclass of Cell implementing the Code cell
     """
 
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
@@ -274,6 +356,10 @@ class CodeCell(Cell):
 
 class MarkdownCell(Cell):
 
+    """
+    Subclass of Cell implementing the Markdown cell 
+    """
+
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
         super().__init__(notebook,key,code=code,auto_rerun=auto_rerun,fragment=False)
         self.has_fragment_toggle=False
@@ -281,11 +367,18 @@ class MarkdownCell(Cell):
         self.type="markdown"
 
     def get_exec_code(self):
-        formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
+        """
+        Formats the markdown code and converts it to a st.markdown call
+        """
+        formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
         code=f"st.markdown(r'''{formatted_code}''');"
         return code
 
 class HTMLCell(Cell):
+
+    """
+    Subclass of Cell implementing the HTML cell
+    """
 
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
         super().__init__(notebook,key,code=code,auto_rerun=auto_rerun,fragment=False)
@@ -294,7 +387,10 @@ class HTMLCell(Cell):
         self.type="html"
 
     def get_exec_code(self):
-        formatted_code=format(self.submitted_code,**state,**globals()).replace("'''","\'\'\'")
+        """
+        Formats the html code and converts it to a st.html call
+        """
+        formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
         code=f"st.html(r'''{formatted_code}''');"
         return code
 
@@ -312,4 +408,8 @@ def type_to_class(cell_type):
         raise NotImplementedError(f"Unsupported cell type: {cell_type}")
 
 def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
+    """
+    Returns a new cell, given a notebook object, a key, and optional kwargs
+    Used in the notebook.new_cell function
+    """
     return type_to_class(type)(notebook,key,code=code,auto_rerun=auto_rerun,fragment=fragment)

@@ -9,7 +9,7 @@ Key Components:
 - Shell: The main class for executing Python code in a controlled environment.
 - ShellResponse: A class representing the result of code execution.
 - Collector: A context manager for capturing stdout, stderr and exceptions.
-- Stream: A custom IO stream for efficient text handling.
+- Stream: A custom IO stream for efficient text handling and optional routing of outputs to a hook.
 
 Example Usage:
 
@@ -76,9 +76,6 @@ This example demonstrates:
 7. Handling of multi-line code input
 8. Accessing various attributes of the ShellResponse
 
-This showcases the Shell class's ability to provide fine-grained control over
-the execution process, particularly highlighting the power of ASTTokens for
-source code tracking and analysis.
 """
 
 import sys
@@ -162,12 +159,22 @@ class Collector:
         self.exception = None
 
     def get_stdout(self):
+        """
+        Returns all that was written to the stdout stream
+        """
         return self.stdout_stream.get_value()
     
     def get_stderr(self):
+        """
+        Returns all that was written to the stderr stream
+        """
         return self.stderr_stream.get_value()
 
     def __enter__(self):
+        """
+        Implements using the collector as a context manager
+        redirects sys.stdout and sys.stderr to stdout and stderr Streams
+        """
         self.saved_stdout = sys.stdout
         self.saved_stderr = sys.stderr
         sys.stdout = self.stdout_stream
@@ -175,6 +182,9 @@ class Collector:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        """
+        Flushes the streams, restores the standard streams and gracefully process any pending exception
+        """
         # Flush streams
         self.stdout_stream.flush()
         self.stderr_stream.flush()
@@ -264,7 +274,7 @@ class Shell:
     Called when an exception occurs during execution.
 
     10. namespace_change_hook(old_globals: dict, new_globals: dict, locals: dict) -> dict
-    Called after execution to process namespace changes. Return the updated globals.
+    Called after execution to process namespace changes. Returns the updated globals.
 
     11. post_run_hook(response: ShellResponse) -> ShellResponse
     Called after execution with the ShellResponse. Can modify and return the response.
@@ -277,10 +287,11 @@ class Shell:
                  namespace_change_hook=None):
         
         self.namespace = namespace or {"__builtins__": builtins}
-        self.update_namespace(
-            display=self.display
-        )
         self.display_mode = display_mode
+        self.update_namespace(
+            display=self.display # default display function
+        )
+        
 
         self.input_hook = input_hook
         self.code_hook = code_hook
@@ -408,6 +419,11 @@ class Shell:
         return response
     
     def display(self,obj):
+        """
+        Default method to display an object
+        Attempts to use self.display_hook if provided, or falls back to printing the repr
+        """
+
         if self.display_hook:
             self.display_hook(obj)
         else:
@@ -416,7 +432,7 @@ class Shell:
     def reset_namespace(self):
         """
         Clears the namespace, retaining only built-in functions and classes.
-        This method is useful for resetting the shell or avoiding cross-contamination of run contexts.
+        This method is useful for resetting the shell to startup state.
         """
         self.namespace.clear()
         self.namespace["__builtins__"] = builtins
