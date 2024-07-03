@@ -1,29 +1,47 @@
 from .cell import new_cell, display
 from .attrdict import AttrDict
 from .echo import echo
-from .utils import format, rerun, check_rerun
+from .utils import format, rerun, check_rerun, root_join, state
 from .shell import Shell
 import streamlit as st 
 import os
 import json
 from io import StringIO
 from textwrap import dedent,indent
-import sys
 from typing import Union, Dict
-
-os.environ['ROOT_PACKAGE_FOLDER']=os.path.dirname(os.path.abspath(__file__))
-
-state=st.session_state
-
-def root_join(*args):
-    return os.path.join(os.getenv('ROOT_PACKAGE_FOLDER'),*args)
 
 class Notebook:
 
     """
-    The Streamlit notebook object.
+    The main Streamlit notebook object.
 
-    Provides all the utilities needed to orchestrate cell execution and rendering.
+    This class orchestrates the entire notebook, managing cells, execution,
+    and overall notebook state.
+
+    Attributes:
+        title (str): The title of the notebook.
+        cells (dict): A dictionary of Cell objects, keyed by their unique identifiers.
+        hide_code_cells (bool): If True, code cells are hidden in the UI.
+        run_on_submit (bool): If True, cells are executed immediately upon submission.
+        show_logo (bool): If True, the notebook logo is displayed.
+        shell (Shell): The Shell object used for code execution.
+
+    Methods:
+        show(): Renders the entire notebook UI.
+        sidebar(): Renders the notebook's sidebar with controls.
+        logo(): Renders the notebook's logo.
+        control_bar(): Renders the control bar for adding new cells.
+        load_demo(): Loads a demo notebook.
+        upload_notebook(): Allows user to upload a notebook file.
+        download_notebook(): Allows user to download the current notebook as a file.
+        download_python(): Allows user to download the notebook as a Python script.
+        clear_cells(): Deletes all cells in the notebook.
+        run_all_cells(): Executes all cells in the notebook.
+        new_cell(type, code, auto_rerun, fragment): Creates a new cell.
+        delete_cell(key): Deletes a specific cell.
+        to_python(): Converts the notebook to a Python script.
+        to_json(): Converts the notebook to a JSON string.
+        from_json(json_string): Loads a notebook from a JSON string.
     """
 
     def __init__(self,title="new_notebook"):
@@ -40,7 +58,9 @@ class Notebook:
 
     def init_shell(self):
         """
-        (Re)Initializes the shell to startup state
+        (Re)Initializes the shell to startup state.
+
+        This method creates a new Shell instance with the necessary hooks and updates the namespace.
         """
         self.shell=Shell(
             stdout_hook=self.stdout_hook,
@@ -56,7 +76,8 @@ class Notebook:
     @property
     def current_cell(self):
         """
-        The cell currently executing code
+        The cell currently executing code.
+
         This property is used in the shell hooks to know where to direct outputs of execution
         """
         return self._current_cell
@@ -67,19 +88,29 @@ class Notebook:
 
     def input_hook(self,code):
         """
-        Shell hook called whenever code is inputed
+        Shell hook called whenever code is inputted.
+
+        Args:
+            code (str): The inputted code.
         """
         self.current_code=code
 
     def get_current_code(self):
         """
-        Returns the code being currently executed 
+        Returns the code being currently executed.
+
+        Returns:
+            str: The current code being executed.
         """
         return self.current_code
 
     def stdout_hook(self,data,buffer):
         """
-        Shell hook called whenever the shell attempts to write to stdout
+        Shell hook called whenever the shell attempts to write to stdout.
+
+        Args:
+            data (str): The data being written to stdout.
+            buffer (str): The current content of the stdout buffer.
         """
         if self.current_cell.ready:
             with self.current_cell.stdout_area:
@@ -88,7 +119,11 @@ class Notebook:
 
     def stderr_hook(self,data,buffer):
         """
-        Shell hook called whenever the shell attempts to write to stderr
+        Shell hook called whenever the shell attempts to write to stderr.
+
+        Args:
+            data (str): The data being written to stderr.
+            buffer (str): The current content of the stderr buffer.
         """
         if self.current_cell.ready:
             with self.current_cell.stderr_area:
@@ -97,7 +132,10 @@ class Notebook:
 
     def display_hook(self,result):
         """
-        Shell hook called whenever the shell attempts to display a result
+        Shell hook called whenever the shell attempts to display a result.
+
+        Args:
+            result: The result to be displayed.
         """
         self.current_cell.results.append(result)
         if self.current_cell.ready:
@@ -106,7 +144,10 @@ class Notebook:
 
     def exception_hook(self,exception):
         """
-        Shell hook called whenever the shell catches an exception
+        Shell hook called whenever the shell catches an exception.
+
+        Args:
+            exception (Exception): The caught exception.
         """
         if self.current_cell.ready:
             with self.current_cell.output: 
@@ -122,9 +163,11 @@ class Notebook:
             return super().__getattribute__(name)     
 
     def show(self):
-
         """
-        Renders the notebook's UI 
+        Renders the notebook's UI.
+
+        This method is responsible for displaying all components of the notebook,
+        including the logo, sidebar, cells, and control bar.
         """
 
         self.logo()        
@@ -138,7 +181,10 @@ class Notebook:
 
     def sidebar(self):
         """
-        Renders the notebook's sidebar
+        Renders the notebook's sidebar.
+
+        The sidebar contains various controls and options for the notebook,
+        such as title editing, file operations, and display settings.
         """
         with st.sidebar:
             st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
@@ -171,7 +217,9 @@ class Notebook:
 
     def logo(self):
         """
-        Renders the app's logo
+        Renders the app's logo.
+
+        Displays the notebook logo if show_logo is True.
         """
         if self.show_logo:
             _,c,_=st.columns([40,40,40])
@@ -179,7 +227,9 @@ class Notebook:
 
     def control_bar(self):
         """
-        Renders the notebooks "New XXX cell" buttons
+        Renders the notebooks "New XXX cell" buttons.
+
+        This bar allows users to add new code, markdown, or HTML cells to the notebook.
         """
         if not self.hide_code_cells:
             c1,c2,c3=st.columns(3)
@@ -197,7 +247,9 @@ class Notebook:
 
     def load_demo(self):
         """
-        Loads a demo notebook found in the package folder at 'streamlit_notebook/demo_notebooks'
+        Loads a demo notebook.
+
+        Allows the user to select and load a pre-defined demo notebook from the package's demo folder.
         """
         demo_folder=root_join("demo_notebooks")
         demos=list(os.listdir(demo_folder))
@@ -209,7 +261,9 @@ class Notebook:
 
     def upload_notebook(self):
         """
-        Let the user upload a notebook from a .stnb file and loads it.
+        Lets the user upload a notebook from a .stnb file and loads it.
+
+        This method handles file upload and notebook loading from the uploaded file.
         """
         def on_change():
             if state.uploaded_file is not None:
@@ -228,7 +282,9 @@ class Notebook:
 
     def download_notebook(self):
         """
-        Let the user download the current notebook as a json file
+        Lets the user download the current notebook as a JSON file.
+
+        This method creates a downloadable .stnb file containing the current notebook state.
         """
         st.download_button(
             label="Download notebook",
@@ -240,7 +296,9 @@ class Notebook:
 
     def download_python(self):
         """
-        Let the user download the current notebook as a streamlit script file
+        Lets the user download the current notebook as a Streamlit script file.
+
+        This method converts the notebook to a .py file that can be run as a standalone Streamlit app.
         """
         st.download_button(
             label="Download as Python script",
@@ -252,21 +310,28 @@ class Notebook:
 
     def clear_cells(self):
         """
-        Deletes all cells
+        Deletes all cells in the notebook.
+
+        This method removes all cells from the notebook, resetting it to an empty state.
         """
         self.cells={}
         rerun()
 
     def run_all_cells(self):
         """
-        (Re)Run all the cells
+        (Re)Runs all the cells in the notebook.
+
+        This method executes all cells in the notebook in order, updating their outputs.
         """
         for cell in self.cells.values():
             cell.run()
 
     def gen_cell_key(self):
         """
-        Generates a unique key for the cell 
+        Generates a unique key for the cell.
+
+        Returns:
+            int: A unique integer used as a cell key in the cells dict
         """
         i=0
         while i in self.cells:
@@ -275,7 +340,16 @@ class Notebook:
 
     def new_cell(self,type="code",code="",auto_rerun=False,fragment=False):
         """
-        Adds a new cell of the chosen type at the bottom of the notebook
+        Adds a new cell of the chosen type at the bottom of the notebook.
+
+        Args:
+            type (str): The type of cell to create ("code", "markdown", or "html").
+            code (str): Initial code or content for the cell.
+            auto_rerun (bool): If True, the cell will automatically re-run when changed.
+            fragment (bool): If True, the cell will run as a Streamlit fragment.
+
+        Returns:
+            Cell: The newly created cell object.
         """
         key=self.gen_cell_key()
         cell=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
@@ -285,14 +359,20 @@ class Notebook:
 
     def delete_cell(self,key):
         """
-        Deletes a cell given its key
+        Deletes a cell given its key.
+
+        Args:
+            key: The unique identifier of the cell to be deleted.
         """
         if key in self.cells:
             self.cells[key].delete()
 
     def to_python(self):
         """
-        Exports the notebook as a python script 
+        Exports the notebook as a Python script.
+
+        Returns:
+            str: A string containing the Python script representation of the notebook.
         """
         code="import streamlit as st\n\n"
         for cell in self.cells.values():
@@ -312,7 +392,10 @@ class Notebook:
 
     def to_json(self):
         """
-        Converts the whole notebook to a json strings
+        Converts the whole notebook to a JSON string.
+
+        Returns:
+            str: A JSON string representation of the notebook.
         """
         data=dict(
             title=self.title,
@@ -326,7 +409,12 @@ class Notebook:
     
     def from_json(self,json_string):
         """
-        Loads a new notebook from a json string
+        Loads a new notebook from a JSON string.
+
+        Args:
+            json_string (str): A JSON string representing a notebook.
+
+        This method replaces the current notebook state with the one defined in the JSON string.
         """
         self.shell_enabled=False
         data=AttrDict(**json.loads(json_string))
@@ -347,6 +435,9 @@ def st_notebook(initial_notebook: Union[str, Dict, None] = None):
     """
     Initializes and renders the notebook interface.
 
+    This function sets up the Streamlit notebook environment, either starting with a blank notebook
+    or loading an existing one based on the provided input.
+
     Args:
         initial_notebook (Union[str, Dict, None]): 
             Either a path to a JSON file, a JSON string, a dictionary representing 
@@ -354,7 +445,11 @@ def st_notebook(initial_notebook: Union[str, Dict, None] = None):
 
     Raises:
         ValueError: If the provided initial_notebook is invalid or cannot be loaded.
+
+    This function modifies the Streamlit session state and renders the notebook UI.
+    It's the main entry point for using the Streamlit Notebook in an application.
     """
+
     if 'notebook' not in state:
         state.notebook = Notebook()
         

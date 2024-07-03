@@ -10,6 +10,18 @@ import traceback
 import streamlit as st
 
 class echo:
+    """
+    A context manager for echoing code execution in Streamlit.
+
+    This class provides functionality to display the code being executed
+    along with its output in a Streamlit app.
+
+    Attributes:
+        current_code_hook (callable): Optional function to retrieve the current code.
+
+    Methods:
+        __call__(code_location="above"): The main method to use the echo functionality.
+    """
 
     def __init__(self,current_code_hook=None):
         self.current_code_hook=current_code_hook
@@ -20,22 +32,17 @@ class echo:
         """
         Use in a `with` block to draw some code on the app, then execute it.
 
-        Usage/Signature
-        -------
-        st.echo(code_location="above")
+        Args:
+            code_location (str): Whether to show the echoed code before or after the results.
+                                 Can be "above" or "below". Defaults to "above".
 
-        Parameters
-        ----------
-        code_location : "above" or "below"
-            Whether to show the echoed code before or after the results of the
-            executed code block.
+        Returns:
+            A context manager that displays and executes the code.
 
-        Example
-        -------
-        >>> import streamlit as st
-        >>>
-        >>> with st.echo():
-        >>>     st.write('This code will be printed')
+        Example:
+            >>> import streamlit as st
+            >>> with st.echo():
+            >>>     st.write('This code will be printed')
         """
 
         from streamlit import source_util

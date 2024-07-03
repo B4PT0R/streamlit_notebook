@@ -1,6 +1,14 @@
 class AttrDict(dict):
     """
-    A simple subclass of dict enabling attribute style access to items
+    A simple subclass of dict enabling attribute style access to items.
+
+    This class allows dictionary items to be accessed using dot notation,
+    in addition to the standard bracket notation.
+
+    Methods:
+        __getattr__(key): Allows accessing dictionary items as attributes.
+        __setattr__(key, value): Allows setting dictionary items as attributes.
+        __delattr__(key): Allows deleting dictionary items as attributes.
     """
     def __getattr__(self, key):
         try:

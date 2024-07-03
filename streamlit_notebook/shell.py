@@ -91,9 +91,26 @@ def debug_print(content):
 class Stream(io.IOBase):
     """
     Custom io stream that intercepts stdout and stderr streams.
+
     This class manages text data by buffering it and optionally passing it through a hook
     for real-time processing and display. It ensures efficient data handling by
     maintaining a maximum buffer size and flushing data when this size is exceeded or on newlines.
+
+    Args:
+        hook (callable, optional): Function to process written data in real-time.
+        buffer_size (int, optional): Maximum size of the internal buffer before forcing a flush. Defaults to 2048.
+
+
+    Attributes:
+        hook (callable): Optional function to process written data in real-time.
+        buffer_size (int): Maximum size of the internal buffer before forcing a flush.
+        buffer (str): Internal buffer for storing written data.
+        cache_buffer (str): Buffer for storing all written data.
+
+    Methods:
+        write(data): Writes data to the stream, managing buffering and flushing.
+        flush(data_to_flush=None): Flushes the given data to the hook and caches it.
+        get_value(): Returns all text that has been written to this stream.
     """
     def __init__(self, hook=None, buffer_size=2048):
         super().__init__()
@@ -104,7 +121,16 @@ class Stream(io.IOBase):
 
     def write(self, data):
         """
-        Writes data to the buffer, flushing complete lines or when buffer exceeds max size.
+        Writes data to the stream, managing buffering and flushing.
+
+        Args:
+            data (str): The data to be written to the stream.
+
+        Raises:
+            TypeError: If the input data is not a string.
+
+        This method handles writing data to the stream, managing the internal buffer,
+        and flushing complete lines or when the buffer size is exceeded.
         """
         if not isinstance(data, str):
             raise TypeError("write argument must be str, not {}".format(type(data).__name__))
@@ -126,8 +152,12 @@ class Stream(io.IOBase):
 
     def flush(self, data_to_flush=None):
         """
-        Flushes the given data to the hook and caches it. 
-        If no data is given, flushes the current buffer.
+        Flushes the given data to the hook and caches it.
+
+        Args:
+            data_to_flush (str, optional): The data to flush. If None, flushes the current buffer.
+
+        This method processes the data through the hook (if set) and adds it to the cache buffer.
         """
         if data_to_flush is None:
             data_to_flush = self.buffer
@@ -142,13 +172,29 @@ class Stream(io.IOBase):
     def get_value(self):
         """
         Returns all text that has been written to this stream.
+
+        Returns:
+            str: The entire content that has been written to the stream.
         """
         return self.cache_buffer
 
 class Collector:
     """
     Manages stdout and stderr redirection within a context manager.
-    It captures all output and exceptions, allowing fine control over their handling and display.
+
+    This class captures all output and exceptions, allowing fine control over their handling and display.
+
+    Attributes:
+        stdout_hook (callable): Optional function to process stdout in real-time.
+        stderr_hook (callable): Optional function to process stderr in real-time.
+        exception_hook (callable): Optional function to process exceptions.
+        stdout_stream (Stream): Custom stream for capturing stdout.
+        stderr_stream (Stream): Custom stream for capturing stderr.
+        exception (Exception): Stores any exception raised during execution.
+
+    Methods:
+        get_stdout(): Returns all that was written to the stdout stream.
+        get_stderr(): Returns all that was written to the stderr stream.
     """
     def __init__(self, stdout_hook=None, stderr_hook=None,exception_hook=None):
         self.stdout_hook = stdout_hook
@@ -160,20 +206,30 @@ class Collector:
 
     def get_stdout(self):
         """
-        Returns all that was written to the stdout stream
+        Returns all that was written to the stdout stream.
+
+        Returns:
+            str: The entire content written to stdout.
         """
         return self.stdout_stream.get_value()
     
     def get_stderr(self):
         """
-        Returns all that was written to the stderr stream
+        Returns all that was written to the stderr stream.
+
+        Returns:
+            str: The entire content written to stderr.
         """
         return self.stderr_stream.get_value()
 
     def __enter__(self):
         """
-        Implements using the collector as a context manager
-        redirects sys.stdout and sys.stderr to stdout and stderr Streams
+        Implements using the collector as a context manager.
+
+        This method redirects sys.stdout and sys.stderr to stdout and stderr Streams.
+
+        Returns:
+            Collector: The Collector instance.
         """
         self.saved_stdout = sys.stdout
         self.saved_stderr = sys.stderr
@@ -183,7 +239,15 @@ class Collector:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """
-        Flushes the streams, restores the standard streams and gracefully process any pending exception
+        Flushes the streams, restores the standard streams and gracefully processes any pending exception.
+
+        Args:
+            exc_type: The type of the exception.
+            exc_value: The exception instance.
+            exc_traceback: The traceback object.
+
+        Returns:
+            bool: True if the exception was handled, False otherwise.
         """
         # Flush streams
         self.stdout_stream.flush()
@@ -232,52 +296,36 @@ class ShellResponse:
 
 class Shell:
     """
-    Executes Python code within a managed environment and captures the output and exceptions.
-    This class is designed to be extensible through various hooks that allow custom handling 
-    of input code, parsed blocks of code, ast nodes, outputs, results, exceptions, and namespace changes
-    providing flexibility to tailor its functionality to specific needs.
+    Executes Python code within a managed environment and captures output and exceptions.
 
+    This class provides a flexible and extensible Python code execution environment.
+    It allows for fine-grained control over code execution, input/output handling,
+    and namespace management through various hooks and customization options.
 
     Attributes:
         namespace (dict): The global namespace for code execution.
         display_mode (str): Controls when results are displayed ('all', 'last', or 'none').
 
-    The various hook attributes (e.g., input_hook, pre_run_hook, etc.) can be set to custom
-    functions to extend the shell's functionality at different stages of code execution.
+    Methods:
+        run(code, globals, locals): Execute the given code in the shell environment.
+        execute(node, source, globals, locals, suppress_result, is_last_node):
+            Execute a single AST node in the given namespace.
+        reset_namespace(): Clears the namespace, retaining only built-in functions and classes.
+        update_namespace(*args, **kwargs): Dynamically updates the namespace with provided variables or functions.
+        display(obj): Default method to display an object.
 
-    Hook Signatures:
-    1. input_hook(code: str) -> None
-    Called before processing the input code.
-
-    2. pre_run_hook(code: str) -> str
-    Preprocesses the input code. Returns the modified code.
-
-    3. code_hook(code_block: str) -> None
-    Called for each code block before execution.
-
-    4. pre_execute_hook(node: ast.AST, source: ASTTokens) -> ast.AST
-    Allows modification of AST nodes before execution. Must return an AST node.
-
-    5. post_execute_hook(node: ast.AST, result: Any) -> None
-    Called after each node execution with the node and its result.
-
-    6. display_hook(result: Any) -> None
-    Called to display the result of an expression evaluation.
-
-    7. stdout_hook(data: str, full_buffer: str) -> None
-    Called when data is written to stdout.
-
-    8. stderr_hook(data: str, full_buffer: str) -> None
-    Called when data is written to stderr.
-
-    9. exception_hook(exception: Exception) -> None
-    Called when an exception occurs during execution.
-
-    10. namespace_change_hook(old_globals: dict, new_globals: dict, locals: dict) -> dict
-    Called after execution to process namespace changes. Returns the updated globals.
-
-    11. post_run_hook(response: ShellResponse) -> ShellResponse
-    Called after execution with the ShellResponse. Can modify and return the response.
+    The class supports various hooks that can be set to customize behavior:
+        input_hook(code): Called before processing the input code.
+        pre_run_hook(code): Preprocesses the input code.
+        code_hook(code_block): Called for each code block before execution.
+        pre_execute_hook(node, source): Allows modification of AST nodes before execution.
+        post_execute_hook(node, result): Called after each node execution with the node and its result.
+        display_hook(result): Called to display the result of an expression evaluation.
+        stdout_hook(data, full_buffer): Called when data is written to stdout.
+        stderr_hook(data, full_buffer): Called when data is written to stderr.
+        exception_hook(exception): Called when an exception occurs during execution.
+        namespace_change_hook(old_globals, new_globals, locals): Called after execution to process namespace changes.
+        post_run_hook(response): Called after execution with the ShellResponse.
     """
 
     def __init__(self, namespace=None, stdout_hook=None, stderr_hook=None, input_hook=None, 
@@ -318,6 +366,9 @@ class Shell:
 
         Returns:
             tuple: Updated (globals, locals) after execution.
+
+        This method is responsible for the actual execution of individual AST nodes.
+        It handles both expression and statement nodes, and manages result capturing and display.
         """
 
         if self.pre_execute_hook:
@@ -351,6 +402,10 @@ class Shell:
 
         Returns:
             ShellResponse: An object containing the results of the execution.
+
+        This method is the main entry point for code execution in the Shell.
+        It handles the entire execution process, including calling various hooks,
+        managing the execution environment, and capturing outputs and exceptions.
         """
 
         if self.input_hook:
@@ -419,8 +474,13 @@ class Shell:
     
     def display(self,obj):
         """
-        Default method to display an object
-        Attempts to use self.display_hook if provided, or falls back to printing the repr
+        Default method to display an object.
+
+        Args:
+            obj: The object to be displayed.
+
+        This method attempts to use self.display_hook if provided,
+        or falls back to printing the repr of the object.
         """
 
         if self.display_hook:
@@ -431,7 +491,9 @@ class Shell:
     def reset_namespace(self):
         """
         Clears the namespace, retaining only built-in functions and classes.
-        This method is useful for resetting the shell to startup state.
+
+        This method is useful for resetting the shell to its initial state,
+        clearing all user-defined variables and functions while keeping Python builtins.
         """
         self.namespace.clear()
         self.namespace["__builtins__"] = builtins
@@ -441,11 +503,13 @@ class Shell:
 
     def update_namespace(self, *args, **kwargs):
         """
-        Dynamically updates the namespace with provided variables or functions,
-        allowing for modifications to the execution environment in real-time.
+        Dynamically updates the namespace with provided variables or functions.
 
         Args:
             *args: Dictionaries of items to add to the namespace.
             **kwargs: Key-value pairs to add to the namespace.
+
+        This method allows for real-time modifications to the execution environment,
+        adding new variables or functions that will be available in subsequent code executions.
         """
         self.namespace.update(*args, **kwargs)

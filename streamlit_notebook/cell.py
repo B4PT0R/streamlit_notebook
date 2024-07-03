@@ -7,8 +7,16 @@ state=st.session_state
 
 def display(obj):
     """
-    Display an object using st.write as a default backend
-    falls back to displaying the object's repr() in case st.write fails
+    Display an object using st.write as a default backend.
+
+    This function attempts to display the object using Streamlit's st.write function.
+    If that fails, it falls back to displaying the object's string representation.
+
+    Args:
+        obj: The object to be displayed.
+
+    This function is used internally to handle the display of various types of objects
+    within the notebook cells.
     """
     if obj is not None:
         try: 
@@ -18,8 +26,34 @@ def display(obj):
 
 class Cell:
 
-    "Implements the main notebook Cell class from which other cell types inherit"
+    """
+    The base class for all types of cells in the notebook.
 
+    This class provides the core functionality for cells, including
+    code storage, execution, and UI management.
+
+    Attributes:
+        notebook (Notebook): The parent Notebook object.
+        key (str): A unique identifier for the cell.
+        code (str): The content of the cell (code, markdown, or HTML).
+        auto_rerun (bool): If True, the cell automatically reruns when its content changes.
+        fragment (bool): If True, the cell runs as a Streamlit fragment.
+        type (str): The type of the cell ("code", "markdown", or "html").
+        ui (CellUI): The UI object managing the cell's interface.
+        results (list): A list of results from the last execution.
+        exception (Exception): Any exception raised during the last execution.
+
+    Methods:
+        show(): Renders the cell's layout and content.
+        run(): Executes the cell's code.
+        get_exec_code(): Returns the code to be executed.
+        set_output(response): Sets the output of the cell after execution.
+        show_previous_output(): Displays the previous execution results.
+        move_up(): Moves the cell up in the notebook.
+        move_down(): Moves the cell down in the notebook.
+        delete(): Removes the cell from the notebook.
+        to_dict(): Returns a dictionary representation of the cell.
+    """
     def __init__(self,notebook,key,code="",auto_rerun=False,fragment=False):
         self.notebook=notebook
         self.container=None
@@ -48,29 +82,47 @@ class Cell:
     @property
     def code(self):
         """
-        This property returns the code written in the cell
+        The code written in the cell.
+
+        Returns:
+            str: The current code content of the cell.
         """
         return self._code.get_value()
     
     @code.setter
     def code(self,value):
         """
-        Setter of the code property
+        Setter for the code property.
+
+        Args:
+            value (str): The new code content to set for the cell.
         """
         self._code.from_backend(value)
         rerun()
 
     @property
     def has_run_once(self):
+        """
+        Checks if the cell has been run at least once with the current code.
+
+        Returns:
+            bool: True if the cell has been run with the current code, False otherwise.
+        """
         return self.last_code is not None and self.last_code==self.code
 
     def __enter__(self):
         """
-        Allows to use the cell as a context manager.
-        Enables to run code in the shell and direct its outputs to the cell by switching the notebook.current_cell porperty
-        example:
-        with cell:
-            notebook.shell.run(code) # all shell outputs will be directed to the cell
+        Allows using the cell as a context manager.
+
+        This method enables running code in the shell and directing its outputs to the cell
+        by switching the notebook.current_cell property.
+
+        Returns:
+            Cell: The current cell instance.
+
+        Example:
+            with cell:
+                notebook.shell.run(code)  # all shell outputs will be directed to the cell
         """
         self.saved_cell=self.notebook.current_cell
         self.notebook.current_cell=self
@@ -78,14 +130,19 @@ class Cell:
     
     def __exit__(self,exc_type,exc_value,exc_tb):
         """
-        Restore the notebook.current_cell property to initial value
+        Restores the notebook.current_cell property to its initial value.
+
+        Args:
+            exc_type: The type of the exception that was raised, if any.
+            exc_value: The exception instance that was raised, if any.
+            exc_tb: The traceback object encapsulating the call stack at the point where the exception occurred.
         """
         self.notebook.current_cell=self.saved_cell
 
 
     def prepare_ui(self):
         """
-        Initializes the CellUI object
+        Initializes the CellUI object and sets up the cell's user interface components.
         """
         self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{short_id()}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
@@ -101,7 +158,7 @@ class Cell:
 
     def update_ui(self):
         """
-        Updates the cell's ui
+        Updates the cell's UI components based on the current cell state.
         """
         self.ui.lang=self.language
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
@@ -110,7 +167,7 @@ class Cell:
 
     def prepare_output_area(self):
         """
-        Prepares the various containers used to display cell outputs
+        Prepares the various containers used to display cell outputs.
         """
         self.output=self.output_area.container()
         with self.output:
@@ -119,7 +176,7 @@ class Cell:
         
     def prepare_skeleton(self):
         """
-        Prepares the various containers used to display the cell ui and its outputs
+        Prepares the various containers used to display the cell UI and its outputs.
         """
         self.container=st.container()
         self.output_area=st.empty()
@@ -128,7 +185,10 @@ class Cell:
 
     def show(self):
         """
-        Renders the cell's layout
+        Renders the cell's layout.
+
+        This method is responsible for displaying the cell's UI components
+        and managing its visibility based on notebook settings.
         """
 
         self.prepare_skeleton()
@@ -148,8 +208,9 @@ class Cell:
         
     def submit_callback(self):
         """
-        Callback used to deal with the "submit" event from the ui
-        run it only if notebook.run_on_submit is true
+        Callback used to deal with the "submit" event from the UI.
+
+        Runs the cell only if notebook.run_on_submit is true.
         """
         if self.notebook.run_on_submit:
             self.has_run=False
@@ -157,15 +218,19 @@ class Cell:
 
     def run_callback(self):
         """
-        Callback used to deal with the "run" event from the ui
-        submits the code and run it
+        Callback used to deal with the "run" event from the ui.
+
+        Resets has_run to False and runs the cell.
         """
         self.has_run=False
         self.run()
 
     def run(self):
         """
-        Runs the cell's code
+        Runs the cell's code.
+
+        This method executes the cell's content, captures the output,
+        and updates the cell's state accordingly.
         """
         if not self.has_run and self.code:
             self.needs_to_run=False
@@ -185,8 +250,14 @@ class Cell:
 
     def get_exec_code(self):
         """
-        Get the code to execute. Defaults to the submitted code.
-        Overriden by Markdown and HTML cells.
+        Get the code to execute.
+
+        Returns:
+            str: The code to be executed.
+
+        Note:
+            This method is overridden in subclasses to provide
+            type-specific code preparation.
         """
         return self.code
 
@@ -200,7 +271,12 @@ class Cell:
 
     def set_output(self,response):
         """
-        Assigns relevant fields of the shell response to the cell
+        Assigns relevant fields of the shell response to the cell.
+
+        Args:
+            response (ShellResponse): The response object from code execution.
+
+        This method updates the cell's stdout, stderr, and exception attributes.
         """
         self.stdout=response.stdout
         self.stderr=response.stderr
@@ -208,8 +284,10 @@ class Cell:
 
     def show_previous_output(self):
         """
-        Called whenever a cell hasn't run in the current streamlit run
-        In which case it only displays previous results without reruning the code
+        Displays the previous execution results.
+
+        This method is called when a cell hasn't run in the current Streamlit run,
+        displaying previous results without re-executing the code.
         """
         if self.stdout:
             with self.stdout_area:
@@ -228,13 +306,19 @@ class Cell:
     @property
     def rank(self):
         """
-        Gets the current rank of the cell in the cells dict
+        Gets the current rank of the cell in the cells dict.
+
+        Returns:
+            int: The index of the cell in the notebook's cell list.
         """
         return list(self.notebook.cells.keys()).index(self.key)
     
     def rerank(self,rank):
         """
-        Moves the cell to a new rank
+        Moves the cell to a new rank.
+
+        Args:
+            rank (int): The new rank (position) for the cell in the notebook.
         """
         if 0<=rank<len(self.notebook.cells) and not rank==self.rank:
             keys=list(self.notebook.cells.keys())
@@ -245,33 +329,37 @@ class Cell:
 
     def move_up(self):
         """
-        Moves the cell up
+        Moves the cell up in the notebook.
+
+        This method changes the cell's position, moving it one place earlier in the execution order.
         """
         self.rerank(self.rank-1)
         
 
     def move_down(self):
         """
-        Moves the cell down
+        Moves the cell down in the notebook.
+
+        This method changes the cell's position, moving it one place later in the execution order.
         """
         self.rerank(self.rank+1)
 
 
     def toggle_auto_rerun(self):
         """
-        Toggle 'Auto-Rerun'
+        Toggles the 'Auto-Rerun' feature for the cell.
         """
         self.auto_rerun=self.ui.buttons["Auto_rerun"].toggled
 
     def toggle_fragment(self):
         """
-        Toggle 'Run as fragment' 
+        Toggles the 'Run as fragment' feature for the cell.
         """
         self.fragment=self.ui.buttons["Fragment"].toggled
 
     def delete(self):
         """
-        Deletes the cell
+        Deletes the cell from the notebook.
         """
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
@@ -279,8 +367,13 @@ class Cell:
     
     def to_dict(self):
         """
-        Returns a minimal dict representation of the cell
-        Only what is necessary to recreate it 
+        Returns a minimal dict representation of the cell.
+
+        Returns:
+            dict: A dictionary containing the essential attributes of the cell.
+
+        This method is used for serialization of the cell, containing only
+        what is necessary to recreate it.
         """
         d=dict(
             key=self.key,
@@ -294,7 +387,19 @@ class Cell:
 class CodeCell(Cell):
 
     """
-    Subclass of Cell implementing the Code cell
+    A subclass of Cell implementing a code cell.
+
+    This class represents a cell containing Python code that can be executed
+    within the notebook environment.
+
+    Attributes:
+        language (str): Always set to "python" for code cells.
+        type (str): Always set to "code" for code cells.
+
+    Methods:
+        exec(): Executes the cell code, either as a fragment or normally.
+        exec_code_as_fragment(): Executes the cell as a Streamlit fragment.
+        exec_code(): Executes the cell normally.
     """
 
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
@@ -305,7 +410,10 @@ class CodeCell(Cell):
 
     def exec(self):
         """
-        Executes the cell code, either as a fragment or normally depending on its setting
+        Executes the cell code.
+
+        This method chooses between normal execution and fragment execution
+        based on the cell's fragment attribute.
         """
         if self.fragment:
             self.exec_code_as_fragment()
@@ -316,7 +424,10 @@ class CodeCell(Cell):
     @st.experimental_fragment
     def exec_code_as_fragment(self):
         """
-        Executes the cell as a fragment 
+        Executes the cell as a Streamlit fragment.
+
+        This method is decorated with @st.experimental_fragment and executes
+        the cell's code within a Streamlit fragment context.
         """
         with self:
             response=self.notebook.shell.run(self.get_exec_code())
@@ -324,7 +435,9 @@ class CodeCell(Cell):
 
     def exec_code(self):
         """
-        Executes the cell normally
+        Executes the cell normally.
+
+        This method runs the cell's code in the normal execution context.
         """
         with self:
             response=self.notebook.shell.run(self.get_exec_code())
@@ -333,7 +446,17 @@ class CodeCell(Cell):
 class MarkdownCell(Cell):
 
     """
-    Subclass of Cell implementing the Markdown cell 
+    A subclass of Cell implementing a Markdown cell.
+
+    This class represents a cell containing Markdown content that is
+    rendered as formatted text in the notebook.
+
+    Attributes:
+        language (str): Always set to "markdown" for Markdown cells.
+        type (str): Always set to "markdown" for Markdown cells.
+
+    Methods:
+        get_exec_code(): Formats the Markdown code and converts it to a st.markdown call.
     """
 
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
@@ -344,7 +467,13 @@ class MarkdownCell(Cell):
 
     def get_exec_code(self):
         """
-        Formats the markdown code and converts it to a st.markdown call
+        Formats the Markdown code and converts it to a st.markdown call.
+
+        Returns:
+            str: A string containing a st.markdown() call with the formatted Markdown content.
+
+        This method processes the cell's content, formats any variables,
+        and wraps it in a Streamlit markdown function call.
         """
         formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
         code=f"st.markdown(r'''{formatted_code}''');"
@@ -353,7 +482,17 @@ class MarkdownCell(Cell):
 class HTMLCell(Cell):
 
     """
-    Subclass of Cell implementing the HTML cell
+    A subclass of Cell implementing an HTML cell.
+
+    This class represents a cell containing HTML content that is
+    rendered directly in the notebook.
+
+    Attributes:
+        language (str): Always set to "html" for HTML cells.
+        type (str): Always set to "html" for HTML cells.
+
+    Methods:
+        get_exec_code(): Formats the HTML code and converts it to a st.html call.
     """
 
     def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
@@ -364,7 +503,13 @@ class HTMLCell(Cell):
 
     def get_exec_code(self):
         """
-        Formats the html code and converts it to a st.html call
+        Formats the HTML code and converts it to a st.html call.
+
+        Returns:
+            str: A string containing a st.html() call with the formatted HTML content.
+
+        This method processes the cell's content, formats any variables,
+        and wraps it in a Streamlit HTML function call.
         """
         formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
         code=f"st.html(r'''{formatted_code}''');"
@@ -372,7 +517,18 @@ class HTMLCell(Cell):
 
 def type_to_class(cell_type):
     """
-    Routes a cell type to the adequate class
+    Routes a cell type to the appropriate class.
+
+    This function maps cell type strings to their corresponding Cell subclasses.
+
+    Args:
+        cell_type (str): The type of cell ("code", "markdown", or "html").
+
+    Returns:
+        type: The Cell subclass corresponding to the given type.
+
+    Raises:
+        NotImplementedError: If an unsupported cell type is specified.
     """
     if cell_type=="code":
         return CodeCell
@@ -385,7 +541,22 @@ def type_to_class(cell_type):
 
 def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
     """
-    Returns a new cell, given a notebook object, a key, and optional kwargs
-    Used in the notebook.new_cell function
+    Returns a new cell, given a notebook object, a key, and optional kwargs.
+
+    This function is used in the notebook.new_cell method to create cells of different types.
+
+    Args:
+        notebook (Notebook): The parent Notebook object.
+        key: Unique identifier for the cell.
+        type (str): The type of cell to create ("code", "markdown", or "html").
+        code (str): Initial code or content for the cell.
+        auto_rerun (bool): Whether the cell should automatically re-run when changed.
+        fragment (bool): Whether the cell should run as a Streamlit fragment.
+
+    Returns:
+        Cell: A new Cell object of the specified type.
+
+    Raises:
+        NotImplementedError: If an unsupported cell type is specified.
     """
     return type_to_class(type)(notebook,key,code=code,auto_rerun=auto_rerun,fragment=fragment)

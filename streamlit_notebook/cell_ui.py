@@ -60,9 +60,24 @@ class Code:
         self.new_code_flag=False
 
     def get_value(self):
+        """
+        Returns the current code content.
+
+        Returns:
+            str: The current code content stored in the object.
+        """
         return self._value
     
     def from_ui(self,value):
+        """
+        Updates the code content from the UI.
+
+        Args:
+            value (str): The new code content from the UI.
+
+        This method updates the code content while considering the new_code_flag
+        to prevent overwriting backend updates with UI input.
+        """
         if self.new_code_flag:
             """
             Avoid incoming code from ui to overwrite the code value when it has just been set to a new value by a backend callback
@@ -72,6 +87,15 @@ class Code:
             self._value=value
 
     def from_backend(self,value):
+        """
+        Updates the code content from the backend.
+
+        Args:
+            value (str): The new code content from the backend.
+
+        This method updates the code content and sets the new_code_flag to True,
+        indicating that the content has been updated by the backend.
+        """
         self._value=value
         self.new_code_flag=True
 
@@ -110,19 +134,6 @@ css_string = '''
     }
     '''
 
-def editor(*args,**kwargs):
-
-    """
-    Function wrapping the streamlit-code-editor component
-    """
-
-    kwargs.update(
-        lang=kwargs.get("lang",'text'),
-    )
-
-    output=code_editor(*args,**kwargs)
-    return output
-
 class Bar:
 
     """
@@ -149,16 +160,35 @@ class Bar:
         self.info=info or dict()
 
     def get_info(self):
+        """
+        Returns the bar's info as a list of dictionaries.
+
+        Returns:
+            list: A list containing a dictionary with the bar's name and style.
+        """
         return [dict(
             name=self.info.get("name",""),
             style=self.info.get("style",None)
         )]
     
     def set_info(self,info):
+        """
+        Sets the bar's info.
+
+        Args:
+            info (dict): A dictionary containing the new info for the bar.
+        """
         self.info=info
 
 
     def get_dict(self):
+        """
+        Returns the bar's configuration as a dictionary.
+
+        Returns:
+            dict: A dictionary containing the complete configuration for the bar,
+                  including name, CSS, style, and info.
+        """
         if self.order==3:
             border_radius="0px 0px 8px 8px"
         elif self.order==1:
@@ -192,10 +222,6 @@ class InfoBar(Bar):
     This class extends the Bar class to create a specialized bar
     for displaying cell information.
 
-    Attributes:
-        editor (Editor): The parent editor object.
-        info (dict): Additional information to display in the bar.
-
     The InfoBar is typically positioned at the bottom of the cell UI.
     """
 
@@ -209,10 +235,6 @@ class MenuBar(Bar):
 
     This class extends the Bar class to create a specialized bar
     for cell controls and options.
-
-    Attributes:
-        editor (Editor): The parent editor object.
-        info (dict): Additional information or controls for the menu.
 
     The MenuBar is typically positioned at the top of the cell UI.
     """
@@ -268,6 +290,12 @@ class Control:
         self.toggled=False
     
     def _callback(self):
+        """
+        The function called when the control is activated.
+
+        This method is called when the control is interacted with (e.g., clicked).
+        It toggles the control's state and calls any custom callback function if defined.
+        """
         self.toggled=not self.toggled
         if self.callback:
             self.callback()
@@ -275,9 +303,22 @@ class Control:
             self.editor.refresh()
 
     def get_icon(self):
+        """
+        Returns the icon for the control.
+
+        Returns:
+            str: The name of the icon to be displayed on the control.
+        """
         return self.icons[0]
 
     def get_dict(self):
+        """
+        Returns the control's configuration as a dictionary.
+
+        Returns:
+            dict: A dictionary containing the complete configuration for the control,
+                  including name, icon, style, and event commands.
+        """
         style=dict()
         if self.style:
             style.update(self.style)
@@ -342,13 +383,18 @@ class Editor:
         key (str): A unique identifier for the editor.
         info_bar (InfoBar): The information bar for the editor.
         menu_bar (MenuBar): The menu bar for the editor.
-        submit_callback (callable): Custom callback for the "submit" event
+        submit_callback (callable): Custom callback for the "submit" event.
 
     Methods:
         add_button(): Adds a button to the editor UI.
         add_toggle(): Adds a toggle to the editor UI.
         show(): Renders the editor UI.
         refresh(): Triggers a refresh of the editor UI.
+        get_params(): Returns the parameters for the code editor component.
+        get_output(output): Retrieves the output from the code editor component.
+        component(): Renders the code editor component.
+        submit(): Handles the submission of editor content.
+        process_event(): Processes UI events.
     """
 
     _excluded=['parser','key','container','code','event','submitted_code','submit_callback','info_bar','menu_bar','kwargs','buttons']
@@ -383,13 +429,55 @@ class Editor:
         return {button.event:button._callback for button in self.buttons.values()}
 
     def add_button(self,name="button",caption="Click me!",icon="Play",event=None,style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
+        """
+        Adds a button to the editor UI.
+
+        Args:
+            name (str): The name of the button.
+            caption (str): The text to display on the button.
+            icon (str): The name of the icon to use.
+            event (str): The event identifier for the button.
+            style (dict): Custom CSS styles for the button.
+            callback (callable): Function to call when the button is clicked.
+            has_caption (bool): Whether to show the caption text.
+            has_icon (bool): Whether to show the icon.
+            hover (bool): Whether to apply hover effects.
+            always_on (bool): Whether the button is always visible.
+            icon_size (str): The size of the icon.
+            visible (bool): Whether the button is visible.
+        """
         self.buttons[name]=Button(self,name=name,caption=caption,icon=icon,event=event,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size,visible=visible)
 
     def add_toggle(self,name="toggle",caption="Toggle me!",icons=["Square","CheckSquare"],event=None,style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):
+        """
+        Adds a toggle to the editor UI.
+
+        Args:
+            name (str): The name of the toggle.
+            caption (str): The text to display for the toggle.
+            icons (list): List of two icon names for off and on states.
+            event (str): The event identifier for the toggle.
+            style (dict): Custom CSS styles for the toggle.
+            callback (callable): Function to call when the toggle state changes.
+            has_caption (bool): Whether to show the caption text.
+            has_icon (bool): Whether to show the icon.
+            hover (bool): Whether to apply hover effects.
+            always_on (bool): Whether the toggle is always visible.
+            icon_size (str): The size of the icon.
+            visible (bool): Whether the toggle is visible.
+        """
         self.buttons[name]=Toggle(self,name=name,caption=caption,icons=icons,event=event,style=style,callback=callback,has_caption=has_caption,has_icon=has_icon,hover=hover,always_on=always_on,icon_size=icon_size,visible=visible)
 
     def get_params(self):
+        """
+        Returns the parameters for the code editor component.
+
+        Returns:
+            dict: A dictionary of parameters used to configure the code editor.
+        """
         params=dict(
+            lang=self.kwargs.pop('lang','text'),
+            key=self.key,
             buttons=[button.get_dict() for button in self.buttons.values() if button.visible],
             options={
                 "showLineNumbers":True
@@ -401,14 +489,7 @@ class Editor:
                 "style":{
                     "borderRadius": "0px 0px 0px 0px"
                 }
-            },
-            component_props={
-                "style":{
-                    
-                }
-
-            },
-            key=self.key
+            }
         )
         params.update(self.kwargs)
         params.update(
@@ -418,34 +499,72 @@ class Editor:
         return params
 
     def get_output(self,output):
+        """
+        Retrieves the output from the code editor component.
+
+        Args:
+            output: The raw output from the code editor.
+
+        Returns:
+            The retrieved output, either from the session state (if available) or the raw output.
+        """
         if self.key in state:
             return state[self.key]
         else:
             return output
             
     def component(self):
-        output=editor(self.code.get_value(),**self.get_params())
+        """
+        Renders the code editor component.
+
+        This method creates and displays the main code editing interface.
+        """
+        output=code_editor(self.code.get_value(),**self.get_params())
         event,content=self.parser(self.get_output(output))
         self.code.from_ui(content)
         self.event=event
 
     def submit(self):
+        """
+        Handles the submission of editor content.
+
+        This method is called when the editor content is submitted,
+        typically triggering the submit_callback if defined.
+        """
         if self.submit_callback:
             self.submit_callback()
 
     def process_event(self):
+        """
+        Processes UI events.
+
+        This method handles various events triggered by UI interactions,
+        such as button clicks or toggles.
+        """
         if self.event=="submit":
             self.submit()
         elif self.event in self.bindings:
             self.bindings[self.event]()
 
     def show(self):
+        """
+        Renders the editor UI.
+
+        This method is responsible for displaying all components of the editor, and process incoming events from the ui.
+        including the code input area and control buttons.
+        """
         self.container=st.empty()
         with self.container:
             self.component()
         self.process_event()
     
     def refresh(self):
+        """
+        Triggers a refresh of the UI.
+
+        This method is used to update the editor's visual representation by requiring a notebook rerun,
+        typically after changes to its content or state.
+        """
         rerun()
         
 class CellUI(Editor):
@@ -455,6 +574,21 @@ class CellUI(Editor):
 
     This class extends the Editor class to provide cell-specific
     functionality and UI elements.
+
+    Attributes:
+        buttons (dict): A dictionary of Button and Toggle objects for cell controls.
+        code (Code): The Code object managing the editor's content.
+        key (str): A unique identifier for the editor.
+        info_bar (InfoBar): The information bar for the editor.
+        menu_bar (MenuBar): The menu bar for the editor.
+        submit_callback (callable): Custom callback for the "submit" event.
+
+    Methods:
+        show(): Renders the cell's UI components.
+        component(): Renders the code editor component.
+        submit(): Handles the submission of cell content.
+        process_event(): Processes UI events.
+        refresh(): Triggers a refresh of the cell UI.
     """
 
     def __init__(self,**kwargs):
