@@ -1,23 +1,29 @@
 import subprocess
 import os
+import sys
+import urllib.parse
 
 def main():
     """
-    Runs the streamlit app by calling 'streamlit run .../streamlit_notebook/main.py'
+    Runs the streamlit app by calling 'streamlit run .../main.py'
+    Optionally accepts a path to a .stnb notebook file as a command-line argument.
     """
-
-
-    # Get the directory of the current script
     script_directory = os.path.dirname(os.path.abspath(__file__))
-
-    # Path to the Streamlit app
     script_path = os.path.join(script_directory, 'main.py')
-
-    # Command to run the Streamlit app as a list
+    
     command = ["streamlit", "run", script_path]
 
-    # Execute the command
+    # If a notebook file path was provided, add it to the command
+    if len(sys.argv) > 1:
+        notebook_path = sys.argv[1]
+        if notebook_path.endswith('.stnb'):
+            command.append(notebook_path)
+        else:
+            print(f"Error: The file {notebook_path} is not a valid .stnb file.")
+            return
+
     subprocess.run(command)
 
 if __name__ == '__main__':
     main()
+

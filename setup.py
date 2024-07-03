@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="streamlit_notebook",
-    version="0.0.24",
+    version="0.0.25",
     author="Baptiste Ferrand",
     author_email="bferrand.maths@gmail.com",
     description="A notebook interface for Streamlit.",

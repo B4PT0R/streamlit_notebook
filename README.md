@@ -22,7 +22,7 @@ I hope users already familiar with Streamlit will have great fun with this noteb
 - Create reactive Markdown or HTML cells by adding formatting tags `<<my_expression>>` that let you insert the current value of any global / state variable or evaluated expression into the text/code.
 - Special `display` function that you can use even in one-shot cells to display python data in a pretty manner to the frontend (uses `st.write` as a default backend). 
 - Automatic evaluation and display of single expressions. Can be selectively deactivated using semicolons at the end of the expression or by switching the display mode in the sidebar menu.
-- Easily download / upload your notebooks as json files.
+- Easily download / upload your notebooks as `.stnb` files (json format).
 - The whole notebook UI can be controled dynamically from code cells. This feature will be refined as I advance this project, but can already be played with. You can refer to the notebook object as `notebook` from within the session and call its methods programmaticaly. For instance you can programmatically create, edit and run cells:
 
 ```python
@@ -54,9 +54,14 @@ pip install streamlit-notebook
 
 ## Usage
 
-You may open a new notebook from anywhere by just running `st_notebook` in the terminal.
+Once installed, you may open the notebook interface from anywhere by just running `st_notebook` in the terminal.
 
-You may as well create a python file like so :
+Or pass a notebook file to open it directly:
+```bash
+$ st_notebook my_notebook.stnb
+```
+
+In case you need to use the package programmatically, you may create a python script like so: 
 
 ```python 
 # notebook.py
@@ -67,9 +72,11 @@ st_notebook()
 
 and run it using `streamlit run notebook.py` from the terminal.
 
-The `st_notebook()` function imported from the package is a complete app in itself rather than a single component, and only serves as an entry point.
+The `st_notebook()` function accepts a local `stnb` file or a serialized notebook string as parameter.
 
-The app is meant to be run locally on your computer, the browser only being used as a GUI interface. Performance is better and allows to use your file system and packages in your sessions. It can be deployed to be used online and share your notebooks, but keep in mind that in this case, the code will run remotely in the cloud server and you will be able to use only preinstalled packages. 
+This function is complete app in itself rather than a single component, and only serves as an entry point.
+
+The app is meant to be run locally on your computer, the browser only being used as a GUI interface. Performance is better and allows to use your file system and packages in your sessions. It can be deployed to be used online and share your notebooks as apps, but keep in mind that in this case, the code will run remotely in the cloud server and you will be able to use only preinstalled packages. 
 
 It is discouraged to introduce any sensitive data in your web sessions, as there is no inherent limitation on the code that can be run in the notebook (appart from limitations on the python packages that can be used). The app doesn't provide any additional security beyond those already implemented by Streamlit. A clever malvolent user could potentially reach your data or spy your session.
 
@@ -110,4 +117,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - july 2nd 2024:
     - Improved dynamic cell creation, edition, and execution.
-    - Added a couple demo notebooks to showcase these features. 
+    - Added a couple demo notebooks to showcase these features.
+
+- july 3rd 2024:
+    - Notebook files now have a .stnb extension (content is still in json format).
+    - Improved the st_notebook function to accept a .stnb file, or a serialized notebook string as parameter. Also improved the terminal command to accept a .stnb file as parameter. 

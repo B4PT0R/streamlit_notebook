@@ -9,6 +9,7 @@ import json
 from io import StringIO
 from textwrap import dedent,indent
 import sys
+from typing import Union, Dict
 
 os.environ['ROOT_PACKAGE_FOLDER']=os.path.dirname(os.path.abspath(__file__))
 
@@ -21,9 +22,11 @@ class Notebook:
 
     """
     The Streamlit notebook object.
+
+    Provides all the utilities needed to orchestrate cell execution and rendering.
     """
 
-    def __init__(self):
+    def __init__(self,title="new_notebook"):
         self.title="new_notebook"
         self.cells={}
         self._current_cell=None
@@ -206,12 +209,22 @@ class Notebook:
 
     def upload_notebook(self):
         """
-        Let the user upload a notebook from a json file and loads it.
+        Let the user upload a notebook from a .stnb file and loads it.
         """
         def on_change():
             if state.uploaded_file is not None:
-                self.from_json(StringIO(state.uploaded_file.getvalue().decode("utf-8")).read())
-        st.file_uploader("Upload a notebook file from your local drive.",on_change=on_change,key="uploaded_file")
+                if state.uploaded_file.name.endswith('.stnb'):
+                    self.from_json(StringIO(state.uploaded_file.getvalue().decode("utf-8")).read())
+                else:
+                    st.error("Invalid file type. Please upload a .stnb file.")
+                    state.uploaded_file = None
+
+        st.file_uploader(
+            "Upload a notebook file (.stnb) from your local drive.",
+            type=['stnb'],
+            on_change=on_change,
+            key="uploaded_file"
+        )
 
     def download_notebook(self):
         """
@@ -220,7 +233,7 @@ class Notebook:
         st.download_button(
             label="Download notebook",
             data=self.to_json(),
-            file_name=f"{self.title}.json",
+            file_name=f"{self.title}.stnb",
             mime="application/json",
             use_container_width=True
         )
@@ -330,14 +343,42 @@ class Notebook:
         self.init_shell()
         rerun()
 
+def st_notebook(initial_notebook: Union[str, Dict, None] = None):
+    """
+    Initializes and renders the notebook interface.
 
-def st_notebook():
+    Args:
+        initial_notebook (Union[str, Dict, None]): 
+            Either a path to a JSON file, a JSON string, a dictionary representing 
+            the notebook, or None to start with a blank notebook. Defaults to None.
+
+    Raises:
+        ValueError: If the provided initial_notebook is invalid or cannot be loaded.
     """
-    Initializes and renders the notebook
-    """
-    if not 'notebook' in state:
-        state.notebook=Notebook()
+    if 'notebook' not in state:
+        state.notebook = Notebook()
+        
+        if initial_notebook is not None:
+            try:
+                if isinstance(initial_notebook, str):
+                    # Check if it's a file path
+                    if initial_notebook.endswith('.stnb'):
+                        with open(initial_notebook, 'r') as f:
+                            notebook_data = json.load(f)
+                    else:  # Assume it's a JSON string
+                        notebook_data = json.loads(initial_notebook)
+                elif isinstance(initial_notebook, dict):
+                    notebook_data = initial_notebook
+                else:
+                    raise ValueError("Invalid initial_notebook type. Expected str, dict, or None.")
+                
+                state.notebook.from_json(json.dumps(notebook_data))
+            except Exception as e:
+                raise ValueError(f"Failed to load initial notebook: {str(e)}")
+
     state.notebook.show()
     check_rerun()
+
+    
 
 

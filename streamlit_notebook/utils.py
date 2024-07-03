@@ -32,14 +32,14 @@ def rerun():
     Commands a rerun of the app at the end of the current run
     Doesn't interrupt any pending operation before the current run is finished
     """
-    state.rerun=True
+    state.rerun_flag=True
     
 def check_rerun():
     """
     Placed as a last command in a streamlit main script, checks whether a rerun has been commanded by rerun() and reruns the app if so.
     """
-    if 'rerun' in state and state.rerun:
-        state.rerun=False
+    if 'rerun_flag' in state and state.rerun_flag:
+        state.rerun_flag=False
         st.rerun()
 
 def format(string, **kwargs):
