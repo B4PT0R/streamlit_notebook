@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit.errors import DuplicateWidgetID
-from .utils import format
-from .cell_ui import CellUI
+from .utils import format, short_id, rerun
+from .cell_ui import CellUI, Code
 
 state=st.session_state
 
@@ -15,36 +15,6 @@ def display(obj):
             st.write(obj)
         except:
             st.text(repr(obj))
-
-class Code:
-
-    """
-    Code object used internally by the Cell object
-    Meant to ease and give more control on how the backend and ui communicate code updates between eachother
-    """
-
-    def __init__(self,value=""):
-        self._value=value
-        self.new_code_flag=False
-
-    def get_value(self):
-        return self._value
-    
-    def from_ui(self,value):
-        if self.new_code_flag:
-            """
-            Avoid the incoming code from ui to overwrite the code value when it has just been set to a new value by a backend callback
-            """
-            self.new_code_flag=False
-        else:
-            self._value=value
-
-    def from_backend(self,value):
-        self._value=value
-        self.new_code_flag=True
-        
-
-
 
 class Cell:
 
@@ -62,6 +32,7 @@ class Cell:
         self.stderr=None
         self.results=[]
         self.exception=None
+        self.ready=False
         self.has_fragment_toggle=True
         self._code=Code(value=code)
         self.last_code=None
@@ -87,7 +58,7 @@ class Cell:
         Setter of the code property
         """
         self._code.from_backend(value)
-        state.rerun=True
+        rerun()
 
     @property
     def has_run_once(self):
@@ -116,16 +87,16 @@ class Cell:
         """
         Initializes the CellUI object
         """
-        self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{self.key}",response_mode="blur")
+        self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{short_id()}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
-        self.ui.buttons["Auto_rerun"]._callback=self.toggle_auto_rerun
+        self.ui.buttons["Auto_rerun"].callback=self.toggle_auto_rerun
         self.ui.buttons["Auto_rerun"].toggled=self.auto_rerun
-        self.ui.buttons["Fragment"]._callback=self.toggle_fragment
+        self.ui.buttons["Fragment"].callback=self.toggle_fragment
         self.ui.buttons["Fragment"].toggled=self.fragment
-        self.ui.buttons["Up"]._callback=self.move_up
-        self.ui.buttons["Down"]._callback=self.move_down
-        self.ui.buttons["Close"]._callback=self.delete
-        self.ui.buttons["Run"]._callback=self.run_callback
+        self.ui.buttons["Up"].callback=self.move_up
+        self.ui.buttons["Down"].callback=self.move_down
+        self.ui.buttons["Close"].callback=self.delete
+        self.ui.buttons["Run"].callback=self.run_callback
         
 
     def update_ui(self):
@@ -153,6 +124,7 @@ class Cell:
         self.container=st.container()
         self.output_area=st.empty()
         self.prepare_output_area()
+        self.ready=True # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
 
     def show(self):
         """
@@ -195,17 +167,21 @@ class Cell:
         """
         Runs the cell's code
         """
-        self.needs_to_run=False
         if not self.has_run and self.code:
+            self.needs_to_run=False
             self.last_code=self.code
             self.results=[]
-            try:
+            if self.ready:
+                # The cell skeleton is on screen and can receive outputs
                 self.prepare_output_area()
                 with self.output:
                     self.exec()
-                self.has_run=True
-            except:
-                self.needs_to_run=True
+            else:
+                # The cell skeleton isn't on screen yet
+                # The code runs anyway, but the outputs will be shown after a refresh
+                self.exec()
+                rerun()
+            self.has_run=True
 
     def get_exec_code(self):
         """
@@ -265,7 +241,7 @@ class Cell:
             del keys[self.rank]
             keys.insert(rank,self.key)
             self.notebook.cells={k:self.notebook.cells[k] for k in keys}
-            state.rerun=True
+            rerun()
 
     def move_up(self):
         """
@@ -299,7 +275,7 @@ class Cell:
         """
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
-            state.rerun=True
+            rerun()
     
     def to_dict(self):
         """

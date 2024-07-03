@@ -3,7 +3,7 @@ import os
 
 def main():
     """
-    Runs the streamlit app by calling 'streamlit run .../main.py'
+    Runs the streamlit app by calling 'streamlit run .../streamlit_notebook/main.py'
     """
 
 

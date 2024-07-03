@@ -1,7 +1,7 @@
 from .cell import new_cell, display
 from .attrdict import AttrDict
 from .echo import echo
-from .utils import format,check_rerun
+from .utils import format, rerun, check_rerun
 from .shell import Shell
 import streamlit as st 
 import os
@@ -24,7 +24,7 @@ class Notebook:
     """
 
     def __init__(self):
-        self.notebook_title="new_notebook"
+        self.title="new_notebook"
         self.cells={}
         self._current_cell=None
         self.hide_code_cells=False
@@ -78,32 +78,36 @@ class Notebook:
         """
         Shell hook called whenever the shell attempts to write to stdout
         """
-        with self.current_cell.stdout_area:
-            if buffer:
-                st.code(buffer,language="text")
+        if self.current_cell.ready:
+            with self.current_cell.stdout_area:
+                if buffer:
+                    st.code(buffer,language="text")
 
     def stderr_hook(self,data,buffer):
         """
         Shell hook called whenever the shell attempts to write to stderr
         """
-        with self.current_cell.stderr_area:
-            if buffer:
-                st.code(buffer,language="text")
+        if self.current_cell.ready:
+            with self.current_cell.stderr_area:
+                if buffer:
+                    st.code(buffer,language="text")
 
     def display_hook(self,result):
         """
         Shell hook called whenever the shell attempts to display a result
         """
-        with self.current_cell.output:    
-            self.current_cell.results.append(result)
-            display(result)
+        self.current_cell.results.append(result)
+        if self.current_cell.ready:
+            with self.current_cell.output:    
+                display(result)
 
     def exception_hook(self,exception):
         """
         Shell hook called whenever the shell catches an exception
         """
-        with self.current_cell.output: 
-            st.exception(exception)
+        if self.current_cell.ready:
+            with self.current_cell.output: 
+                st.exception(exception)
 
     def __getattr__(self,name):
         """
@@ -120,7 +124,6 @@ class Notebook:
         Renders the notebook's UI 
         """
 
-
         self.logo()        
 
         self.sidebar()
@@ -130,10 +133,6 @@ class Notebook:
 
         self.control_bar()
 
-        check_rerun()
-
-
-    
     def sidebar(self):
         """
         Renders the notebook's sidebar
@@ -141,7 +140,7 @@ class Notebook:
         with st.sidebar:
             st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
             st.divider()
-            self.notebook_title=st.text_input("Notebook title:",value=self.notebook_title)
+            self.title=st.text_input("Notebook title:",value=self.title)
             if st.button("Upload notebook", use_container_width=True,key="button_upload_notebook"):
                 self.upload_notebook()
             self.download_notebook()
@@ -221,7 +220,7 @@ class Notebook:
         st.download_button(
             label="Download notebook",
             data=self.to_json(),
-            file_name=f"{self.notebook_title}.json",
+            file_name=f"{self.title}.json",
             mime="application/json",
             use_container_width=True
         )
@@ -233,7 +232,7 @@ class Notebook:
         st.download_button(
             label="Download as Python script",
             data=self.to_python(),
-            file_name=f"{self.notebook_title}.py",
+            file_name=f"{self.title}.py",
             mime="text/x-python",
             use_container_width=True
         )
@@ -243,7 +242,7 @@ class Notebook:
         Deletes all cells
         """
         self.cells={}
-        state.rerun=True
+        rerun()
 
     def run_all_cells(self):
         """
@@ -268,7 +267,7 @@ class Notebook:
         key=self.gen_cell_key()
         cell=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
         self.cells[key]=cell
-        state.rerun=True
+        rerun()
         return cell
 
     def delete_cell(self,key):
@@ -303,8 +302,9 @@ class Notebook:
         Converts the whole notebook to a json strings
         """
         data=dict(
-            name=self.notebook_title,
+            title=self.title,
             hide_code_cells=self.hide_code_cells,
+            display_mode=self.shell.display_mode,
             show_logo=self.show_logo,
             run_on_submit=self.run_on_submit,
             cells={k:self.cells[k].to_dict() for k in self.cells}
@@ -315,16 +315,20 @@ class Notebook:
         """
         Loads a new notebook from a json string
         """
+        self.shell_enabled=False
         data=AttrDict(**json.loads(json_string))
-        self.notebook_title=data.name
-        self.hide_code_cells=data.hide_code_cells
-        self.show_logo=data.show_logo
-        self.run_on_submit=data.run_on_submit
+        self.title=data.get('title',data.get('name',"new_notebook"))
+        self.hide_code_cells=data.get('hide_code_cells',False)
+        self.shell.display_mode=data.get('display_mode','last')
+        self.show_logo=data.get('show_logo',True)
+        self.run_on_submit=data.get('run_on_submit',True)
+        cells=data.get('cells',{})
         self.cells={}
-        for cell in data.cells.values():
-            cell=AttrDict(**cell)
+        for cell in cells.values():
+            cell=AttrDict(cell)
             self.cells[cell.key]=new_cell(self,cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
-        state.rerun=True
+        self.init_shell()
+        rerun()
 
 
 def st_notebook():
@@ -333,7 +337,7 @@ def st_notebook():
     """
     if not 'notebook' in state:
         state.notebook=Notebook()
-    if not 'rerun' in state:
-        state.rerun=False
     state.notebook.show()
+    check_rerun()
+
 

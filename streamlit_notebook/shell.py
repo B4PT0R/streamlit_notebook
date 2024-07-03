@@ -292,7 +292,6 @@ class Shell:
             display=self.display # default display function
         )
         
-
         self.input_hook = input_hook
         self.code_hook = code_hook
         self.stdout_hook = stdout_hook

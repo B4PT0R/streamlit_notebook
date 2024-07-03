@@ -1,17 +1,44 @@
 import re
 import streamlit as st
+import random
+import string
 
+# shortcut for st.session_state
 state=st.session_state
 
+def short_id(length=16):
+    """
+    Generates a (most-likely) unique string id of specified length
+    """
+    return ''.join(random.choices(string.ascii_letters, k=length))
+
 def init_state(**kwargs):
-    if not 'rerun' in state:
-        state.rerun=False
+    """
+    Initializes st.session_state with given kwargs
+    """
     for key,value in kwargs.items():
         if not key in state:
             state[key]=value
 
+def update_state(**kwargs):
+    """
+    update st.session_state with given kwargs
+    """
+    for key,value in kwargs.items():
+        state[key]=value
+
+def rerun():
+    """
+    Commands a rerun of the app at the end of the current run
+    Doesn't interrupt any pending operation before the current run is finished
+    """
+    state.rerun=True
+    
 def check_rerun():
-    if state.rerun:
+    """
+    Placed as a last command in a streamlit main script, checks whether a rerun has been commanded by rerun() and reruns the app if so.
+    """
+    if 'rerun' in state and state.rerun:
         state.rerun=False
         st.rerun()
 
