@@ -1,7 +1,8 @@
 # Custom exclusions
 .tmp/
 .documents/
-compil.py
+compile_package.py
+compiled/
 all.txt
 docs/
 

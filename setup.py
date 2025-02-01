@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="streamlit_notebook",
-    version="0.0.25",
+    version="0.0.26",
     author="Baptiste Ferrand",
     author_email="bferrand.maths@gmail.com",
     description="A notebook interface for Streamlit.",
@@ -31,8 +31,8 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        "streamlit-code-editor==0.1.20",
-        "streamlit>=1.35.0",
+        "streamlit-code-editor",
+        "streamlit>=1.41.0",
         "asttokens",
         "matplotlib",
         "numpy",

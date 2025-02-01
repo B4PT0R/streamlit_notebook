@@ -420,7 +420,7 @@ class Shell:
             globals=self.namespace
 
         if locals is None:
-            locals=dict()
+            locals=globals
 
         old_globals = dict(globals)
 
@@ -452,8 +452,6 @@ class Shell:
 
         if self.namespace_change_hook:
             globals=self.namespace_change_hook(old_globals, globals, locals)
-        else:
-            globals.update(locals)
 
         response = ShellResponse(
             input=code,

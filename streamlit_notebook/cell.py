@@ -421,12 +421,12 @@ class CodeCell(Cell):
             self.exec_code()
 
 
-    @st.experimental_fragment
+    @st.fragment
     def exec_code_as_fragment(self):
         """
         Executes the cell as a Streamlit fragment.
 
-        This method is decorated with @st.experimental_fragment and executes
+        This method is decorated with @st.fragment and executes
         the cell's code within a Streamlit fragment context.
         """
         with self:

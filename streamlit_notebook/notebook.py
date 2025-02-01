@@ -187,7 +187,7 @@ class Notebook:
         such as title editing, file operations, and display settings.
         """
         with st.sidebar:
-            st.image(root_join("app_images","st_notebook.png"),use_column_width=True)
+            st.image(root_join("app_images","st_notebook.png"),use_container_width=True)
             st.divider()
             self.title=st.text_input("Notebook title:",value=self.title)
             if st.button("Upload notebook", use_container_width=True,key="button_upload_notebook"):
@@ -223,7 +223,7 @@ class Notebook:
         """
         if self.show_logo:
             _,c,_=st.columns([40,40,40])
-            c.image(root_join("app_images","st_notebook.png"),use_column_width=True)
+            c.image(root_join("app_images","st_notebook.png"),use_container_width=True)
 
     def control_bar(self):
         """
