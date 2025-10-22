@@ -67,16 +67,15 @@ class Cell:
         self.results=[]
         self.exception=None
         self.ready=False
+        self.has_run=False
         self.has_fragment_toggle=True
         self._code=Code(value=code)
         self.last_code=None
         self.key=key
         self.auto_rerun=auto_rerun
-        self.has_run=False
         self.language=None
         self.type=None
         self.fragment=fragment
-        self.needs_to_run=False
         self.prepare_ui()
 
     @property
@@ -106,7 +105,7 @@ class Cell:
         Checks if the cell has been run at least once with the current code.
 
         Returns:
-            bool: True if the cell has been run with the current code, False otherwise.
+            bool: True if the cell has been run once with the current code, False otherwise.
         """
         return self.last_code is not None and self.last_code==self.code
 
@@ -165,7 +164,7 @@ class Cell:
         #self.ui.buttons['Has_run'].visible=self.has_run_once
         self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="14px",width="100%")))
 
-    def prepare_output_area(self):
+    def initialize_output_area(self):
         """
         Prepares the various containers used to display cell outputs.
         """
@@ -180,7 +179,7 @@ class Cell:
         """
         self.container=st.container()
         self.output_area=st.empty()
-        self.prepare_output_area()
+        self.initialize_output_area()
         self.ready=True # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
 
     def show(self):
@@ -193,18 +192,17 @@ class Cell:
 
         self.prepare_skeleton()
 
-        self.has_run=False
-
-        if not self.notebook.hide_code_cells and self.visible:
+        if not self.notebook.app_mode and self.visible:
             with self.container.container():
                 self.update_ui()
                 self.ui.show()
 
-        if self.auto_rerun or self.needs_to_run:
+        # Auto-rerun only if the cell has been run at least once with the current code
+        # This prevents premature execution when toggling auto-rerun on a cell that hasn't run yet
+        if self.auto_rerun and self.has_run_once:
             self.run()
-                
-        if not self.has_run:
-            self.show_previous_output()
+
+        self.show_output()
         
     def submit_callback(self):
         """
@@ -213,16 +211,16 @@ class Cell:
         Runs the cell only if notebook.run_on_submit is true.
         """
         if self.notebook.run_on_submit:
-            self.has_run=False
+            self.run_state=False
             self.run()
 
     def run_callback(self):
         """
         Callback used to deal with the "run" event from the ui.
 
-        Resets has_run to False and runs the cell.
+        Resets run_state to None and runs the cell.
         """
-        self.has_run=False
+        self.run_state=None
         self.run()
 
     def run(self):
@@ -233,12 +231,11 @@ class Cell:
         and updates the cell's state accordingly.
         """
         if not self.has_run and self.code:
-            self.needs_to_run=False
             self.last_code=self.code
             self.results=[]
             if self.ready:
                 # The cell skeleton is on screen and can receive outputs
-                self.prepare_output_area()
+                self.initialize_output_area()
                 with self.output:
                     self.exec()
             else:
@@ -266,7 +263,7 @@ class Cell:
         Executes the code returned by self.get_exec_code()
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code())
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
         self.set_output(response)       
 
     def set_output(self,response):
@@ -282,26 +279,28 @@ class Cell:
         self.stderr=response.stderr
         self.exception=response.exception
 
-    def show_previous_output(self):
+    def show_output(self):
         """
         Displays the previous execution results.
 
         This method is called when a cell hasn't run in the current Streamlit run,
         displaying previous results without re-executing the code.
         """
+        self.initialize_output_area()
         if self.stdout:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
-        #if self.stderr:
-        #    with self.stderr_area:     
-        #        st.code(self.stderr,language="text")
+        if self.stderr and self.notebook.show_stderr:
+            with self.stderr_area:     
+                st.code(self.stderr,language="text")
         if self.results:
             with self.output:
                 for result in self.results:
                     display(result)
         if self.exception:
             with self.output:
-                st.exception(self.exception)
+                formatted_traceback=f"**{type(self.exception).__name__}**: {str(self.exception)}\n```\n{self.exception.enriched_traceback_string}\n```"
+                st.error(formatted_traceback)
 
     @property
     def rank(self):
@@ -430,7 +429,7 @@ class CodeCell(Cell):
         the cell's code within a Streamlit fragment context.
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code())
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
         self.set_output(response)
 
     def exec_code(self):
@@ -440,7 +439,7 @@ class CodeCell(Cell):
         This method runs the cell's code in the normal execution context.
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code())
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
         self.set_output(response)
 
 class MarkdownCell(Cell):
@@ -475,7 +474,7 @@ class MarkdownCell(Cell):
         This method processes the cell's content, formats any variables,
         and wraps it in a Streamlit markdown function call.
         """
-        formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
+        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
         code=f"st.markdown(r'''{formatted_code}''');"
         return code
 
@@ -511,7 +510,7 @@ class HTMLCell(Cell):
         This method processes the cell's content, formats any variables,
         and wraps it in a Streamlit HTML function call.
         """
-        formatted_code=format(self.code,**state,**globals()).replace("'''","\'\'\'")
+        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
         code=f"st.html(r'''{formatted_code}''');"
         return code
 

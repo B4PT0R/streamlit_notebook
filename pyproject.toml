@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streamlit_notebook"
+version = "0.0.26"
+description = "A notebook interface for Streamlit."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Baptiste Ferrand", email = "bferrand.maths@gmail.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "streamlit-code-editor",
+    "streamlit>=1.41.0",
+    "asttokens",
+    "matplotlib",
+    "numpy",
+    "seaborn",
+    "pandas",
+    "graphviz",
+    "altair",
+    "plotly",
+    "bokeh",
+    "pydeck",
+    "scipy",
+    "sympy",
+    "scikit-learn",
+    "vega-datasets"
+]
+
+[project.urls]
+Homepage = "https://github.com/B4PT0R/streamlit_notebook"
+
+[project.entry-points."console_scripts"]
+st_notebook = "streamlit_notebook.launch_app:main"
+
+[tool.setuptools.package-data]
+streamlit_notebook = [
+    "app_images/*",
+    "demo_notebooks/*",
+    "launch_app.py"
+]
+
+[tool.setuptools.packages.find]
+include = ["streamlit_notebook*"]
