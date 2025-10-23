@@ -6,6 +6,7 @@ import streamlit as st
 import os
 from textwrap import dedent, indent
 from typing import Union, Dict
+import inspect
 
 class Notebook:
 
@@ -24,7 +25,8 @@ class Notebook:
         shell (Shell): The Shell object used for code execution.
 
     Methods:
-        show(): Renders the entire notebook UI.
+        render(): Renders the entire notebook (with required pre and post actions).
+        show(): Renders the UI (sidebar, logo, cells, controls)
         sidebar(): Renders the notebook's sidebar with controls.
         logo(): Renders the notebook's logo.
         control_bar(): Renders the control bar for adding new cells.
@@ -32,12 +34,15 @@ class Notebook:
         upload_notebook(): Allows user to upload a notebook file.
         download_notebook(): Allows user to download the current notebook as a file.
         clear_cells(): Deletes all cells in the notebook.
+        run_next_cell(): runs the first cell encountered that hasn't run yet.
         run_all_cells(): Executes all cells in the notebook.
+        restart_session(): reinitializes the shell and resets the cells to initial state
+        save(file=None): save the current notebook as a .py file.
+        open(file): opens a notebook from a .py file.
         new_cell(type, code, auto_rerun, fragment): Creates a new cell.
         delete_cell(key): Deletes a specific cell.
+        @cell: decorator used to declare new cells in the .py notebook script
         to_python(): Converts the notebook to a Python script.
-        to_json(): Converts the notebook to a JSON string.
-        from_json(json_string): Loads a notebook from a JSON string.
     """
 
     def __init__(self,
@@ -206,7 +211,7 @@ class Notebook:
         # So if a callback caused a cell to run during this run, resetting 'has_run' before cells show in the for
         # loop would cause the cell to run AGAIN in the same run when we reach it in the loop.
         # Causing potential DuplicateWidgetID errors and other issues.
-        self.reset_cells()
+        self.reset_run_states()
         check_rerun()
 
     def sidebar(self):
@@ -231,23 +236,19 @@ class Notebook:
             st.image(root_join("app_images","st_notebook.png"),use_container_width=True)
             st.divider()
 
-            # Title (read-only in locked mode, editable in preview mode)
-            if self.locked:
-                st.markdown(f"### {self.title}")
-            else:
-                def on_title_change_app():
-                    self.title = state.notebook_title_app
-                st.text_input("Notebook title:",value=self.title,key="notebook_title_app",on_change=on_title_change_app)
+            st.text_input("Notebook title:",value=self.title,key="notebook_title_show",disabled=True)
 
             st.divider()
 
             # Execution controls
             st.markdown("**Execution**")
-            if st.button("▶️ Run All Cells", use_container_width=True, key="app_run_all"):
+            if st.button("▶️ Run Next Cell", use_container_width=True, key="app_run_next"):
+                self.run_next_cell()
+            if st.button("⏩​ Run All Cells", use_container_width=True, key="app_run_all"):
                 self.run_all_cells()
-            if st.button("🔄 Reset & Run All", use_container_width=True, key="app_reset_run"):
-                self.init_shell()
-                self.run_all_cells()
+            if st.button("🔄 Reset", use_container_width=True, key="app_reset_run"):
+                self.restart_session()
+
 
             st.divider()
 
@@ -297,6 +298,13 @@ class Notebook:
                     self.open_notebook()
 
             st.divider()
+    
+            st.button("▶️​ Run next cell",on_click=self.run_next_cell,use_container_width=True,key="button_run_next_cell")
+            st.button("⏩ Run all cells",on_click=self.run_all_cells,use_container_width=True,key="button_run_all_cells")
+            st.button("🔄​ Restart session",on_click=self.restart_session,use_container_width=True,key="button_restart_session")
+            st.button("🗑️​ Clear all cells",on_click=self.clear_cells,use_container_width=True,key="button_clear_cells")
+
+            st.divider()
 
             # App mode preview toggle (only if not locked)
             if not self.locked:
@@ -317,10 +325,6 @@ class Notebook:
             def on_change():
                 self.show_stderr=state.toggle_show_stderr
             st.toggle("Show stderr output",value=self.show_stderr,on_change=on_change,key="toggle_show_stderr")
-            st.divider()
-            st.button("Clear all cells",on_click=self.clear_cells,use_container_width=True,key="button_clear_cells")
-            st.button("Restart shell",on_click=self.init_shell,use_container_width=True,key="button_restart_shell")
-            st.button("Run all cells",on_click=self.run_all_cells,use_container_width=True,key="button_run_all_cells")
 
     def logo(self):
         """
@@ -391,18 +395,18 @@ class Notebook:
             filename = f"{self.title}.py"
             filepath = os.path.join(os.getcwd(), filename)
             try:
-                self.save_as_python(filepath)
+                self.save(filepath)
                 st.toast(f"Saved to {filepath}", icon="💾")
             except Exception as e:
                 st.toast(f"Failed to save: {str(e)}", icon="⚠️")
 
         st.button("Save notebook", use_container_width=True, key="button_save_notebook", on_click=on_click)
 
-    def open_notebook_from_py(self, filepath):
+    def open(self, filepath):
         """
         Opens a notebook from a .py file by loading it into session state.
 
-        The .py file should be a notebook generated by save_as_python().
+        The .py file should be a notebook generated by save().
         Works by storing the script in session_state, which will be executed
         by the main script on rerun.
 
@@ -424,9 +428,6 @@ class Notebook:
             # Clear current notebook from state so it gets recreated
             if 'notebook' in state:
                 del state['notebook']
-
-            # Close the open dialog
-            state.show_open_dialog = False
 
             # Rerun to execute the new script
             rerun()
@@ -462,7 +463,9 @@ class Notebook:
             if state.open_notebook_choice:
                 filepath = os.path.join(cwd, state.open_notebook_choice)
                 try:
-                    self.open_notebook_from_py(filepath)
+                    self.open(filepath)
+                    # Close the open dialog
+                    state.show_open_dialog = False
                 except Exception as e:
                     st.error(f"Failed to open: {str(e)}")
 
@@ -483,7 +486,7 @@ class Notebook:
         self.cells={}
         rerun()
 
-    def reset_cells(self):
+    def reset_run_states(self):
         """
         Resets all cells in the notebook.
 
@@ -492,6 +495,15 @@ class Notebook:
         for cell in self.cells.values():
             cell.has_run=False
 
+    def reset_cells(self):
+        """
+        Resets all cells in the notebook.
+
+        This method clears the outputs and state of all cells without deleting them.
+        """
+        for cell in self.cells.values():
+            cell.reset()
+
     def run_all_cells(self):
         """
         (Re)Runs all the cells in the notebook.
@@ -499,7 +511,22 @@ class Notebook:
         This method executes all cells in the notebook in order, updating their outputs.
         """
         for cell in list(self.cells.values()):
-            cell.run()
+            if not cell.has_run_once:
+                cell.run()
+
+    def run_next_cell(self):
+        """
+        Runs the first cell that hasn't been run yet.
+        """
+        for cell in list(self.cells.values()):
+            if not cell.has_run_once:
+                cell.run()
+                break
+
+    def restart_session(self):
+        self.reset_cells()
+        self.init_shell()
+        rerun()
 
     def gen_cell_key(self):
         """
@@ -735,7 +762,7 @@ class Notebook:
         lines.append("render_notebook()")
         return "\n".join(lines)
     
-    def save_as_python(self,filepath=None):
+    def save(self,filepath=None):
         """
         Saves the notebook as a Python script file.
 
@@ -823,6 +850,25 @@ def get_notebook(
 
     return state.notebook
 
+_original_set_page_config = st.set_page_config
+
+def set_page_config(*args, **kwargs):
+    """
+    Patched version of st.set_page_config that only runs during exec context.
+
+    When a notebook is run directly via 'streamlit run notebook.py', this becomes
+    a no-op. When render_notebook() re-execs the script with __file__ = '<notebook_script>',
+    the actual page config is set. This makes <notebook_script> the canonical execution context.
+    """
+    # Check if running from exec context (via <notebook_script>)
+    frame = inspect.currentframe()
+    caller_globals = frame.f_back.f_globals if frame else {}
+    caller_file = caller_globals.get('__file__', '<notebook_script>')
+
+    # Only call set_page_config if in exec context
+    if caller_file == '<notebook_script>':
+        _original_set_page_config(*args, **kwargs)
+
 def render_notebook():
     """
     Renders the notebook currently stored in session state.
@@ -838,8 +884,6 @@ def render_notebook():
     Automatically handles direct runs via 'streamlit run notebook.py' by
     bootstrapping the session state when needed.
     """
-    import inspect
-
     # Check if running directly (not via main.py's <notebook_script>)
     frame = inspect.currentframe()
     caller_globals = frame.f_back.f_globals if frame else {}

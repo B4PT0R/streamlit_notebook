@@ -1,70 +1,27 @@
 # Streamlit Notebook
 
+The reactive notebook powered by Streamlit you've been waiting for.
+
 Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
-
-**Core features:**
-- **Professional shell** - Full-featured Python execution environment with persistent namespace and state management
-- **Selective reactivity** - Choose which cells run once and which respond to UI interactions
-- **100% Streamlit compatible** - Every Streamlit widget, chart, and component works out of the box
-- **Pure Python format** - Notebooks are `.py` files, not JSON—readable, git-friendly, and self-contained
-- **Zero-friction deployment** - The same file runs in development and production with no conversion needed
-
-```python
-# my_notebook.py - just a Python file
-from streamlit_notebook import get_notebook, render_notebook
-import streamlit as st
-
-st.set_page_config(page_title="My Analysis")
-nb = get_notebook(title='my_analysis')
-
-@nb.cell(type='code')
-def load_data():
-    import pandas as pd
-    df = pd.read_csv("data.csv")
-
-@nb.cell(type='code', auto_rerun=True)
-def interactive_viz():
-    column = st.selectbox("Choose column", df.columns)
-    st.line_chart(df[column])
-
-render_notebook()
-```
-
-**Run it:**
-```bash
-st_notebook my_notebook.py       # Full notebook interface for development
-streamlit run my_notebook.py     # Standard mode (uses script parameters)
-streamlit run my_notebook.py --app  # Locked app mode for deployment
-```
 
 ## Overview
 
-Streamlit Notebook bridges the gap between exploratory development and production deployment. Write code in notebook-style cells during development, then deploy the exact same file as a Streamlit app—no rewriting required.
+We all know Jupyter as the go-to for interactive programming, but it comes with its own limitations:
+- JSON format notebooks
+- converting notebooks to deployable apps means rewriting everything. 
+- limited UI widget ecosystem, 
+- limited UI/namespace reactivity
+- limited dynamic creation of widgets
+- limited programmatic creation and execution of cells
+- kernel / frontend dichotomy
+- Huge dependency tree
 
-**Key benefits:**
-- **Pure Python format** - `.py` files, not JSON. Git-friendly diffs, readable code, standard tooling.
-- **Zero learning curve** - Uses standard Streamlit APIs. If you know Streamlit, you know Streamlit Notebook.
-- **Persistent namespace** - Variables and imports survive across reruns. No more re-loading data on every interaction.
-- **Flexible execution** - Choose which cells run once and which react to UI changes.
-- **Instant deployment** - The same file works in development and production.
+Streamlit on the other hand is great for fast reactive apps development, with a huge components ecosystem, and easy deployment on the cloud. But its "rerun the whole script" execution model (without namespace persistence!) can sometimes turn cumbersome, and it lacked a proper notebook ergonomics.
 
-## Why Streamlit Notebook?
+Streamlit Notebook attempts to give you the best of both worlds.
 
-### The Development Problem
-
-Regular Streamlit development has friction:
-- Every script rerun starts from scratch—re-importing libraries, reloading data, recomputing results
-- The edit-save-refresh cycle slows exploration
-- No way to execute code incrementally during development
-
-Jupyter solves this but creates a new problem: converting notebooks to deployable apps means rewriting everything. Besides, widget ecosystem, UI reactivity, dynamic creation of widgets, dynamic creation and execution of cells are all limited.
-
-### The Solution
-
-Streamlit Notebook gives you notebook ergonomics during development and Streamlit apps for deployment, using the same pure Python file.
-
-**Development:** Cell-by-cell execution, persistent namespace, fast iteration
-**Deployment:** Standard Streamlit app, no special runtime, works anywhere Streamlit works
+- **Development:** Cell-by-cell execution, full widget support, selective reactivity, persistent namespace, fast iteration, saved as readable and runnable `.py` files.
+- **Deployment:** Easily publish your notebook as a Streamlit app, no special runtime, deploy in couple of clicks, works anywhere Streamlit works.
 
 ## Installation
 
@@ -123,15 +80,15 @@ streamlit run analysis.py --app  # Locked app mode (overrides script parameters)
 
 ### Cell Types
 
-**One-shot cells:** Run once when you click Run. Use for imports, data loading, expensive computations.
+**One-shot cells:** Run only once when you click Run. Used for imports, data loading, expensive computations.
 
-**Auto-rerun cells:** Run automatically on every UI interaction. Use for widgets and reactive displays.
+**Reactive cells:** Toggle `auto-rerun` on any code cell to make it reactive. These will rerun automatically on every UI interaction and update the python namespace accordingly. Used for widgets and reactive displays.
 
 This selective reactivity lets you separate expensive setup from interactive exploration.
 
 ### Persistent Shell
 
-All cells share a long-lived Python namespace stored in session state. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
+All cells share a long-lived Python namespace with Ipython-style ergonomics. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
 
 **Example:**
 ```python
@@ -220,11 +177,29 @@ The same file now runs as a locked production app with working filters and no vi
 - Clean Streamlit appearance
 - Optional locked mode prevents toggling back
 
-Toggle between modes with the sidebar switch, or use `--app-mode` / `--locked` flags.
+Toggle between modes with the sidebar switch, or use the `--app` flag.
 
 ### Rich Content
 
-**Markdown cells** with variable interpolation:
+**Rich display**
+
+Cell results are automatically displayed with pretty formatting (anything that `st.write` can handle).
+
+Control how expression results appear:
+- `all` - show every expression result
+- `last` - show only the last expression (default)
+- `none` - suppress automatic display
+
+Configurable in the sidebar settings.
+
+You may also :
+- add a trailing `;` at the end of a line to bypass automatic display
+- use the `display` function to selectively display a given result
+
+**Markdown/HTML cells** 
+
+Supporting variable interpolation using `<<any_expression>>`
+
 ```markdown
 # Analysis Results
 
@@ -232,21 +207,80 @@ We loaded << len(df) >> rows.
 The mean value is << df['value'].mean() >>.
 ```
 
-**HTML cells** for custom visualizations.
+**System commands and magics**
 
-**System commands** and IPython-style magics:
+Ipython style commands and magics are supported. It's still basic but works.
+(would require a proper parsing at token level to mimic Ipython more closely)
+
 ```python
+#Cell 1
+
+#system commands
 !pip install requests
-%timeit sum(range(1000))
+
+#define a new magic
+@magic
+def my_new_magic(content):
+    print(content.upper())
+
+#call it in a single line with % (takes the whole line trailing the %<command> as input string)
+%my_new_magic hello, this is a test!
+```
+
+With `%%`, the whole cell starting at second line is considered the magic input.
+
+```python
+#Cell 2
+%%my_new_magic
+All the content of
+the cell goes in the
+magic input
+```
+
+Note: Only the mechanism is supported and you have to declare your own magics.
+
+Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just route the arg to be run as a system command/script.
+
+Note: The shell is *NOT* meant to be an exact reproduction of Ipython. My goal is to provide a practical and versatile coding environment matching the common needs of interactive execution. Yet, you might encounter situations where you feel like some useful features of Ipython are missing, if so please add a feature request.
+
+## Advanced Features
+
+### Streamlit Fragments
+
+Auto-rerun cells can use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
+
+```python
+@nb.cell(type='code', auto_rerun=True, fragment=True)
+def fast_widget():
+    # Only this cell reruns on interaction
+    value = st.slider("Value", 0, 100)
+    st.write(f"Selected: {value}")
+```
+
+### File Operations
+
+**In development mode:**
+- **Save** button: saves to `./notebook_title.py`
+- **Open** button: dropdown of all `.py` notebooks in current directory
+- **Demo notebooks**: load pre-built examples
+
+**From code:**
+```python
+notebook.save()
+notebook.save("my_notebook.py")
+notebook.open("my_notebook.py")
 ```
 
 ### Programmatic API
 
-Manipulate notebooks from code—useful for automation or AI agents:
+The notebook object is exposed in the shell's namespace as `__notebook__` and can be controled programmaticaly from code cells — useful for automation or AI agents:
 
 ```python
+# get the notebook instance
+nb=__notebook__
+
 # Create cells programmatically
-cell = notebook.new_cell(
+cell = nb.new_cell(
     type="code",
     code="st.line_chart([1,2,3])",
     auto_rerun=True
@@ -254,9 +288,11 @@ cell = notebook.new_cell(
 cell.run()
 
 # Edit existing cells
-notebook.cells[0].code = "import pandas as pd"
-notebook.cells[0].run()
+nb.cells[0].code = "import pandas as pd"
+nb.cells[0].run()
 ```
+
+Not really possible in Jupyter or very hacky!
 
 ## Deployment
 
@@ -301,7 +337,7 @@ st_notebook my_notebook.py --app
    - Select `my_dashboard.py` as main file
    - Click "Deploy"
 
-Since notebooks are just Python files, Streamlit Cloud runs them directly—no wrapper needed.
+Since notebooks are just Python files, Streamlit Cloud runs them directly — no wrapper needed.
 
 ### Docker
 
@@ -356,104 +392,12 @@ The `--app` flag is simpler and works everywhere. The environment variable is us
 - Use `@st.cache_data` for expensive operations
 - Add `--app` flag to deployment command or set environment variables
 - Include all dependencies in `requirements.txt`
-- Use environment variables for secrets
+- Use `st.secrets` for secrets (API keys, database credentials, etc.)
 
 ❌ **Don't:**
-- Allow code editing in production deployments
+- Allow code editing in production deployments (the user could read `st.secrets` or run malicious scripts)
 - Hardcode API keys or credentials
 - Assume filesystem persistence (use databases/cloud storage)
-
-## Comparison
-
-### vs. Jupyter
-
-**Jupyter:** Excellent development UX, but notebooks are JSON files and converting to apps requires significant rewriting.
-
-**Streamlit Notebook:** Same notebook development experience with pure Python files that deploy directly as apps. Native Streamlit widgets and deployment ecosystem.
-
-### vs. Marimo
-
-**Marimo:** Modern reactive notebooks with clean Python format, but requires learning new APIs and has a smaller ecosystem.
-
-**Streamlit Notebook:** Zero learning curve if you know Streamlit. Leverages Streamlit's mature ecosystem (35K+ stars, thousands of components, enterprise support). Standard Streamlit deployment works out of the box.
-
-### vs. Plain Streamlit
-
-**Plain Streamlit:** Great for apps, but the edit-refresh cycle and full reruns make exploratory development slower.
-
-**Streamlit Notebook:** Cell-by-cell execution and persistent namespace for fast iteration during development, then deploy the same file as a standard Streamlit app.
-
-## Pure Python Format
-
-Streamlit Notebooks are just Python files with standard syntax. No JSON, no special format.
-
-**Compare to Jupyter:**
-
-```json
-// notebook.ipynb - JSON with metadata noise
-{
-  "cells": [
-    {
-      "cell_type": "code",
-      "execution_count": 1,
-      "metadata": {},
-      "outputs": [],
-      "source": ["import pandas\n", "df = pd.read_csv('data.csv')\n"]
-    }
-  ],
-  "metadata": { "kernelspec": {...}, "language_info": {...} }
-}
-```
-
-vs.
-
-```python
-# notebook.py - clean Python
-import pandas
-df = pd.read_csv('data.csv')
-```
-
-**Benefits:**
-- Git-friendly diffs show actual code changes, not JSON structure changes
-- Readable—just look at the file to understand what it does
-- Standard tools—use any Python editor, linter, or formatter
-- Self-contained—includes `st.set_page_config`, runs standalone
-- Portable—copy the file anywhere, it works
-
-## Advanced Features
-
-### Streamlit Fragments
-
-Auto-rerun cells can use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
-
-```python
-@nb.cell(type='code', auto_rerun=True, fragment=True)
-def fast_widget():
-    # Only this cell reruns on interaction
-    value = st.slider("Value", 0, 100)
-    st.write(f"Selected: {value}")
-```
-
-### Display Modes
-
-Control how expression results appear:
-- `all` - show every expression result
-- `last` - show only the last expression (default)
-- `none` - suppress automatic display
-
-Configure in the cell settings or programmatically.
-
-### File Operations
-
-**In development mode:**
-- **Save** button: saves to `./notebook_title.py`
-- **Open** button: dropdown of all `.py` notebooks in current directory
-- **Demo notebooks**: load pre-built examples
-
-**From code:**
-```python
-notebook.save_as_python("my_notebook.py")
-```
 
 ### Multi-Notebook Deployments
 
@@ -511,17 +455,19 @@ MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
-### 2025-01 - Pure Python Format
+### 2025-10 - Pure Python Format
 
 **Major update:** Notebooks are now pure Python files (`.py`), not JSON.
 
 - Pure Python format with `@nb.cell()` decorator syntax
 - Self-contained notebook .py files
 - Run directly with `streamlit run notebook.py`
-- Session-state based notebook switching
-- App mode with locked deployment option
-- Save/Open buttons for local file management
+- Locked App mode deployment option
 - Removed `.stnb` JSON format entirely
+
+### 2024-09 
+- Improved shell behaviour
+- Implemented basic magic commands support
 
 ### 2024-07
 

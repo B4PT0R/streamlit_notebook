@@ -364,6 +364,15 @@ class Cell:
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
             rerun()
+
+    def reset(self):
+        self.initialize_output_area()
+        self.has_run=False
+        self.last_code=None
+        self.results=[]
+        self.stdout=None
+        self.stderr=None
+        self.exception=None
     
     def to_dict(self):
         """
