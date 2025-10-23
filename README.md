@@ -1,289 +1,230 @@
 # Streamlit Notebook
 
-**The notebook interface Streamlit users have been waiting for.**
+Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
 
-Build interactive analyses with notebook-style cells. Deploy them as polished Streamlit apps. Zero rewriting required.
+**Core features:**
+- **Professional shell** - Full-featured Python execution environment with persistent namespace and state management
+- **Selective reactivity** - Choose which cells run once and which respond to UI interactions
+- **100% Streamlit compatible** - Every Streamlit widget, chart, and component works out of the box
+- **Pure Python format** - Notebooks are `.py` files, not JSON—readable, git-friendly, and self-contained
+- **Zero-friction deployment** - The same file runs in development and production with no conversion needed
 
-> **For Streamlit users:** Get Jupyter-style cell execution without leaving the Streamlit ecosystem.
-> **For Jupyter users:** Keep your notebook workflow, gain Streamlit's deployment power and widget ecosystem.
-> **Compared to Marimo:** Same reactive notebook vision, but leverage Streamlit's mature ecosystem and zero learning curve.
+```python
+# my_notebook.py - just a Python file
+from streamlit_notebook import get_notebook, render_notebook
+import streamlit as st
+
+st.set_page_config(page_title="My Analysis")
+nb = get_notebook(title='my_analysis')
+
+@nb.cell(type='code')
+def load_data():
+    import pandas as pd
+    df = pd.read_csv("data.csv")
+
+@nb.cell(type='code', auto_rerun=True)
+def interactive_viz():
+    column = st.selectbox("Choose column", df.columns)
+    st.line_chart(df[column])
+
+render_notebook()
+```
+
+**Run it:**
+```bash
+st_notebook my_notebook.py       # Full notebook interface for development
+streamlit run my_notebook.py     # Standard mode (uses script parameters)
+streamlit run my_notebook.py --app  # Locked app mode for deployment
+```
+
+## Overview
+
+Streamlit Notebook bridges the gap between exploratory development and production deployment. Write code in notebook-style cells during development, then deploy the exact same file as a Streamlit app—no rewriting required.
+
+**Key benefits:**
+- **Pure Python format** - `.py` files, not JSON. Git-friendly diffs, readable code, standard tooling.
+- **Zero learning curve** - Uses standard Streamlit APIs. If you know Streamlit, you know Streamlit Notebook.
+- **Persistent namespace** - Variables and imports survive across reruns. No more re-loading data on every interaction.
+- **Flexible execution** - Choose which cells run once and which react to UI changes.
+- **Instant deployment** - The same file works in development and production.
 
 ## Why Streamlit Notebook?
 
-### The Problem
-- **Jupyter → Production** is painful. Converting notebooks to deployable apps means rewriting everything.
-- **Streamlit development** lacked a notebook ergonomics. The edit-refresh cycle slows down exploration, and **every script rerun starts from scratch** — you constantly re-import libraries, redefine functions/objects and recompute expensive operations unless you properly cache them or store them in `st.session_state`.
-- **Marimo** is promising, but requires learning new APIs, and leaves the Streamlit ecosystem behind.
+### The Development Problem
+
+Regular Streamlit development has friction:
+- Every script rerun starts from scratch—re-importing libraries, reloading data, recomputing results
+- The edit-save-refresh cycle slows exploration
+- No way to execute code incrementally during development
+
+Jupyter solves this but creates a new problem: converting notebooks to deployable apps means rewriting everything. Besides, widget ecosystem, UI reactivity, dynamic creation of widgets, dynamic creation and execution of cells are all limited.
 
 ### The Solution
-Streamlit Notebook gives you **notebook ergonomics during development** and **Streamlit apps for deployment** — using the exact same `.stnb` file.
 
-```bash
-# Develop locally with full notebook interface
-st_notebook my_analysis.stnb
+Streamlit Notebook gives you notebook ergonomics during development and Streamlit apps for deployment, using the same pure Python file.
 
-# Deploy as a locked Streamlit app (no code editing)
-st_notebook my_analysis.stnb --app-mode --locked
-```
+**Development:** Cell-by-cell execution, persistent namespace, fast iteration
+**Deployment:** Standard Streamlit app, no special runtime, works anywhere Streamlit works
 
-**Same file. Two modes. Zero rewriting.**
+## Installation
 
-## Key Advantages
-
-### ✅ **For Streamlit Users**
-- **Zero learning curve** – uses standard Streamlit APIs (`st.slider`, `st.write`, etc.)
-- **Drop-in compatibility** – copy/paste your existing Streamlit code into cells
-- **Persistent namespace** – imports, variables, and state survive across reruns (no more re-importing pandas every refresh!)
-- **Better dev experience** – cell-by-cell execution beats the edit-refresh loop
-- **Deploy anywhere** – works with Streamlit Cloud, Docker, Kubernetes, etc.
-
-### ✅ **vs. Jupyter**
-- **Deployment story** – notebooks become apps instantly, no conversion needed
-- **Native widgets** – Streamlit's rich widget ecosystem built-in
-- **Reactive UI** – interactive dashboards without complex callbacks
-- **Modern stack** – all the React ecosystem easily wrapped as Streamlit components
-
-### ✅ **vs. Marimo**
-- **Mature ecosystem** – 35K+ Streamlit stars, thousands of components, enterprise support
-- **No migration** – if you know Streamlit, you know Streamlit Notebook
-- **Proven deployment** – Streamlit Cloud, Docker, Kubernetes all just work
-- **Community resources** – thousands of StackOverflow answers, tutorials, examples
-
-## Screenshots
-
-**Development Mode:**
-![Notebook mode](./streamlit_notebook/app_images/st_notebook_demo.png)
-
-**Deployed App Mode:**
-![App mode](./streamlit_notebook/app_images/st_notebook_demo_2.png)
-
-## Quick Start
-
-### Installation
 ```bash
 pip install streamlit-notebook
 ```
 
-### Development Mode
+## Quick Start
+
+### Create a notebook
+
+**Option 1: Start from the UI**
 ```bash
-st_notebook                     # Start empty notebook
-st_notebook my_analysis.stnb    # Open existing notebook
+st_notebook  # Opens empty notebook interface
 ```
+Create cells interactively, then click "Save notebook" to save as a `.py` file.
 
-**Quick example - mixing one-shot and auto-rerun cells:**
-
+**Option 2: Write the file directly**
 ```python
-# Cell 1 (one-shot): Run once, results persist
-import pandas as pd
-df = pd.read_csv("data.csv")
-
-# Cell 2 (auto-rerun): Runs on every widget interaction
-column = st.selectbox("Choose column", df.columns)
-st.line_chart(df[column])
-```
-
-**Key insight:** Cell 1 loads data once. Cell 2 reruns when the selectbox changes, but `df` is already in memory — no re-importing, no re-loading!
-
-### App Mode (Deployment)
-
-**Preview locally:**
-```bash
-st_notebook my_analysis.stnb --app-mode
-```
-
-**Deploy locked (production):**
-```bash
-st_notebook my_analysis.stnb --app-mode --locked
-```
-
-**Docker deployment:**
-```dockerfile
-FROM python:3.11
-RUN pip install streamlit-notebook
-COPY dashboard.stnb /app/
-ENV ST_NOTEBOOK_MODE=app
-ENV ST_NOTEBOOK_LOCKED=true
-CMD ["st_notebook", "/app/dashboard.stnb"]
-```
-
-**Environment variables:**
-```bash
-export ST_NOTEBOOK_MODE=app      # Enable app mode
-export ST_NOTEBOOK_LOCKED=true   # Lock app mode
-```
-
-## Core Features
-
-### 🎯 **Selective Reactivity**
-Control exactly what runs when by choosing the right cell type:
-
-| Cell Type | When it runs | Best for |
-|-----------|-------------|----------|
-| **One-shot** | Once (when you click Run) | Imports, data loading, expensive computations, function definitions |
-| **Auto-rerun** | Every UI interaction | Widgets (`st.slider`), live charts, reactive displays |
-
-This gives you **notebook-style persistence** for heavy operations + **Streamlit-style reactivity** for interactive elements.
-
-### 🔄 **Persistent Shell**
-All cells share a long-lived Python namespace **stored in session state**. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
-
-**Regular Streamlit:** Reruns entire script on every button click → re-imports, re-loads data, re-computes everything.
-
-**Streamlit Notebook:** One-shot cells run once, results persist → import once, load once, compute once. Only auto-rerun cells refresh on interactions.
-
-### 🎨 **Full Streamlit API**
-Every Streamlit widget, chart, and component works out of the box. No new APIs to learn.
-
-```python
-# This just works - standard Streamlit code
+# analysis.py
+from streamlit_notebook import get_notebook, render_notebook
 import streamlit as st
-import pandas as pd
 
-df = pd.read_csv("data.csv")
-selected = st.slider("Select rows", 0, len(df))
-st.dataframe(df.head(selected))
+st.set_page_config(page_title="Analysis")
+nb = get_notebook(title='analysis')
+
+@nb.cell(type='code')
+def setup():
+    import pandas as pd
+    df = pd.read_csv("data.csv")
+    print(f"Loaded {len(df)} rows")
+
+@nb.cell(type='code', auto_rerun=True)
+def explore():
+    col = st.selectbox("Column", df.columns)
+    st.line_chart(df[col])
+
+render_notebook()
 ```
 
-### 🚀 **Streamlit Fragments**
-Auto-rerun cells can run as [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates.
+### Run it
 
-### 🤖 **Programmable Notebooks**
-Manipulate notebooks from code — perfect for AI agents or automation:
+```bash
+# Development mode - full notebook interface
+st_notebook analysis.py
 
-```python
-# Create cells programmatically
-cell = notebook.new_cell(type="code", code="st.line_chart([1,2,3])", auto_rerun=True)
-cell.run()
+# Locked app mode - clean interface, code hidden
+st_notebook analysis.py --app
 
-# Edit existing cells
-notebook.cells[0].code = "import pandas as pd"
-notebook.cells[0].run()
+# Or run directly with Streamlit
+streamlit run analysis.py        # Development mode (uses script parameters)
+streamlit run analysis.py --app  # Locked app mode (overrides script parameters)
 ```
 
-### 📝 **Rich Content**
-- **Markdown cells** with `<< variable >>` interpolation
-- **HTML cells** for custom visualizations
-- **Magic commands** (`%timeit`, `%%bash`, etc.)
-- **System commands** (`!ls`, `!pip install`, etc.)
+## Core Concepts
 
-## Two-Mode Workflow
+### Cell Types
 
-### Development Mode
-**Full notebook interface with:**
-- Code editor for each cell
-- Cell management (create, delete, reorder)
-- One-shot vs auto-rerun toggle
-- Fragment execution option
-- Run all, restart shell, clear cells
-- Save/Open from current directory
-- Upload/Download for sharing
+**One-shot cells:** Run once when you click Run. Use for imports, data loading, expensive computations.
 
-### App Mode
-**Clean, production-ready UI with:**
-- Code editors hidden
-- Interactive widgets remain functional
-- Execution controls (Run All, Reset & Run)
-- Download notebook option
-- Professional Streamlit appearance
+**Auto-rerun cells:** Run automatically on every UI interaction. Use for widgets and reactive displays.
 
-**Toggle modes:**
-- **Preview:** "App mode preview" toggle in sidebar (development)
-- **Locked:** `--locked` flag prevents toggling back (deployment)
+This selective reactivity lets you separate expensive setup from interactive exploration.
 
-## Understanding Cell Types
+### Persistent Shell
 
-### Simple Rule
-- **One-shot cells:** Run once when you click Run. For imports, data loading, heavy computation.
-- **Auto-rerun cells:** Run automatically on every UI interaction. For widgets and reactive displays.
+All cells share a long-lived Python namespace stored in session state. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
 
-### Common Patterns
-
-✅ **Do this:**
+**Example:**
 ```python
-# Cell 1 (one-shot)
+# Cell 1 (one-shot) - runs once
 import pandas as pd
-df = pd.read_csv("data.csv")
-model = train_model(df)
+df = pd.read_csv("large_file.csv")  # 10 seconds to load
 
-# Cell 2 (auto-rerun)
+# Cell 2 (auto-rerun) - reruns on interaction
 threshold = st.slider("Threshold", 0, 100)
-st.line_chart(df[df['value'] > threshold])
+st.write(df[df['value'] > threshold])  # Instant - df already in memory
 ```
 
-❌ **Not this:**
+Cell 1 loads data once. Cell 2 reruns on slider changes but `df` is already in memory—no re-loading.
+
+### Standard Streamlit APIs
+
+Every Streamlit widget, chart, and component works out of the box. Copy-paste your existing Streamlit code into cells.
+
 ```python
-# Cell 1 (auto-rerun) - BAD: re-loads data on every slider change!
-import pandas as pd
-df = pd.read_csv("data.csv")
-threshold = st.slider("Threshold", 0, 100)
-st.line_chart(df[df['value'] > threshold])
+@nb.cell(type='code', auto_rerun=True)
+def my_widget():
+    # Standard Streamlit code - nothing new to learn
+    value = st.slider("Select value", 0, 100)
+    st.metric("Current value", value)
+    st.bar_chart([value, value*2, value*3])
 ```
 
-**Important:** Auto-rerun cells only execute after being run manually once. Toggle auto-rerun on, then click Run to start the reactive behavior.
-
-## Real-World Example: Sales Dashboard
+## Real-World Example
 
 Building a dashboard for 1M rows of sales data:
 
 ```python
-# Cell 1 (one-shot): Setup - run once
-import pandas as pd
-import plotly.express as px
-
-# Cell 2 (one-shot): Load & preprocess - run once (~10 seconds)
-df = pd.read_csv("sales_data.csv")  # 1M rows
-df['date'] = pd.to_datetime(df['date'])
-print(f"Loaded {len(df):,} records")
-
-# Cell 3 (auto-rerun): Interactive filters - instant
-region = st.multiselect("Select regions", df['region'].unique())
-date_range = st.date_input("Date range", [df['date'].min(), df['date'].max()])
-
-# Cell 4 (auto-rerun): Live results - instant
-filtered = df[df['region'].isin(region)] if region else df
-st.metric("Total Sales", f"${filtered['amount'].sum():,.2f}")
-st.plotly_chart(px.line(filtered.groupby('date')['amount'].sum()))
-```
-
-**Performance:** Cells 1-2 run once (10 sec). Cells 3-4 rerun instantly on filter changes. **No re-loading 1M rows!**
-
-**Deploy:** `st_notebook sales_dashboard.stnb --app-mode --locked` → Professional app with working filters, no code visible.
-
-**Want to deploy to the cloud?** See the [Deploying to the Cloud](#deploying-to-the-cloud) section for step-by-step guides.
-
-## File Operations
-
-### Local Development
-- **Save** button: Saves to `./notebook_title.stnb` in current directory
-- **Open** button: Opens dropdown with:
-  - Selectbox showing all `.stnb` files in current directory
-  - File uploader below for importing notebooks from elsewhere
-- **Download** button (tertiary): Export to Downloads folder if needed
-
-### Embedding in Apps
-```python
+from streamlit_notebook import get_notebook, render_notebook
 import streamlit as st
-from streamlit_notebook import st_notebook
 
-# Start with empty notebook
-st_notebook()
+st.set_page_config(page_title="Sales Dashboard", layout="wide")
+nb = get_notebook(title='sales_dashboard')
 
-# Load from file
-st_notebook("path/to/notebook.stnb")
+@nb.cell(type='code')
+def setup():
+    import pandas as pd
+    import plotly.express as px
 
-# App mode from code
-st_notebook("dashboard.stnb", app_mode=True, locked=True)
+@nb.cell(type='code')
+def load_data():
+    df = pd.read_csv("sales_data.csv")  # 1M rows, ~10 seconds
+    df['date'] = pd.to_datetime(df['date'])
+    print(f"Loaded {len(df):,} records")
+
+@nb.cell(type='code', auto_rerun=True)
+def filters():
+    region = st.multiselect("Regions", df['region'].unique())
+    date_range = st.date_input("Date range", [df['date'].min(), df['date'].max()])
+
+@nb.cell(type='code', auto_rerun=True)
+def dashboard():
+    filtered = df[df['region'].isin(region)] if region else df
+    st.metric("Total Sales", f"${filtered['amount'].sum():,.2f}")
+    st.plotly_chart(px.line(filtered.groupby('date')['amount'].sum()))
+
+render_notebook()
 ```
 
-## Advanced Features
+**Performance:** Setup and data loading run once (~10 sec). Filters and dashboard rerun instantly on interaction. No re-loading 1M rows.
 
-### Display Modes
-Control how expression results appear:
-- **`all`**: show every expression result
-- **`last`**: show only the last expression (default)
-- **`none`**: suppress automatic display
+**Deploy:**
+```bash
+streamlit run sales_dashboard.py --app
+```
+The same file now runs as a locked production app with working filters and no visible code.
 
-### Reactive Markdown
+## Development Features
+
+### Two Modes
+
+**Notebook Mode** (development):
+- Code editor for each cell
+- Cell management (create, delete, reorder)
+- Execution controls (Run, Run All, Restart Shell)
+- Save/Open notebooks
+- Demo notebooks library
+
+**App Mode** (deployment):
+- Code editors hidden
+- Interactive widgets remain functional
+- Clean Streamlit appearance
+- Optional locked mode prevents toggling back
+
+Toggle between modes with the sidebar switch, or use `--app-mode` / `--locked` flags.
+
+### Rich Content
+
+**Markdown cells** with variable interpolation:
 ```markdown
 # Analysis Results
 
@@ -291,217 +232,309 @@ We loaded << len(df) >> rows.
 The mean value is << df['value'].mean() >>.
 ```
 
-### System Commands & Magics
+**HTML cells** for custom visualizations.
+
+**System commands** and IPython-style magics:
 ```python
-# Shell commands
 !pip install requests
-!ls -la
-
-# IPython-style magics
 %timeit sum(range(1000))
-%%bash
-echo "Hello from bash"
 ```
 
-## Deployment Considerations
+### Programmatic API
 
-**Local development** (recommended use case):
-- Full filesystem access
-- Install any packages
-- Save/load notebooks freely
-- Complete control
+Manipulate notebooks from code—useful for automation or AI agents:
 
-**Cloud deployment** (possible, with caveats):
-- Code runs on server
-- Preinstall dependencies
-- Read-only filesystem (container restarts)
-- Use `--locked` to prevent code editing
-- Add authentication for public deployments
-
-## Comparison Matrix
-
-| Feature | Streamlit Notebook | Jupyter | Marimo | Plain Streamlit |
-|---------|-------------------|---------|--------|-----------------|
-| **Development UX** | ✅ Cell-by-cell | ✅ Cell-by-cell | ✅ Cell-by-cell | ⚠️ Edit-refresh loop |
-| **Persistent namespace** | ✅ Yes (session state) | ✅ Yes (kernel) | ✅ Yes | ❌ No (reruns from scratch) |
-| **Deployment** | ✅ One-click | ❌ Requires rewrite | ✅ Built-in | ✅ Native |
-| **API familiarity** | ✅ Standard Streamlit | ✅ Standard Python | ⚠️ New Marimo API | ✅ Standard Streamlit |
-| **Ecosystem size** | ✅ Streamlit (35K+ ⭐) | ✅ Huge | ⚠️ Growing | ✅ Streamlit (35K+ ⭐) |
-| **Widget library** | ✅ All Streamlit widgets | ⚠️ Limited (ipywidgets) | ✅ Marimo widgets | ✅ All Streamlit widgets |
-| **Reactive UI** | ✅ Selective | ❌ Not reactive | ✅ Automatic | ✅ Automatic |
-| **Learning curve** | ✅ Minimal (if you know Streamlit) | ✅ Minimal | ⚠️ New framework | ✅ Minimal |
-| **Enterprise support** | ✅ Via Streamlit/Snowflake | ✅ Available | ⚠️ Limited | ✅ Via Streamlit/Snowflake |
-
-## Deploying to the Cloud
-
-### Streamlit Cloud (Easiest)
-
-**1. Prepare your notebook:**
-```bash
-# Test locally in app mode first
-st_notebook my_dashboard.stnb --app-mode --locked
-```
-
-**2. Create a requirements.txt:**
-```txt
-streamlit-notebook
-pandas
-plotly
-# ... other dependencies
-```
-
-**3. Create a Streamlit app file (`app.py`):**
 ```python
-from streamlit_notebook import st_notebook
-import os
-
-# Deploy in locked app mode
-st_notebook(
-    "my_dashboard.stnb",
-    app_mode=True,
-    locked=True
+# Create cells programmatically
+cell = notebook.new_cell(
+    type="code",
+    code="st.line_chart([1,2,3])",
+    auto_rerun=True
 )
+cell.run()
+
+# Edit existing cells
+notebook.cells[0].code = "import pandas as pd"
+notebook.cells[0].run()
 ```
 
-**4. Push to GitHub:**
+## Deployment
+
+### Local Testing
+
 ```bash
-git add my_dashboard.stnb app.py requirements.txt
-git commit -m "Add dashboard"
-git push
+# Test in locked app mode (production simulation)
+st_notebook my_notebook.py --app
 ```
 
-**5. Deploy on Streamlit Cloud:**
-- Go to [share.streamlit.io](https://share.streamlit.io)
-- Connect your GitHub repo
-- Select `app.py` as the main file
-- Click "Deploy"
+### Streamlit Cloud
 
-Done! Your notebook is now a live app at `https://yourapp.streamlit.app`
+1. Create `requirements.txt`:
+   ```
+   streamlit-notebook
+   pandas
+   # ... other dependencies
+   ```
 
-### Docker Deployment
+2. Create `.streamlit/config.toml` (optional - for page config):
+   ```toml
+   [server]
+   headless = true
+   ```
 
-**Dockerfile:**
+3. Create `.env` file to enable locked app mode:
+   ```bash
+   ST_NOTEBOOK_APP_MODE=true
+   ```
+
+   **Note:** Since Streamlit Cloud doesn't let you control the `streamlit run` command, use the `.env` file to set the environment variable. This ensures your notebook deploys in locked app mode.
+
+4. Push to GitHub:
+   ```bash
+   git add my_dashboard.py requirements.txt .env
+   git commit -m "Add dashboard"
+   git push
+   ```
+
+5. Deploy on [share.streamlit.io](https://share.streamlit.io):
+   - Connect your GitHub repo
+   - Select `my_dashboard.py` as main file
+   - Click "Deploy"
+
+Since notebooks are just Python files, Streamlit Cloud runs them directly—no wrapper needed.
+
+### Docker
+
 ```dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy notebook
-COPY my_dashboard.stnb .
+COPY my_dashboard.py .
 
-# Set environment variables for app mode
-ENV ST_NOTEBOOK_MODE=app
-ENV ST_NOTEBOOK_LOCKED=true
-
-# Expose Streamlit port
 EXPOSE 8501
 
-# Run the app
-CMD ["st_notebook", "my_dashboard.stnb"]
+# Option 1: Use --app flag
+CMD ["streamlit", "run", "my_dashboard.py", "--app"]
+
+# Option 2: Use environment variable
+# ENV ST_NOTEBOOK_APP_MODE=true
+# CMD ["streamlit", "run", "my_dashboard.py"]
 ```
 
-**Build and run:**
+Build and run:
 ```bash
 docker build -t my-dashboard .
 docker run -p 8501:8501 my-dashboard
 ```
 
-**Deploy to cloud:**
-- **AWS ECS/Fargate**: Push to ECR, create task definition
-- **Google Cloud Run**: `gcloud run deploy --image gcr.io/project/my-dashboard`
-- **Azure Container Apps**: Deploy from container registry
+Deploy to AWS ECS, Google Cloud Run, Azure Container Apps, or any container platform.
 
 ### Environment Variables
 
-Set these in your deployment platform:
+Control behavior via CLI flag or environment variable:
 
+**CLI flag (recommended):**
 ```bash
-ST_NOTEBOOK_MODE=app       # Enable app mode
-ST_NOTEBOOK_LOCKED=true    # Lock editing (recommended for production)
+streamlit run notebook.py --app  # Locked app mode
 ```
 
-**Streamlit Cloud:** Add to Secrets management
-**Docker:** Set in Dockerfile or docker-compose.yml
-**Kubernetes:** Add to ConfigMap or deployment YAML
+**Environment variable:**
+```bash
+export ST_NOTEBOOK_APP_MODE=true  # Locked app mode
+```
 
-### Best Practices for Production
+The `--app` flag is simpler and works everywhere. The environment variable is useful when you can't modify the command line (e.g., some cloud platforms).
+
+### Production Best Practices
 
 ✅ **Do:**
-- Test in `--app-mode --locked` locally first
+- Test with `--app` flag locally first
 - Use `@st.cache_data` for expensive operations
-- Set `ST_NOTEBOOK_LOCKED=true` to prevent code editing
+- Add `--app` flag to deployment command or set environment variables
 - Include all dependencies in `requirements.txt`
-- Use environment variables for secrets (not hardcoded)
+- Use environment variables for secrets
 
 ❌ **Don't:**
-- Deploy without testing app mode first
-- Allow code editing in production (leave unlocked)
+- Allow code editing in production deployments
 - Hardcode API keys or credentials
 - Assume filesystem persistence (use databases/cloud storage)
+
+## Comparison
+
+### vs. Jupyter
+
+**Jupyter:** Excellent development UX, but notebooks are JSON files and converting to apps requires significant rewriting.
+
+**Streamlit Notebook:** Same notebook development experience with pure Python files that deploy directly as apps. Native Streamlit widgets and deployment ecosystem.
+
+### vs. Marimo
+
+**Marimo:** Modern reactive notebooks with clean Python format, but requires learning new APIs and has a smaller ecosystem.
+
+**Streamlit Notebook:** Zero learning curve if you know Streamlit. Leverages Streamlit's mature ecosystem (35K+ stars, thousands of components, enterprise support). Standard Streamlit deployment works out of the box.
+
+### vs. Plain Streamlit
+
+**Plain Streamlit:** Great for apps, but the edit-refresh cycle and full reruns make exploratory development slower.
+
+**Streamlit Notebook:** Cell-by-cell execution and persistent namespace for fast iteration during development, then deploy the same file as a standard Streamlit app.
+
+## Pure Python Format
+
+Streamlit Notebooks are just Python files with standard syntax. No JSON, no special format.
+
+**Compare to Jupyter:**
+
+```json
+// notebook.ipynb - JSON with metadata noise
+{
+  "cells": [
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {},
+      "outputs": [],
+      "source": ["import pandas\n", "df = pd.read_csv('data.csv')\n"]
+    }
+  ],
+  "metadata": { "kernelspec": {...}, "language_info": {...} }
+}
+```
+
+vs.
+
+```python
+# notebook.py - clean Python
+import pandas
+df = pd.read_csv('data.csv')
+```
+
+**Benefits:**
+- Git-friendly diffs show actual code changes, not JSON structure changes
+- Readable—just look at the file to understand what it does
+- Standard tools—use any Python editor, linter, or formatter
+- Self-contained—includes `st.set_page_config`, runs standalone
+- Portable—copy the file anywhere, it works
+
+## Advanced Features
+
+### Streamlit Fragments
+
+Auto-rerun cells can use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
+
+```python
+@nb.cell(type='code', auto_rerun=True, fragment=True)
+def fast_widget():
+    # Only this cell reruns on interaction
+    value = st.slider("Value", 0, 100)
+    st.write(f"Selected: {value}")
+```
+
+### Display Modes
+
+Control how expression results appear:
+- `all` - show every expression result
+- `last` - show only the last expression (default)
+- `none` - suppress automatic display
+
+Configure in the cell settings or programmatically.
+
+### File Operations
+
+**In development mode:**
+- **Save** button: saves to `./notebook_title.py`
+- **Open** button: dropdown of all `.py` notebooks in current directory
+- **Demo notebooks**: load pre-built examples
+
+**From code:**
+```python
+notebook.save_as_python("my_notebook.py")
+```
+
+### Multi-Notebook Deployments
+
+Deploy multiple related notebooks in a single repo, allowing users to navigate between them while keeping everything in locked app mode.
+
+**Use case:** A data engineer creates several analysis notebooks (Sales, Customers, Forecasting) and wants to deploy them all as apps with simple navigation.
+
+**Setup:**
+```
+my-analytics/
+├── .env                          # ST_NOTEBOOK_APP_MODE=true
+├── requirements.txt
+├── sales_analysis.py
+├── customer_segmentation.py
+└── forecasting_model.py
+```
+
+**How it works:**
+- Deploy to Streamlit Cloud pointing to any notebook as the main file
+- Users see "Open notebook" dropdown to switch between notebooks
+- `ST_NOTEBOOK_APP_MODE=true` in `.env` ensures ALL notebooks are locked apps
+- Safe for end users—no code editing allowed on any notebook
+
+This is perfect for demos, dashboards, or sharing multiple analyses with stakeholders without creating separate deployments for each notebook.
+
+## Use Cases
+
+**Data Exploration → Dashboard:** Build analysis interactively, deploy as stakeholder dashboard.
+
+**Prototyping → Production:** Develop proof-of-concept in notebook mode, deploy as locked app without rewriting.
+
+**Interactive Reports:** Blend narrative (Markdown) with live data and widgets.
+
+**Teaching & Demos:** Create interactive tutorials for step-by-step learning.
+
+**AI Agent Integration:** Let LLMs generate and execute cells programmatically for autonomous analysis.
 
 ## Demo
 
 Try the hosted demo: [st-notebook.streamlit.app](https://st-notebook.streamlit.app/)
 
-## Use Cases
+## Contributing
 
-### Data Exploration → Dashboard
-Build an analysis interactively, deploy it as a dashboard for stakeholders.
-
-### Prototyping → Production
-Develop proof-of-concept in notebook mode, deploy as locked app without rewriting.
-
-### Interactive Reports
-Create notebooks that blend narrative (Markdown) with live data and widgets.
-
-### Teaching & Demos
-Build interactive tutorials that students/viewers can follow step-by-step.
-
-### AI Agent Integration
-Let LLMs generate and execute cells programmatically for autonomous analysis.
-
-## Contributing & Feedback
-
-This project is evolving quickly. Bug reports, feature ideas, and PRs are welcome!
+Contributions welcome! File issues for bugs or feature requests. Submit PRs for improvements.
 
 1. Fork the repo
 2. Create a feature branch (`git checkout -b feature/my-idea`)
-3. Commit changes (`git commit -m "Add my idea"`)
+3. Commit changes (`git commit -m "Add feature"`)
 4. Push (`git push origin feature/my-idea`)
 5. Open a pull request
 
-File issues for anything unexpected or frustrating.
-
 ## License
 
-MIT License – see [LICENSE](LICENSE).
+MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
-- **2025-01-XX**
-  - Added app mode with locked deployment option
-  - Implemented Save/Open buttons for better local UX
-  - Fixed auto-rerun behavior (only triggers after first manual run)
-  - Separated notebook mode vs app mode sidebars
-- **2024-07-03**
-  - `.stnb` becomes the default notebook extension
-  - `st_notebook` accepts file paths or JSON strings
-- **2024-07-02**
-  - Programmatic cell creation/editing improvements
-  - Added demo notebooks
-- **2024-06-24**
-  - Custom shell with AST-based execution
-  - Expression display modes
-  - `display()` helper function
-- **2024-06-11**
-  - HTML cells
-  - JSON import/export
-  - Demo notebooks
+### 2025-01 - Pure Python Format
+
+**Major update:** Notebooks are now pure Python files (`.py`), not JSON.
+
+- Pure Python format with `@nb.cell()` decorator syntax
+- Self-contained notebook .py files
+- Run directly with `streamlit run notebook.py`
+- Session-state based notebook switching
+- App mode with locked deployment option
+- Save/Open buttons for local file management
+- Removed `.stnb` JSON format entirely
+
+### 2024-07
+
+- `.stnb` JSON format as default
+- `st_notebook` accepts file paths or JSON strings
+
+### 2024-06
+
+- Custom shell with AST-based execution
+- Expression display modes
+- HTML cells
+- Demo notebooks
 
 ---
 
-**Stop rewriting notebooks. Start deploying them.** 🚀
+**Develop with notebooks. Deploy as apps.** 🚀

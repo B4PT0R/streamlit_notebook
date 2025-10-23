@@ -579,7 +579,7 @@ class Shell:
 
     @property
     def current_code(self):
-        """Returns the current code being executed."""
+        """Returns the current code being executed (readonly)."""
         return self._current_code
     
     def _render_snippet(self, filename, lineno):

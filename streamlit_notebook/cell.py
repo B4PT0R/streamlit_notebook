@@ -48,7 +48,7 @@ class Cell:
         run(): Executes the cell's code.
         get_exec_code(): Returns the code to be executed.
         set_output(response): Sets the output of the cell after execution.
-        show_previous_output(): Displays the previous execution results.
+        show_output(): Displays the execution results (if any).
         move_up(): Moves the cell up in the notebook.
         move_down(): Moves the cell down in the notebook.
         delete(): Removes the cell from the notebook.
@@ -166,7 +166,7 @@ class Cell:
 
     def initialize_output_area(self):
         """
-        Prepares the various containers used to display cell outputs.
+        Prepares or clears the various containers used to display cell outputs.
         """
         self.output=self.output_area.container()
         with self.output:
@@ -233,6 +233,7 @@ class Cell:
         if not self.has_run and self.code:
             self.last_code=self.code
             self.results=[]
+            self.has_run=True
             if self.ready:
                 # The cell skeleton is on screen and can receive outputs
                 self.initialize_output_area()
@@ -243,7 +244,7 @@ class Cell:
                 # The code runs anyway, but the outputs will be shown after a refresh
                 self.exec()
                 rerun()
-            self.has_run=True
+            
 
     def get_exec_code(self):
         """
@@ -549,7 +550,7 @@ def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
         key: Unique identifier for the cell.
         type (str): The type of cell to create ("code", "markdown", or "html").
         code (str): Initial code or content for the cell.
-        auto_rerun (bool): Whether the cell should automatically re-run when changed.
+        auto_rerun (bool): Whether the cell should automatically re-run when UI refreshes.
         fragment (bool): Whether the cell should run as a Streamlit fragment.
 
     Returns:

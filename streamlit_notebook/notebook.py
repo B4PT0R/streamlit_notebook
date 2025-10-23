@@ -1,13 +1,10 @@
 from .cell import new_cell, display
-from .attrdict import AttrDict
 from .echo import echo
 from .utils import format, rerun, check_rerun, root_join, state
 from .shell import Shell
-import streamlit as st 
+import streamlit as st
 import os
-import json
-from io import StringIO
-from textwrap import dedent,indent
+from textwrap import dedent, indent
 from typing import Union, Dict
 
 class Notebook:
@@ -43,16 +40,24 @@ class Notebook:
         from_json(json_string): Loads a notebook from a JSON string.
     """
 
-    def __init__(self,title="new_notebook",app_mode=False,locked=False):
+    def __init__(self,
+            title="new_notebook",
+            app_mode=False,
+            locked=False,
+            run_on_submit=True,
+            show_logo=True,
+            show_stderr=False
+        ):
         self.title=title
         self.cells={}
         self._current_cell=None
         self.app_mode=app_mode  # Whether to hide code cells (can be toggled in dev)
         self.locked=locked  # Whether app mode is locked (deployment mode, can't toggle back)
-        self.run_on_submit=True
-        self.show_logo=True
-        self.show_stderr=False
+        self.run_on_submit=run_on_submit
+        self.show_logo=show_logo
+        self.show_stderr=show_stderr
         self.current_code=None
+        self.initialized=False
         # patch st.echo in streamlit module to fit the notebook environment
         st.echo=echo(self.get_current_code).__call__
         # replace streamlit module in sys.modules to ensure the interactive shell uses the patched version
@@ -186,13 +191,23 @@ class Notebook:
 
         self.control_bar()
 
-        # Though not very intuitive, resetting cells 'has_run' state AT THE END of show()
-        # instead of the beginning ensures that a cell isn't executed twice in the same run 
+    def render(self):
+        """
+        main rendering method called in each Streamlit run.
+        """
+
+        self.initialized=True
+
+        self.show()
+
+        # Though not very intuitive, resetting cells 'has_run' state AFTER show()
+        # instead of before ensures that a cell isn't executed twice in the same run 
         # Indeed, in Streamlit, callbacks triggered by UI events are fired AT THE VERY BEGINNING of the current run.
-        # So if a callback caused a cell to run during this run, resetting 'has_run' before the above
+        # So if a callback caused a cell to run during this run, resetting 'has_run' before cells show in the for
         # loop would cause the cell to run AGAIN in the same run when we reach it in the loop.
         # Causing potential DuplicateWidgetID errors and other issues.
         self.reset_cells()
+        check_rerun()
 
     def sidebar(self):
         """
@@ -220,7 +235,9 @@ class Notebook:
             if self.locked:
                 st.markdown(f"### {self.title}")
             else:
-                self.title=st.text_input("Notebook title:",value=self.title)
+                def on_title_change_app():
+                    self.title = state.notebook_title_app
+                st.text_input("Notebook title:",value=self.title,key="notebook_title_app",on_change=on_title_change_app)
 
             st.divider()
 
@@ -247,9 +264,6 @@ class Notebook:
 
             st.divider()
 
-            # Download notebook
-            self.download_notebook()
-
             if self.locked:
                 st.caption("🔒 Running in locked app mode")
 
@@ -263,7 +277,9 @@ class Notebook:
         with st.sidebar:
             st.image(root_join("app_images","st_notebook.png"),use_container_width=True)
             st.divider()
-            self.title=st.text_input("Notebook title:",value=self.title)
+            def on_title_change_edit():
+                self.title = state.notebook_title_edit
+            st.text_input("Notebook title:",value=self.title,key="notebook_title_edit",on_change=on_title_change_edit)
 
             # Demo notebooks
             if st.button("Demo notebooks", use_container_width=True, key="button_load_demo"):
@@ -279,11 +295,6 @@ class Notebook:
             if state.get('show_open_dialog', False):
                 with st.container():
                     self.open_notebook()
-                    st.caption("Or upload from elsewhere:")
-                    self.upload_notebook()
-
-            # Download button (tertiary, less prominent)
-            self.download_notebook_button()
 
             st.divider()
 
@@ -348,110 +359,119 @@ class Notebook:
 
         Allows the user to select and load a pre-defined demo notebook from the package's demo folder.
         """
-        demo_folder=root_join("demo_notebooks")
-        demos=list(os.listdir(demo_folder))
+        demo_folder = root_join("demo_notebooks")
+        demos = [f for f in os.listdir(demo_folder) if f.endswith('.py')]
+
         def on_change():
             if state.demo_choice:
-                with open(os.path.join(demo_folder,state.demo_choice)) as f:
-                    self.from_json(f.read())
-        st.selectbox("Choose a demo notebook.",options=demos,index=None,on_change=on_change,key="demo_choice")
+                filepath = os.path.join(demo_folder, state.demo_choice)
+                try:
+                    with open(filepath, 'r') as f:
+                        code = f.read()
 
-    def upload_notebook(self):
-        """
-        Lets the user upload a notebook from a .stnb file and loads it.
+                    # Store the notebook script in session state
+                    state.notebook_script = code
 
-        This method handles file upload and notebook loading from the uploaded file.
-        """
-        def on_change():
-            if state.uploaded_file is not None:
-                if state.uploaded_file.name.endswith('.stnb'):
-                    self.from_json(StringIO(state.uploaded_file.getvalue().decode("utf-8")).read())
-                    # Close the open dialog after successful upload
-                    state.show_open_dialog = False
-                else:
-                    st.error("Invalid file type. Please upload a .stnb file.")
-                    state.uploaded_file = None
+                    # Clear current notebook from state so it gets recreated
+                    if 'notebook' in state:
+                        del state['notebook']
 
-        st.file_uploader(
-            "Drag and drop or browse",
-            type=['stnb'],
-            on_change=on_change,
-            key="uploaded_file",
-            label_visibility="collapsed"
-        )
+                    # Rerun to execute the new script
+                    rerun()
+                except Exception as e:
+                    st.error(f"Failed to load demo: {str(e)}")
+
+        st.selectbox("Choose a demo notebook.", options=demos, index=None, on_change=on_change, key="demo_choice")
 
     def save_notebook(self):
         """
-        Saves the current notebook to a .stnb file in the current working directory.
+        Saves the current notebook to a .py file in the current working directory.
         """
         def on_click():
-            filename = f"{self.title}.stnb"
+            filename = f"{self.title}.py"
             filepath = os.path.join(os.getcwd(), filename)
             try:
-                with open(filepath, 'w') as f:
-                    f.write(self.to_json())
-                st.toast(f"Saved to {filepath}",icon="💾")
+                self.save_as_python(filepath)
+                st.toast(f"Saved to {filepath}", icon="💾")
             except Exception as e:
-                st.toast(f"Failed to save: {str(e)}",icon="⚠️")
+                st.toast(f"Failed to save: {str(e)}", icon="⚠️")
 
         st.button("Save notebook", use_container_width=True, key="button_save_notebook", on_click=on_click)
 
+    def open_notebook_from_py(self, filepath):
+        """
+        Opens a notebook from a .py file by loading it into session state.
+
+        The .py file should be a notebook generated by save_as_python().
+        Works by storing the script in session_state, which will be executed
+        by the main script on rerun.
+
+        Args:
+            filepath (str): Path to the .py notebook file
+        """
+        try:
+            with open(filepath, 'r') as f:
+                code = f.read()
+
+            # Validate it's a notebook file
+            if 'from streamlit_notebook import get_notebook' not in code:
+                st.error("This doesn't appear to be a valid notebook Python file.")
+                return
+
+            # Store the notebook script in session state
+            state.notebook_script = code
+
+            # Clear current notebook from state so it gets recreated
+            if 'notebook' in state:
+                del state['notebook']
+
+            # Close the open dialog
+            state.show_open_dialog = False
+
+            # Rerun to execute the new script
+            rerun()
+
+        except Exception as e:
+            import traceback
+            st.error(f"Failed to load notebook: {str(e)}")
+            st.code(traceback.format_exc())
+
     def open_notebook(self):
         """
-        Opens a .stnb file from the current working directory.
+        Opens a notebook .py file from the current working directory.
         """
         cwd = os.getcwd()
-        stnb_files = [f for f in os.listdir(cwd) if f.endswith('.stnb')]
+        all_files = [f for f in os.listdir(cwd) if f.endswith('.py')]
 
-        if not stnb_files:
-            st.info("No .stnb files found in current directory")
+        # Filter .py files to only show those that look like notebooks
+        notebook_files = []
+        for f in all_files:
+            try:
+                with open(os.path.join(cwd, f), 'r') as file:
+                    # Check first 500 chars for notebook signature
+                    if 'from streamlit_notebook import get_notebook' in file.read(500):
+                        notebook_files.append(f)
+            except:
+                pass
+
+        if not notebook_files:
+            st.info("No notebook files (.py) found in current directory")
             return
 
         def on_change():
             if state.open_notebook_choice:
                 filepath = os.path.join(cwd, state.open_notebook_choice)
                 try:
-                    with open(filepath, 'r') as f:
-                        self.from_json(f.read())
+                    self.open_notebook_from_py(filepath)
                 except Exception as e:
                     st.error(f"Failed to open: {str(e)}")
 
         st.selectbox(
             "Open notebook from current directory",
-            options=stnb_files,
+            options=notebook_files,
             index=None,
             on_change=on_change,
             key="open_notebook_choice"
-        )
-
-    def download_notebook(self):
-        """
-        Lets the user download the current notebook as a JSON file.
-
-        This method creates a downloadable .stnb file containing the current notebook state.
-        Used in app mode sidebar.
-        """
-        st.download_button(
-            label="Download notebook",
-            data=self.to_json(),
-            file_name=f"{self.title}.stnb",
-            mime="application/json",
-            use_container_width=True
-        )
-
-    def download_notebook_button(self):
-        """
-        Tertiary download button for notebook mode sidebar.
-        Less prominent than save/open, for exporting to Downloads folder.
-        """
-        st.download_button(
-            label="⬇ Download",
-            data=self.to_json(),
-            file_name=f"{self.title}.stnb",
-            mime="application/json",
-            use_container_width=True,
-            type="tertiary",
-            help="Export notebook to Downloads folder"
         )
 
     def clear_cells(self):
@@ -511,6 +531,222 @@ class Notebook:
         self.cells[key]=cell
         rerun()
         return cell
+    
+    def cell(self,type="code",auto_rerun=False,fragment=False):
+        """
+        returns a decorator that adds a new cell created from a function's source code.
+        allows programmatic creation of cells from code defined in functions.
+        example:
+        @notebook.cell(type="markdown")
+        def my_markdown_cell():
+            '''
+            # This is a markdown cell
+            You can write **Markdown** here.
+            '''
+
+        Args:
+            type (str): The type of cell to create ("code", "markdown", or "html").
+            auto_rerun (bool): If True, the cell will automatically re-run when changed.
+            fragment (bool): If True, the cell will run as a Streamlit fragment.
+        Returns:
+            function: A decorator that adds a new cell from the decorated function's code.
+            
+        """
+        import inspect
+
+        # Check if running directly (not via main.py's <notebook_script>)
+        frame = inspect.currentframe()
+        caller_globals = frame.f_back.f_globals if frame else {}
+        caller_file = caller_globals.get('__file__', '<notebook_script>')
+
+        skip=(caller_file != '<notebook_script>')
+
+        def decorator(func):
+            if skip or self.initialized:
+                return func
+            import inspect
+            if type in ("markdown","html"):
+                # Extract docstring for markdown and html cells
+                code=dedent(inspect.getdoc(func) or "")
+            else:
+                source=self.get_source(func)
+                # source includes the function definition line (def my_function():)
+                # we need to remove it to get the actual function body
+                # skipping first line only
+                code=dedent("\n".join(source.split("\n")[1:]))
+
+                # remove any last useless "pass" statement at function module level
+                # carefully avoiding to remove indented pass statements inside the function body
+                # (might be important to keep in sub-blocks)
+                if code.rstrip().endswith("\npass"):
+                    lines=code.rstrip().split("\n")
+                    if len(lines)>=2 and not lines[-2].startswith(" "):
+                        lines=lines[:-1]
+                        code="\n".join(lines)
+
+            return self.new_cell(type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
+        return decorator
+    
+    def get_source(self, func):
+        """
+        Extracts the source code from a function for @nb.cell() decorator.
+
+        The @nb.cell() decorator is only intended for use in Python script files,
+        not for interactive shell usage.
+
+        Args:
+            func (function): The function from which to extract the source code.
+
+        Returns:
+            str: The source code of the function.
+
+        Raises:
+            ValueError: If the function is not defined in a valid context.
+        """
+        import ast
+
+        # Get the filename where the function was defined
+        filename = func.__code__.co_filename
+
+        # Retrieve source code based on filename
+        if filename == '<notebook_script>':
+            # Function defined in the notebook script executed by main.py
+            if 'notebook_script' in state:
+                code = state.notebook_script
+            else:
+                raise ValueError(
+                    f"Cannot retrieve source for function '{func.__name__}': "
+                    "notebook_script not found in session state"
+                )
+        elif os.path.exists(filename):
+            # Real file - read it
+            with open(filename, 'r') as f:
+                code = f.read()
+        else:
+            # Invalid context - this shouldn't happen with @nb.cell()
+            raise ValueError(
+                f"Cannot retrieve source for function '{func.__name__}': "
+                f"@nb.cell() decorator is only for use in Python script files, "
+                f"not interactive shell execution. "
+                f"For interactive use, create cells with notebook.new_cell() instead."
+            )
+
+        # Parse the source code and extract the specific function
+        try:
+            module = ast.parse(code)
+        except SyntaxError as e:
+            raise ValueError(f"Failed to parse source code: {e}")
+
+        # Find the function definition in the AST
+        for node in module.body:
+            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
+                source_lines = code.split("\n")[node.lineno-1:node.end_lineno]
+                return dedent("\n".join(source_lines))
+
+        # Function not found in source
+        raise ValueError(
+            f"Could not find function '{func.__name__}' in source code"
+        )
+    
+    def to_python(self):
+        """
+        Converts the whole notebook to a Python script.
+        the script recreates the notebook structure using the @cell decorator.
+        the file can be run as a standard Streamlit app.
+
+        Returns:
+            str: A Python script representation of the notebook.
+        """
+        lines=[]
+        lines.append("# Generated by Streamlit Notebook")
+        lines.append(f"# Original notebook: {self.title}")
+        lines.append("# This file can be run directly with: streamlit run <filename>")
+        lines.append("")
+        lines.append("from streamlit_notebook import get_notebook, render_notebook")
+        lines.append("import streamlit as st")
+        lines.append("")
+        lines.append("st.set_page_config(page_title=\"st.notebook\", layout=\"centered\", initial_sidebar_state=\"collapsed\")")
+        lines.append("")
+
+        # Only include non-default parameters
+        defaults = {
+            'title': 'new_notebook',
+            'app_mode': False,
+            'locked': False,
+            'run_on_submit': True,
+            'show_logo': True,
+            'show_stderr': False
+        }
+        params = dict(
+            title=self.title,
+            app_mode=self.app_mode,
+            locked=self.locked,
+            run_on_submit=self.run_on_submit,
+            show_logo=self.show_logo,
+            show_stderr=self.show_stderr
+        )
+        params_str = ", ".join([
+            f"{k}={repr(v)}"
+            for k, v in params.items()
+            if v != defaults.get(k)
+        ])
+        lines.append(f"nb = get_notebook({params_str})")
+
+        # Use @cell decorator to recreate cells from functions
+        # Sort by key to ensure consistent ordering
+        for key in sorted(self.cells.keys()):
+            cell = self.cells[key]
+            if cell.type in ("markdown", "html"):
+                lines.append("")
+                lines.append(f"@nb.cell(type='{cell.type}', auto_rerun={cell.auto_rerun}, fragment={cell.fragment})")
+                lines.append("def cell_{}():".format(cell.key))
+                if cell.code.strip() == "":
+                    lines.append("    pass")
+                else:
+                    # Handle triple quotes properly
+                    content = dedent(cell.code)
+                    if "'''" in content and '"""' not in content:
+                        # Use double quotes
+                        template = 'r"""\n{content}\n"""'
+                    elif '"""' in content and "'''" not in content:
+                        # Use single quotes
+                        template = "r'''\n{content}\n'''"
+                    elif "'''" in content and '"""' in content:
+                        # Both present - escape double quotes
+                        content = content.replace('"""', r'\"\"\"')
+                        template = 'r"""\n{content}\n"""'
+                    else:
+                        # Neither present - use single quotes by default
+                        template = "r'''\n{content}\n'''"
+                    lines.append(indent(template.format(content=content), "    "))
+            else:  # code cell
+                lines.append("")
+                lines.append(f"@nb.cell(type='code', auto_rerun={cell.auto_rerun}, fragment={cell.fragment})")
+                lines.append("def cell_{}():".format(cell.key))
+                if cell.code.strip() == "":
+                    lines.append("    pass")
+                else:
+                    lines.append(indent(dedent(cell.code), "    "))
+
+        lines.append("")
+        lines.append("# Render the notebook")
+        lines.append("# Using render_notebook() instead of nb.render() allows the notebook")
+        lines.append("# to be replaced dynamically (e.g., when loading a different file)")
+        lines.append("render_notebook()")
+        return "\n".join(lines)
+    
+    def save_as_python(self,filepath=None):
+        """
+        Saves the notebook as a Python script file.
+
+        Args:
+            filepath (str): The path where the Python script will be saved.
+                            If None, saves to the current working directory with the notebook title.
+        """
+        if filepath is None:
+            filepath=os.path.join(os.getcwd(),f"{self.title}.py")
+        with open(filepath,'w') as f:
+            f.write(self.to_python())
 
     def delete_cell(self,key):
         """
@@ -520,98 +756,124 @@ class Notebook:
             key: The unique identifier of the cell to be deleted.
         """
         if key in self.cells:
-            self.cells[key].delete()   
+            self.cells[key].delete()
 
-    def to_json(self):
-        """
-        Converts the whole notebook to a JSON string.
-
-        Returns:
-            str: A JSON string representation of the notebook.
-        """
-        data=dict(
-            title=self.title,
-            app_mode=self.app_mode,
-            display_mode=self.shell.display_mode,
-            show_logo=self.show_logo,
-            run_on_submit=self.run_on_submit,
-            cells={k:self.cells[k].to_dict() for k in self.cells}
-        )
-        return json.dumps(data)
-
-    def from_json(self,json_string):
-        """
-        Loads a new notebook from a JSON string.
-
-        Args:
-            json_string (str): A JSON string representing a notebook.
-
-        This method replaces the current notebook state with the one defined in the JSON string.
-        """
-        self.shell_enabled=False
-        data=AttrDict(**json.loads(json_string))
-        self.title=data.get('title',data.get('name',"new_notebook"))
-        # Support both old 'hide_code_cells' and new 'app_mode' for backwards compatibility
-        self.app_mode=data.get('app_mode',data.get('hide_code_cells',False))
-        self.show_logo=data.get('show_logo',True)
-        self.run_on_submit=data.get('run_on_submit',True)
-        display_mode=data.get('display_mode','last')
-        cells=data.get('cells',{})
-        self.cells={}
-        for cell in cells.values():
-            cell=AttrDict(cell)
-            self.cells[cell.key]=new_cell(self,cell.key,type=cell.type,code=cell.code,auto_rerun=cell.auto_rerun,fragment=cell.fragment)
-        self.init_shell()
-        self.shell.display_mode=display_mode
-        rerun()
-
-def st_notebook(initial_notebook: Union[str, Dict, None] = None, app_mode: bool = False, locked: bool = False):
+def get_notebook(
+    title="new_notebook",
+    app_mode=False,
+    locked=False,
+    run_on_submit=True,
+    show_logo=True,
+    show_stderr=False
+) -> Notebook:
     """
-    Initializes and renders the notebook interface.
+    Retrieves the current notebook from state or creates a new one.
 
-    This function sets up the Streamlit notebook environment, either starting with a blank notebook
-    or loading an existing one based on the provided input.
+    If a notebook exists but its parameters don't match the requested ones,
+    it will be recreated. This ensures that when switching notebooks (e.g.,
+    in direct run mode), the new notebook's parameters are applied correctly.
 
     Args:
-        initial_notebook (Union[str, Dict, None]):
-            Either a path to a JSON file, a JSON string, a dictionary representing
-            the notebook, or None to start with a blank notebook. Defaults to None.
-        app_mode (bool):
-            If True, starts in app mode (code cells hidden, minimal UI).
-            Defaults to False.
-        locked (bool):
-            If True, locks the notebook in app mode (prevents toggling back to notebook mode).
-            Useful for deployment. Defaults to False.
+        title (str): The title of the notebook.
+        app_mode (bool): If True, starts in app mode (code cells hidden, minimal UI).
+        locked (bool): If True, locks the notebook in app mode (prevents toggling back to notebook mode).
+        run_on_submit (bool): If True, cells are executed immediately upon submission.
+        show_logo (bool): If True, the notebook logo is displayed.
+        show_stderr (bool): If True, stderr output is shown.
 
-    Raises:
-        ValueError: If the provided initial_notebook is invalid or cannot be loaded.
-
-    This function modifies the Streamlit session state and renders the notebook UI.
-    It's the main entry point for using the Streamlit Notebook in an application.
+    Returns:
+        Notebook: The current or newly created Notebook object.
     """
+    import sys
+
+    # Check for --app flag in CLI arguments or ST_NOTEBOOK_APP_MODE environment variable
+    # Both override the script's parameters to enforce locked app mode
+    if '--app' in sys.argv or os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true':
+        app_mode = True
+        locked = True
+
+    # Check if we need to create or recreate the notebook
+    should_create = False
 
     if 'notebook' not in state:
-        state.notebook = Notebook(app_mode=app_mode, locked=locked)
+        should_create = True
+    else:
+        # Check if parameters match the existing notebook
+        # Only recreate if parameters don't match AND the notebook is not yet initialized
+        # (initialized means it went through the exec pass and created cells)
+        nb = state.notebook
+        if (not nb.initialized and
+            (nb.title != title or
+             nb.app_mode != app_mode or
+             nb.locked != locked or
+             nb.run_on_submit != run_on_submit or
+             nb.show_logo != show_logo or
+             nb.show_stderr != show_stderr)):
+            should_create = True
 
-        if initial_notebook is not None:
-            try:
-                if isinstance(initial_notebook, str):
-                    # Check if it's a file path
-                    if initial_notebook.endswith('.stnb'):
-                        with open(initial_notebook, 'r') as f:
-                            notebook_data = json.load(f)
-                    else:  # Assume it's a JSON string
-                        notebook_data = json.loads(initial_notebook)
-                elif isinstance(initial_notebook, dict):
-                    notebook_data = initial_notebook
-                else:
-                    raise ValueError("Invalid initial_notebook type. Expected str, dict, or None.")
+    if should_create:
+        state.notebook = Notebook(
+            title=title,
+            app_mode=app_mode,
+            locked=locked,
+            run_on_submit=run_on_submit,
+            show_logo=show_logo,
+            show_stderr=show_stderr
+        )
 
-                state.notebook.from_json(json.dumps(notebook_data))
-            except Exception as e:
-                raise ValueError(f"Failed to load initial notebook: {str(e)}")
+    return state.notebook
 
-    state.notebook.show()
-    check_rerun()
+def render_notebook():
+    """
+    Renders the notebook currently stored in session state.
 
-    
+    This function should be used instead of calling nb.render() directly
+    when you want to support dynamic notebook loading. It ensures that
+    even if the notebook object is replaced (e.g., when opening a new file),
+    the render call will always work on the current notebook in state.
+
+    This is particularly important when loading notebooks from .py files,
+    where exec() creates a new notebook instance that replaces the original.
+
+    Automatically handles direct runs via 'streamlit run notebook.py' by
+    bootstrapping the session state when needed.
+    """
+    import inspect
+
+    # Check if running directly (not via main.py's <notebook_script>)
+    frame = inspect.currentframe()
+    caller_globals = frame.f_back.f_globals if frame else {}
+    caller_file = caller_globals.get('__file__', '<notebook_script>')
+
+    if caller_file != '<notebook_script>':
+        # Direct run - need to bootstrap
+        if 'notebook_script' not in state:
+            # First run - capture the script
+            if os.path.exists(caller_file):
+                with open(caller_file, 'r') as f:
+                    state.notebook_script = f.read()
+            # Clear notebook on first bootstrap so exec creates it fresh
+            if 'notebook' in state:
+                del state['notebook']
+
+        # Execute the notebook script
+        exec_globals = globals().copy()
+        exec_globals.update({
+            '__name__': '__main__',
+            '__file__': '<notebook_script>',
+            'st': st,
+            'get_notebook': get_notebook,
+            'render_notebook': render_notebook,
+        })
+        code_obj = compile(state.notebook_script, '<notebook_script>', 'exec')
+        exec(code_obj, exec_globals)
+        return  # New script already rendered
+
+    # Normal render
+    if 'notebook' not in state:
+        st.error("No notebook found in session state. Did you call get_notebook() first?")
+        return
+
+    state.notebook.render()
+
+
