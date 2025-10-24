@@ -57,7 +57,7 @@ def cell_4():
     plt.grid(True)
     plt.legend()
     plt.title('Wave Superposition')
-    st.pyplot(plt.gcf())
+    st.pyplot(plt.gcf());
 
 # Render the notebook
 # Using render_notebook() instead of nb.render() allows the notebook

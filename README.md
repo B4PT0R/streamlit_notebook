@@ -23,6 +23,10 @@ Streamlit Notebook attempts to give you the best of both worlds.
 - **Development:** Cell-by-cell execution, full widget support, selective reactivity, persistent namespace, fast iteration, saved as readable and runnable `.py` files.
 - **Deployment:** Easily publish your notebook as a Streamlit app, no special runtime, deploy in couple of clicks, works anywhere Streamlit works.
 
+## Demo
+
+Try the hosted demo: [st-notebook.streamlit.app](https://st-notebook.streamlit.app/)
+
 ## Installation
 
 ```bash
@@ -434,10 +438,6 @@ This is perfect for demos, dashboards, or sharing multiple analyses with stakeho
 **Teaching & Demos:** Create interactive tutorials for step-by-step learning.
 
 **AI Agent Integration:** Let LLMs generate and execute cells programmatically for autonomous analysis.
-
-## Demo
-
-Try the hosted demo: [st-notebook.streamlit.app](https://st-notebook.streamlit.app/)
 
 ## Contributing
 

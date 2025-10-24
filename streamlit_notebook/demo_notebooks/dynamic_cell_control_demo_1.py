@@ -12,7 +12,7 @@ nb = get_notebook(title='dynamic_cell_control_demo_1')
 @nb.cell(type='code', auto_rerun=True, fragment=False)
 def cell_0():
     if st.button("click me"):
-        notebook.cells[1].run()
+        __notebook__.cells[1].run()
 
 @nb.cell(type='code', auto_rerun=False, fragment=False)
 def cell_1():

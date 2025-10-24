@@ -12,11 +12,11 @@ nb = get_notebook(title='dynamic_cell_control_demo_2')
 @nb.cell(type='code', auto_rerun=False, fragment=False)
 def cell_0():
     code="""
-    cell2=notebook.new_cell(code="print('hello')")
+    cell2=__notebook__.new_cell(code="print('hello')")
     cell2.run()
     """
 
-    cell1=notebook.new_cell(code=code)
+    cell1=__notebook__.new_cell(code=code)
     cell1.run()
 
     #Run this cell
