@@ -33,6 +33,11 @@ Try the hosted demo: [st-notebook.streamlit.app](https://st-notebook.streamlit.a
 pip install streamlit-notebook
 ```
 
+The package comes equiped with the latest version of `streamlit` and a comprehensive starter data-science pack including: 
+`matplotlib, numpy, seaborn, pandas, pillow, openpyxl, requests,
+pydub, graphviz, altair, plotly, bokeh, pydeck, scipy, sympy,
+scikit-learn, vega-datasets`
+
 ## Quick Start
 
 ### Create a notebook
@@ -112,12 +117,12 @@ All cells execute in a shared long-lived Python session. Unlike regular Streamli
 @nb.cell(type='code')
 def load_data():
     import pandas as pd
-    df = pd.read_csv("large_file.csv")
+    df = pd.read_csv("large_file.csv") # One shot cell, runs only once
 
 @nb.cell(type='code', reactive=True)
 def explore():
     threshold = st.slider("Threshold", 0, 100)
-    st.write(df[df['value'] > threshold]) # no need to redefine df
+    st.write(df[df['value'] > threshold]) # no need to redefine df, even after reruns
 ```
 
 Cell 1 loads data once. Cell 2 reruns on slider changes. Both execute in the same namespace.
@@ -229,7 +234,7 @@ You may also :
 
 **Markdown/HTML cells** 
 
-Supporting variable interpolation using `<<any_expression>>`
+Add rich formatted text or layouts to your notebook with Markdown and HTML cells. They support variable interpolation using the `<<any_expression>>` syntax. The expression will be evaluated and replaced in the code.
 
 ```markdown
 # Analysis Results
@@ -240,35 +245,64 @@ The mean value is << df['value'].mean() >>.
 
 **System commands and magics**
 
-Ipython style commands and magics are supported. It's basic but works fine and should be enough to cover most needs.
-(would require a proper parsing at token level to mimic Ipython more closely)
+Ipython style commands and magics are supported.
+Let's demonstrate this by defining a new magic to integrate a basic AI assistant in the session.
 
 ```python
 #Cell 1
 
-#system commands
-!pip ls -a
+#system command to install the openai package
+!pip install openai
 
-#define a new magic
+#simple agent class
+class Agent:
+    
+    def __init__(self):
+        from openai import OpenAI
+        self.messages=[]
+        self.client=OpenAI() #we use the OPENAI_API_KEY provided as env variable
+
+    def add_message(self,**kwargs):
+        self.messages.append(kwargs)
+
+    def __call__(self,prompt):
+        
+        self.add_message(role="user",content=prompt)
+
+        response=self.client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=self.messages
+        ).choices[0].message.content
+
+        self.add_message(role="assistant",content=response)
+
+        return response
+
+#create an agent instance 
+agent=Agent()
+
+#define a new magic to call our agent
 @magic
-def my_new_magic(content):
-    print(content.upper())
+def ai(text_content):
+    if text_content:
+        response=agent(text_content)
+        display(response) # we use display instead of print for prettier markdown rendering
 
 #call it in a single line starting with % (takes the rest of the line after the %<command> as input string)
-%my_new_magic hello, this is a test!
+%ai Hello, this is a test!
 ```
 
 With `%%`, the whole cell starting at second line is considered the magic input.
 
 ```python
 #Cell 2
-%%my_new_magic
+%%ai
 All the content of
 the cell goes in the
 magic input
 ```
 
-Note: Only the mechanism is supported, no predefined magics are provided so you have to declare your own magics.
+Note: Only the mechanism is supported, no predefined magics are provided (yet) so you have to declare your own magics.
 
 Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just execute the input as a system command/script.
 
@@ -278,7 +312,7 @@ Disclaimer: The shell is *NOT* meant to be an exact replica of Ipython. My goal 
 
 ### Streamlit Fragments
 
-You may toggle the "Run as fragment" option of a reactive cell to use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
+You may toggle the "Fragment" option of a reactive cell to run the cell as a [Streamlit fragment](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
 
 ```python
 @nb.cell(type='code', reactive=True, fragment=True)
@@ -367,14 +401,14 @@ st_notebook my_notebook.py --app
 
 4. Push to GitHub:
     ```bash
-    git add my_dashboard.py requirements.txt .env
+    git add my_notebook.py requirements.txt .env
     git commit -m "Add dashboard"
     git push
     ```
 
 5. Deploy on [share.streamlit.io](https://share.streamlit.io):
    - Connect your GitHub repo
-   - Select `my_dashboard.py` as main file
+   - Select `my_notebook.py` as main file
    - Click "Deploy"
 
 Since notebooks are just Python files, Streamlit Cloud runs them directly — no wrapper needed.
@@ -389,12 +423,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY my_dashboard.py .
+COPY my_notebook.py .
 
 EXPOSE 8501
 
 # Option 1: Use --app flag
-CMD ["streamlit", "run", "my_dashboard.py", "--app"]
+CMD ["streamlit", "run", "my_notebook.py", "--app"]
 
 # Option 2: Use environment variable
 # ENV ST_NOTEBOOK_APP_MODE=true
@@ -477,7 +511,7 @@ MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
-### 2025-10 - Pure Python Format
+### 2025-10
 
 **Major update:** Notebooks are now pure Python files (`.py`), not JSON.
 

@@ -353,7 +353,7 @@ class Cell:
 
     def toggle_fragment(self):
         """
-        Toggles the 'Run as fragment' feature for the cell.
+        Toggles the 'Fragment' feature for the cell.
         """
         self.fragment=self.ui.buttons["Fragment"].toggled
 
