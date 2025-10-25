@@ -211,7 +211,7 @@ class Cell:
         Runs the cell only if notebook.run_on_submit is true.
         """
         if self.notebook.run_on_submit:
-            self.run_state=False
+            self.has_run=False
             self.run()
 
     def run_callback(self):
@@ -220,7 +220,7 @@ class Cell:
 
         Resets run_state to None and runs the cell.
         """
-        self.run_state=None
+        self.has_run=False
         self.run()
 
     def run(self):

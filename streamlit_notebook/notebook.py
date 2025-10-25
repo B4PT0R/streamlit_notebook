@@ -170,15 +170,6 @@ class Notebook:
                 formatted_traceback=f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
                 st.error(formatted_traceback)
 
-    def __getattr__(self,name):
-        """
-        Delegate unknown attribute access to state
-        """
-        if name in state:
-            return state[name]
-        else:
-            return super().__getattribute__(name)     
-
     def show(self):
         """
         Renders the notebook's UI.
@@ -237,6 +228,14 @@ class Notebook:
             st.divider()
 
             st.text_input("Notebook title:",value=self.title,key="notebook_title_show",disabled=True)
+
+            # Open button with expandable section
+            if st.button("Open notebook", use_container_width=True, key="button_open_notebook_trigger"):
+                state.show_open_dialog = not state.get('show_open_dialog', False)
+
+            if state.get('show_open_dialog', False):
+                with st.container():
+                    self.open_notebook()
 
             st.divider()
 

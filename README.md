@@ -68,17 +68,30 @@ render_notebook()
 
 ### Run it
 
+You can open it with the st_notebook entry point
+
 ```bash
-# Development mode - full notebook interface
-st_notebook analysis.py
 
-# Locked app mode - clean interface, code hidden
-st_notebook analysis.py --app
-
-# Or run directly with Streamlit
-streamlit run analysis.py        # Development mode (uses script parameters)
-streamlit run analysis.py --app  # Locked app mode (overrides script parameters)
+st_notebook analysis.py         # Development mode - full notebook interface
+st_notebook analysis.py --app   # Locked app mode - clean interface, code cells hidden
 ```
+
+Or run it directly with Streamlit! (same result)
+```bash
+streamlit run analysis.py        # Development mode
+streamlit run analysis.py --app  # Locked app mode
+```
+
+### How it works?
+
+A bit of magic needs to happen under the hood to make it possible
+- `get_notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
+- The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is not-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
+- `render_notebook` finally takes care of fetching and displaying the current notebook instance from state.
+
+Subsequent runs of the script will ignore the cell definitions and merely loop on `get_notebook()` and `render_notebook()` to refresh whatever notebook instance is living in the session's state.
+
+Note: the functions defining the cells will never get called. Doing so would result in errors, as they refer to variables defined out of their local scopes (in other cells!). It's really a nice thing here that python allows to define erroneous function objects, even decorate them, without throwing an exception as long as we don't attempt to call them (lazy evaluation). They still know the file and line range in which they are defined, which is enough for the decorator to retrieve their raw source code. Makes them usable as mere "code bags", ie. containers for source code that gets extracted and executed elsewhere.
 
 ## Core Concepts
 
@@ -92,20 +105,22 @@ This selective reactivity lets you separate expensive setup from interactive exp
 
 ### Persistent Shell
 
-All cells share a long-lived Python namespace with Ipython-style ergonomics. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
+All cells execute in a shared long-lived Python session. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
 
 **Example:**
 ```python
-# Cell 1 (one-shot) - runs once
-import pandas as pd
-df = pd.read_csv("large_file.csv")  # 10 seconds to load
+@nb.cell(type='code')
+def load_data():
+    import pandas as pd
+    df = pd.read_csv("large_file.csv")
 
-# Cell 2 (auto-rerun) - reruns on interaction
-threshold = st.slider("Threshold", 0, 100)
-st.write(df[df['value'] > threshold])  # Instant - df already in memory
+@nb.cell(type='code', auto_rerun=True)
+def explore():
+    threshold = st.slider("Threshold", 0, 100)
+    st.write(df[df['value'] > threshold]) # no need to redefine df
 ```
 
-Cell 1 loads data once. Cell 2 reruns on slider changes but `df` is already in memory—no re-loading.
+Cell 1 loads data once. Cell 2 reruns on slider changes. Both execute in the same namespace.
 
 ### Standard Streamlit APIs
 
@@ -113,7 +128,7 @@ Every Streamlit widget, chart, and component works out of the box. Copy-paste yo
 
 ```python
 @nb.cell(type='code', auto_rerun=True)
-def my_widget():
+def widgets():
     # Standard Streamlit code - nothing new to learn
     value = st.slider("Select value", 0, 100)
     st.metric("Current value", value)
@@ -138,7 +153,7 @@ def setup():
 
 @nb.cell(type='code')
 def load_data():
-    df = pd.read_csv("sales_data.csv")  # 1M rows, ~10 seconds
+    df = pd.read_csv("sales_data.csv")
     df['date'] = pd.to_datetime(df['date'])
     print(f"Loaded {len(df):,} records")
 
@@ -156,13 +171,25 @@ def dashboard():
 render_notebook()
 ```
 
-**Performance:** Setup and data loading run once (~10 sec). Filters and dashboard rerun instantly on interaction. No re-loading 1M rows.
+## Easy deployment
 
-**Deploy:**
+Once you're done working on your notebook you may run it using:
+
 ```bash
 streamlit run sales_dashboard.py --app
 ```
-The same file now runs as a locked production app with working filters and no visible code.
+Now the same file runs as a locked production app with restricted interface and no visible/editable code.
+This prevents untrusted users to run arbitrary code in the cloud environment.
+Your notebook can thus safely be published as an online app without more overhead.
+
+The dedicated environment variable does the same as the flag:
+
+```bash
+export ST_NOTEBOOK_APP_MODE=true # or use a .env file
+streamlit run sales_dashboard.py
+```
+
+Useful when you can't modify the command directly (e.g., in Streamlit cloud platform).
 
 ## Development Features
 
@@ -171,23 +198,23 @@ The same file now runs as a locked production app with working filters and no vi
 **Notebook Mode** (development):
 - Code editor for each cell
 - Cell management (create, delete, reorder)
-- Execution controls (Run, Run All, Restart Shell)
+- Execution controls (Run Next, Run All, Restart Session, Clear All Cells)
 - Save/Open notebooks
 - Demo notebooks library
 
 **App Mode** (deployment):
+- Restricted interface
 - Code editors hidden
 - Interactive widgets remain functional
 - Clean Streamlit appearance
-- Optional locked mode prevents toggling back
 
-Toggle between modes with the sidebar switch, or use the `--app` flag.
+In development, you may toggle between modes with the sidebar switch, or run with enforced app mode to prevent users toggling back to notebook mode.
 
 ### Rich Content
 
 **Rich display**
 
-Cell results are automatically displayed with pretty formatting (anything that `st.write` can handle).
+Cell results are automatically displayed with pretty formatting when possible (anything that `st.write` can handle).
 
 Control how expression results appear:
 - `all` - show every expression result
@@ -213,21 +240,21 @@ The mean value is << df['value'].mean() >>.
 
 **System commands and magics**
 
-Ipython style commands and magics are supported. It's still basic but works.
+Ipython style commands and magics are supported. It's basic but works fine and should be enough to cover most needs.
 (would require a proper parsing at token level to mimic Ipython more closely)
 
 ```python
 #Cell 1
 
 #system commands
-!pip install requests
+!pip ls -a
 
 #define a new magic
 @magic
 def my_new_magic(content):
     print(content.upper())
 
-#call it in a single line with % (takes the whole line trailing the %<command> as input string)
+#call it in a single line starting with % (takes the rest of the line after the %<command> as input string)
 %my_new_magic hello, this is a test!
 ```
 
@@ -241,17 +268,17 @@ the cell goes in the
 magic input
 ```
 
-Note: Only the mechanism is supported and you have to declare your own magics.
+Note: Only the mechanism is supported, no predefined magics are provided so you have to declare your own magics.
 
-Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just route the arg to be run as a system command/script.
+Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just execute the input as a system command/script.
 
-Note: The shell is *NOT* meant to be an exact reproduction of Ipython. My goal is to provide a practical and versatile coding environment matching the common needs of interactive execution. Yet, you might encounter situations where you feel like some useful features of Ipython are missing, if so please add a feature request.
+Disclaimer: The shell is *NOT* meant to be an exact replica of Ipython. My goal is to provide a practical and versatile coding environment matching the common needs of interactive programming. Yet, you might encounter situations where you feel like some useful features of Ipython are missing, if so please add a feature request.
 
 ## Advanced Features
 
 ### Streamlit Fragments
 
-Auto-rerun cells can use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
+You may toggle the "Run as fragment" option of a reactive cell to use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
 
 ```python
 @nb.cell(type='code', auto_rerun=True, fragment=True)
@@ -261,19 +288,12 @@ def fast_widget():
     st.write(f"Selected: {value}")
 ```
 
-### File Operations
+This way the page reloads only the UI fragment in which interaction happens.
+It just won't refresh other widgets on the page even if they depend on variables changed by the fragment.
+So, in general, it's better to group in a same fragment subsets of widgets that are supposed to react to eachother.
 
-**In development mode:**
-- **Save** button: saves to `./notebook_title.py`
-- **Open** button: dropdown of all `.py` notebooks in current directory
-- **Demo notebooks**: load pre-built examples
-
-**From code:**
-```python
-notebook.save()
-notebook.save("my_notebook.py")
-notebook.open("my_notebook.py")
-```
+Note: A variable that's changed by a fragment is immediately updated in the namespace and can be used elsewhere in the notebook.
+So that the isolation is just ui-side, not backend-side.
 
 ### Programmatic API
 
@@ -298,9 +318,26 @@ nb.cells[0].run()
 
 Not really possible in Jupyter or very hacky!
 
+### File Operations
+
+**From the interface:**
+- **Save** button: saves to `./notebook_title.py`
+- **Open** button: dropdown of all `.py` notebooks in current directory
+- **Demo notebooks**: load pre-built examples
+
+**From code:**
+```python
+__notebook__.save()
+__notebook__.save("my_notebook.py")
+__notebook__.open("my_notebook.py")
+```
+
+
 ## Deployment
 
 ### Local Testing
+
+First make sure your notebook looks and runs nice as an app. 
 
 ```bash
 # Test in locked app mode (production simulation)
@@ -310,31 +347,30 @@ st_notebook my_notebook.py --app
 ### Streamlit Cloud
 
 1. Create `requirements.txt`:
-   ```
-   streamlit-notebook
-   pandas
-   # ... other dependencies
-   ```
+    ```
+    streamlit-notebook
+    pandas
+    # ... other dependencies
+    ```
 
 2. Create `.streamlit/config.toml` (optional - for page config):
-   ```toml
-   [server]
-   headless = true
-   ```
+    ```toml
+    [theme]
+    primaryColor = "#F63366"
+    backgroundColor = "black"
+    ```
 
 3. Create `.env` file to enable locked app mode:
-   ```bash
-   ST_NOTEBOOK_APP_MODE=true
-   ```
-
-   **Note:** Since Streamlit Cloud doesn't let you control the `streamlit run` command, use the `.env` file to set the environment variable. This ensures your notebook deploys in locked app mode.
+    ```bash
+    ST_NOTEBOOK_APP_MODE=true
+    ```
 
 4. Push to GitHub:
-   ```bash
-   git add my_dashboard.py requirements.txt .env
-   git commit -m "Add dashboard"
-   git push
-   ```
+    ```bash
+    git add my_dashboard.py requirements.txt .env
+    git commit -m "Add dashboard"
+    git push
+    ```
 
 5. Deploy on [share.streamlit.io](https://share.streamlit.io):
    - Connect your GitHub repo
@@ -373,35 +409,21 @@ docker run -p 8501:8501 my-dashboard
 
 Deploy to AWS ECS, Google Cloud Run, Azure Container Apps, or any container platform.
 
-### Environment Variables
 
-Control behavior via CLI flag or environment variable:
-
-**CLI flag (recommended):**
-```bash
-streamlit run notebook.py --app  # Locked app mode
-```
-
-**Environment variable:**
-```bash
-export ST_NOTEBOOK_APP_MODE=true  # Locked app mode
-```
-
-The `--app` flag is simpler and works everywhere. The environment variable is useful when you can't modify the command line (e.g., some cloud platforms).
 
 ### Production Best Practices
 
 ✅ **Do:**
+- Use one shot cells for expensive operations
 - Test with `--app` flag locally first
-- Use `@st.cache_data` for expensive operations
 - Add `--app` flag to deployment command or set environment variables
 - Include all dependencies in `requirements.txt`
 - Use `st.secrets` for secrets (API keys, database credentials, etc.)
 
 ❌ **Don't:**
 - Allow code editing in production deployments (the user could read `st.secrets` or run malicious scripts)
-- Hardcode API keys or credentials
-- Assume filesystem persistence (use databases/cloud storage)
+- Hardcode API keys or credentials.
+- Assume filesystem persistence. Changes you make to the files will be discarded when the container reboots. (use databases/cloud storage instead)
 
 ### Multi-Notebook Deployments
 
@@ -437,7 +459,7 @@ This is perfect for demos, dashboards, or sharing multiple analyses with stakeho
 
 **Teaching & Demos:** Create interactive tutorials for step-by-step learning.
 
-**AI Agent Integration:** Let LLMs generate and execute cells programmatically for autonomous analysis.
+**AI Agent Integration:** Let LLMs generate and execute cells programmatically for coding assistance and autonomous analysis.
 
 ## Contributing
 
