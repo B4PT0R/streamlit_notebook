@@ -9,14 +9,14 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='machine_learning_demo')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
     r'''
     # Interactive Machine Learning
     This notebook demonstrates how to create an interactive machine learning demo using scikit-learn and Streamlit widgets. We'll create a simple classifier and visualize its decision boundaries.
     '''
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     from sklearn.datasets import make_classification
     from sklearn.model_selection import train_test_split
@@ -32,7 +32,7 @@ def cell_1():
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_2():
     # Interactive parameters
     kernel = st.selectbox('Kernel', ['linear', 'rbf', 'poly'])
@@ -48,7 +48,7 @@ def cell_2():
 
     st.write(f'Test Accuracy: {accuracy:.2f}')
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_3():
     # Plot decision boundary
     def plot_decision_boundary(model, X, y):

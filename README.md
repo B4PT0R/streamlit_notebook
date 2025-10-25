@@ -58,7 +58,7 @@ def setup():
     df = pd.read_csv("data.csv")
     print(f"Loaded {len(df)} rows")
 
-@nb.cell(type='code', auto_rerun=True)
+@nb.cell(type='code', reactive=True)
 def explore():
     col = st.selectbox("Column", df.columns)
     st.line_chart(df[col])
@@ -86,7 +86,7 @@ streamlit run analysis.py --app  # Locked app mode
 
 A bit of magic needs to happen under the hood to make it possible
 - `get_notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
-- The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is not-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
+- The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is no-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
 - `render_notebook` finally takes care of fetching and displaying the current notebook instance from state.
 
 Subsequent runs of the script will ignore the cell definitions and merely loop on `get_notebook()` and `render_notebook()` to refresh whatever notebook instance is living in the session's state.
@@ -99,7 +99,7 @@ Note: the functions defining the cells will never get called. Doing so would res
 
 **One-shot cells:** Run only once when you click Run. Used for imports, data loading, expensive computations.
 
-**Reactive cells:** Toggle `auto-rerun` on any code cell to make it reactive. These will rerun automatically on every UI interaction and update the python namespace accordingly. Used for widgets and reactive displays.
+**Reactive cells:** Toggle the `Reactive` option on any code cell to make it reactive. These will rerun automatically on every UI interaction and update the python namespace accordingly. Used for widgets and reactive displays.
 
 This selective reactivity lets you separate expensive setup from interactive exploration.
 
@@ -114,7 +114,7 @@ def load_data():
     import pandas as pd
     df = pd.read_csv("large_file.csv")
 
-@nb.cell(type='code', auto_rerun=True)
+@nb.cell(type='code', reactive=True)
 def explore():
     threshold = st.slider("Threshold", 0, 100)
     st.write(df[df['value'] > threshold]) # no need to redefine df
@@ -127,7 +127,7 @@ Cell 1 loads data once. Cell 2 reruns on slider changes. Both execute in the sam
 Every Streamlit widget, chart, and component works out of the box. Copy-paste your existing Streamlit code into cells.
 
 ```python
-@nb.cell(type='code', auto_rerun=True)
+@nb.cell(type='code', reactive=True)
 def widgets():
     # Standard Streamlit code - nothing new to learn
     value = st.slider("Select value", 0, 100)
@@ -157,12 +157,12 @@ def load_data():
     df['date'] = pd.to_datetime(df['date'])
     print(f"Loaded {len(df):,} records")
 
-@nb.cell(type='code', auto_rerun=True)
+@nb.cell(type='code', reactive=True)
 def filters():
     region = st.multiselect("Regions", df['region'].unique())
     date_range = st.date_input("Date range", [df['date'].min(), df['date'].max()])
 
-@nb.cell(type='code', auto_rerun=True)
+@nb.cell(type='code', reactive=True)
 def dashboard():
     filtered = df[df['region'].isin(region)] if region else df
     st.metric("Total Sales", f"${filtered['amount'].sum():,.2f}")
@@ -281,7 +281,7 @@ Disclaimer: The shell is *NOT* meant to be an exact replica of Ipython. My goal 
 You may toggle the "Run as fragment" option of a reactive cell to use [Streamlit fragments](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
 
 ```python
-@nb.cell(type='code', auto_rerun=True, fragment=True)
+@nb.cell(type='code', reactive=True, fragment=True)
 def fast_widget():
     # Only this cell reruns on interaction
     value = st.slider("Value", 0, 100)
@@ -307,7 +307,7 @@ nb=__notebook__
 cell = nb.new_cell(
     type="code",
     code="st.line_chart([1,2,3])",
-    auto_rerun=True
+    reactive=True
 )
 cell.run()
 

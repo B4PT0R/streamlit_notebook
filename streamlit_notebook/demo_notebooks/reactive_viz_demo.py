@@ -9,14 +9,14 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='reactive_viz_demo')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
     r'''
     # Interactive Function Visualization
     This notebook shows how to create dynamic visualizations that react to user input. We'll visualize the superposition of sine waves with adjustable parameters.
     '''
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     import numpy as np
     import matplotlib.pyplot as plt
@@ -24,7 +24,7 @@ def cell_1():
     # Create base x values
     x = np.linspace(0, 2*np.pi, 1000)
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_2():
     # Interactive controls
     amp1 = st.slider('Amplitude 1', 0.0, 2.0, 1.0, key='amp1')
@@ -35,14 +35,14 @@ def cell_2():
     freq2 = st.slider('Frequency 2', 1, 5, 2, key='freq2')
     phase2 = st.slider('Phase 2', 0.0, 2*np.pi, 0.0, key='phase2')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_3():
     r'''
     ### Current wave equation:
     $$y(x) = <<amp1>>\sin(<<freq1>>x + <<phase1>>) + <<amp2>>\sin(<<freq2>>x + <<phase2>>)$$
     '''
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_4():
     # Calculate waves
     wave1 = amp1 * np.sin(freq1 * x + phase1)

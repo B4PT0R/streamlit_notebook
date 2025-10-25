@@ -9,12 +9,12 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='dynamic_cell_control_demo_1')
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_0():
     if st.button("click me"):
         __notebook__.cells[1].run()
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     import time
     for i in range(10):

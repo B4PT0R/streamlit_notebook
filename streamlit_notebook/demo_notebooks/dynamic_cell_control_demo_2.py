@@ -9,7 +9,7 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='dynamic_cell_control_demo_2')
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_0():
     code="""
     cell2=__notebook__.new_cell(code="print('hello')")

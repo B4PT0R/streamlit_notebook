@@ -9,7 +9,7 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='interactive_julia_set_demo', app_mode=True)
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
     r'''
     # Interactive Julia Set Visualization
@@ -21,7 +21,7 @@ def cell_0():
     We'll first precompute several Julia sets for different values of $c$, store them in memory, and then provide a smooth interface to view them interactively.
     '''
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     import numpy as np
     import matplotlib.pyplot as plt
@@ -63,7 +63,7 @@ def cell_1():
 
     print('Computation complete!')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_2():
     r'''
     ## Interactive Visualization
@@ -71,7 +71,7 @@ def cell_2():
     Use the slider below to change the value of $c$.
     '''
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_3():
     # Interactive control
     theta = st.slider('θ (angle of c)', 0.0, 2*np.pi, 0.0, 0.1,key="theta")
@@ -88,7 +88,7 @@ def cell_3():
     plt.title(f'Julia Set for c ≈ {nearest_c:.3f}')
     st.pyplot(plt.gcf());
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_4():
     r'''
     ### Implementation Notes

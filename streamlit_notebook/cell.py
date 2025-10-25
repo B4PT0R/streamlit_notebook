@@ -36,7 +36,7 @@ class Cell:
         notebook (Notebook): The parent Notebook object.
         key (str): A unique identifier for the cell.
         code (str): The content of the cell (code, markdown, or HTML).
-        auto_rerun (bool): If True, the cell automatically reruns when its content changes.
+        reactive (bool): If True, the cell automatically reruns when its content changes.
         fragment (bool): If True, the cell runs as a Streamlit fragment.
         type (str): The type of the cell ("code", "markdown", or "html").
         ui (CellUI): The UI object managing the cell's interface.
@@ -54,7 +54,7 @@ class Cell:
         delete(): Removes the cell from the notebook.
         to_dict(): Returns a dictionary representation of the cell.
     """
-    def __init__(self,notebook,key,code="",auto_rerun=False,fragment=False):
+    def __init__(self,notebook,key,code="",reactive=False,fragment=False):
         self.notebook=notebook
         self.container=None
         self.output=None
@@ -72,7 +72,7 @@ class Cell:
         self._code=Code(value=code)
         self.last_code=None
         self.key=key
-        self.auto_rerun=auto_rerun
+        self.reactive=reactive
         self.language=None
         self.type=None
         self.fragment=fragment
@@ -145,8 +145,8 @@ class Cell:
         """
         self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{short_id()}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
-        self.ui.buttons["Auto_rerun"].callback=self.toggle_auto_rerun
-        self.ui.buttons["Auto_rerun"].toggled=self.auto_rerun
+        self.ui.buttons["Reactive"].callback=self.toggle_reactive
+        self.ui.buttons["Reactive"].toggled=self.reactive
         self.ui.buttons["Fragment"].callback=self.toggle_fragment
         self.ui.buttons["Fragment"].toggled=self.fragment
         self.ui.buttons["Up"].callback=self.move_up
@@ -197,9 +197,9 @@ class Cell:
                 self.update_ui()
                 self.ui.show()
 
-        # Auto-rerun only if the cell has been run at least once with the current code
+        # Rerun only if the cell has been run at least once with the current code
         # This prevents premature execution when toggling auto-rerun on a cell that hasn't run yet
-        if self.auto_rerun and self.has_run_once:
+        if self.reactive and self.has_run_once:
             self.run()
 
         self.show_output()
@@ -345,11 +345,11 @@ class Cell:
         self.rerank(self.rank+1)
 
 
-    def toggle_auto_rerun(self):
+    def toggle_reactive(self):
         """
         Toggles the 'Auto-Rerun' feature for the cell.
         """
-        self.auto_rerun=self.ui.buttons["Auto_rerun"].toggled
+        self.reactive=self.ui.buttons["Reactive"].toggled
 
     def toggle_fragment(self):
         """
@@ -388,7 +388,7 @@ class Cell:
             key=self.key,
             type=self.type,
             code=self.code,
-            auto_rerun=self.auto_rerun,
+            reactive=self.reactive,
             fragment=self.fragment
         )
         return d
@@ -411,8 +411,8 @@ class CodeCell(Cell):
         exec_code(): Executes the cell normally.
     """
 
-    def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
-        super().__init__(notebook,key,code=code,auto_rerun=auto_rerun,fragment=fragment)
+    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
+        super().__init__(notebook,key,code=code,reactive=reactive,fragment=fragment)
         self.has_fragment_toggle=True
         self.language="python"
         self.type="code"
@@ -468,8 +468,8 @@ class MarkdownCell(Cell):
         get_exec_code(): Formats the Markdown code and converts it to a st.markdown call.
     """
 
-    def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
-        super().__init__(notebook,key,code=code,auto_rerun=auto_rerun,fragment=False)
+    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
+        super().__init__(notebook,key,code=code,reactive=reactive,fragment=False)
         self.has_fragment_toggle=False
         self.language="markdown"
         self.type="markdown"
@@ -504,8 +504,8 @@ class HTMLCell(Cell):
         get_exec_code(): Formats the HTML code and converts it to a st.html call.
     """
 
-    def __init__(self,notebook,key,code="",auto_rerun=True,fragment=False):
-        super().__init__(notebook,key,code=code,auto_rerun=auto_rerun,fragment=False)
+    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
+        super().__init__(notebook,key,code=code,reactive=reactive,fragment=False)
         self.has_fragment_toggle=False
         self.language="html"
         self.type="html"
@@ -548,7 +548,7 @@ def type_to_class(cell_type):
     else:
         raise NotImplementedError(f"Unsupported cell type: {cell_type}")
 
-def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
+def new_cell(notebook,key,type="code",code="",reactive=False,fragment=False):
     """
     Returns a new cell, given a notebook object, a key, and optional kwargs.
 
@@ -559,7 +559,7 @@ def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
         key: Unique identifier for the cell.
         type (str): The type of cell to create ("code", "markdown", or "html").
         code (str): Initial code or content for the cell.
-        auto_rerun (bool): Whether the cell should automatically re-run when UI refreshes.
+        reactive (bool): Whether the cell should automatically re-run when UI refreshes.
         fragment (bool): Whether the cell should run as a Streamlit fragment.
 
     Returns:
@@ -568,4 +568,4 @@ def new_cell(notebook,key,type="code",code="",auto_rerun=False,fragment=False):
     Raises:
         NotImplementedError: If an unsupported cell type is specified.
     """
-    return type_to_class(type)(notebook,key,code=code,auto_rerun=auto_rerun,fragment=fragment)
+    return type_to_class(type)(notebook,key,code=code,reactive=reactive,fragment=fragment)

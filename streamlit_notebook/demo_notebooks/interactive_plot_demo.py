@@ -9,7 +9,7 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='interactive_plot_demo')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
     r'''
     ### Plot of the function:
@@ -18,17 +18,17 @@ def cell_0():
     $$
     '''
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     import numpy as np
     import matplotlib.pyplot as plt
     x=np.linspace(0,1,200)
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_2():
     n=st.slider("Exponent",0.0,2.0,1.0,key="myslider")
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_3():
     plt.plot(x,x**n);
     st.pyplot(plt.gcf());

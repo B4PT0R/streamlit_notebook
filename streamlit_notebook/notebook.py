@@ -39,7 +39,7 @@ class Notebook:
         restart_session(): reinitializes the shell and resets the cells to initial state
         save(file=None): save the current notebook as a .py file.
         open(file): opens a notebook from a .py file.
-        new_cell(type, code, auto_rerun, fragment): Creates a new cell.
+        new_cell(type, code, reactive, fragment): Creates a new cell.
         delete_cell(key): Deletes a specific cell.
         @cell: decorator used to declare new cells in the .py notebook script
         to_python(): Converts the notebook to a Python script.
@@ -539,26 +539,26 @@ class Notebook:
             i+=1
         return i
 
-    def new_cell(self,type="code",code="",auto_rerun=False,fragment=False):
+    def new_cell(self,type="code",code="",reactive=False,fragment=False):
         """
         Adds a new cell of the chosen type at the bottom of the notebook.
 
         Args:
             type (str): The type of cell to create ("code", "markdown", or "html").
             code (str): Initial code or content for the cell.
-            auto_rerun (bool): If True, the cell will automatically re-run when changed.
+            reactive (bool): If True, the cell will automatically re-run when changed.
             fragment (bool): If True, the cell will run as a Streamlit fragment.
 
         Returns:
             Cell: The newly created cell object.
         """
         key=self.gen_cell_key()
-        cell=new_cell(self,key,type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
+        cell=new_cell(self,key,type=type,code=code,reactive=reactive,fragment=fragment)
         self.cells[key]=cell
         rerun()
         return cell
     
-    def cell(self,type="code",auto_rerun=False,fragment=False):
+    def cell(self,type="code",reactive=False,fragment=False):
         """
         returns a decorator that adds a new cell created from a function's source code.
         allows programmatic creation of cells from code defined in functions.
@@ -572,7 +572,7 @@ class Notebook:
 
         Args:
             type (str): The type of cell to create ("code", "markdown", or "html").
-            auto_rerun (bool): If True, the cell will automatically re-run when changed.
+            reactive (bool): If True, the cell will automatically re-run when changed.
             fragment (bool): If True, the cell will run as a Streamlit fragment.
         Returns:
             function: A decorator that adds a new cell from the decorated function's code.
@@ -610,7 +610,7 @@ class Notebook:
                         lines=lines[:-1]
                         code="\n".join(lines)
 
-            return self.new_cell(type=type,code=code,auto_rerun=auto_rerun,fragment=fragment)
+            return self.new_cell(type=type,code=code,reactive=reactive,fragment=fragment)
         return decorator
     
     def get_source(self, func):
@@ -724,7 +724,7 @@ class Notebook:
             cell = self.cells[key]
             if cell.type in ("markdown", "html"):
                 lines.append("")
-                lines.append(f"@nb.cell(type='{cell.type}', auto_rerun={cell.auto_rerun}, fragment={cell.fragment})")
+                lines.append(f"@nb.cell(type='{cell.type}', reactive={cell.reactive}, fragment={cell.fragment})")
                 lines.append("def cell_{}():".format(cell.key))
                 if cell.code.strip() == "":
                     lines.append("    pass")
@@ -747,7 +747,7 @@ class Notebook:
                     lines.append(indent(template.format(content=content), "    "))
             else:  # code cell
                 lines.append("")
-                lines.append(f"@nb.cell(type='code', auto_rerun={cell.auto_rerun}, fragment={cell.fragment})")
+                lines.append(f"@nb.cell(type='code', reactive={cell.reactive}, fragment={cell.fragment})")
                 lines.append("def cell_{}():".format(cell.key))
                 if cell.code.strip() == "":
                     lines.append("    pass")

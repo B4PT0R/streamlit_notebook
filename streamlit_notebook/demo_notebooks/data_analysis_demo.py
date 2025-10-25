@@ -9,14 +9,14 @@ st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_
 
 nb = get_notebook(title='data_analysis_demo')
 
-@nb.cell(type='markdown', auto_rerun=True, fragment=False)
+@nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
     r'''
     # Interactive Data Analysis
     This notebook demonstrates how to combine pandas analysis with Streamlit widgets for interactive data exploration.
     '''
 
-@nb.cell(type='code', auto_rerun=False, fragment=False)
+@nb.cell(type='code', reactive=False, fragment=False)
 def cell_1():
     import pandas as pd
     import numpy as np
@@ -31,7 +31,7 @@ def cell_1():
         'group': np.random.choice(['Group 1', 'Group 2'], 1000)
     })
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_2():
     # Interactive filters
     selected_category = st.selectbox('Select Category', ['All'] + list(df['category'].unique()))
@@ -44,7 +44,7 @@ def cell_2():
     if selected_group != 'All':
         filtered_df = filtered_df[filtered_df['group'] == selected_group]
 
-@nb.cell(type='code', auto_rerun=True, fragment=False)
+@nb.cell(type='code', reactive=True, fragment=False)
 def cell_3():
     # Display statistics
     st.write('### Summary Statistics')
