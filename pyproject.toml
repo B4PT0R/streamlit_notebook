@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.0.30"
+version = "0.1.0"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,10 @@ dependencies = [
     "numpy",
     "seaborn",
     "pandas",
+    "pillow",
+    "openpyxl",
+    "requests",
+    "pydub",
     "graphviz",
     "altair",
     "plotly",
