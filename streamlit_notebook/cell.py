@@ -153,6 +153,11 @@ class Cell:
         self.ui.buttons["Down"].callback=self.move_down
         self.ui.buttons["Close"].callback=self.delete
         self.ui.buttons["Run"].callback=self.run_callback
+        self.ui.buttons["InsertAbove"].callback=self.insert_above
+        self.ui.buttons["InsertBelow"].callback=self.insert_below
+        self.ui.buttons["TypeCode"].callback=lambda: self.set_type("code")
+        self.ui.buttons["TypeMarkdown"].callback=lambda: self.set_type("markdown")
+        self.ui.buttons["TypeHTML"].callback=lambda: self.set_type("html")
         
 
     def update_ui(self):
@@ -162,7 +167,14 @@ class Cell:
         self.ui.lang=self.language
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         #self.ui.buttons['Has_run'].visible=self.has_run_once
-        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]: {self.type}",style=dict(fontSize="14px",width="100%")))
+        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]:",style=dict(fontSize="14px",width="100%")))
+
+        # Update type buttons to highlight current type with bold font
+        for type_name, button_name in [("code", "TypeCode"), ("markdown", "TypeMarkdown"), ("html", "TypeHTML")]:
+            if self.type == type_name:
+                self.ui.buttons[button_name].style['fontWeight'] = 'bold'
+            else:
+                self.ui.buttons[button_name].style['fontWeight'] = 'normal'
 
     def initialize_output_area(self):
         """
@@ -356,6 +368,60 @@ class Cell:
         Toggles the 'Fragment' feature for the cell.
         """
         self.fragment=self.ui.buttons["Fragment"].toggled
+
+    def set_type(self, new_type):
+        """
+        Changes the type of the cell (code, markdown, or html).
+
+        Args:
+            new_type (str): The new type for the cell ("code", "markdown", or "html")
+        """
+        if new_type == self.type:
+            return  # Already this type, nothing to do
+
+        # Store current code
+        current_code = self.code
+
+        # Get current position
+        current_rank = self.rank
+
+        # Create a new cell of the target type
+        new_key = self.key  # Keep the same key
+        cell = new_cell(self.notebook, new_key, type=new_type, code=current_code,
+                       reactive=self.reactive, fragment=self.fragment)
+
+        # Replace in notebook
+        self.notebook.cells[new_key] = cell
+
+        # Restore position
+        cell.rerank(current_rank)
+
+        st.toast(f"Changed cell {new_key} to {new_type}", icon="🔄")
+        rerun(delay=1.5)
+
+    def insert_above(self):
+        """
+        Inserts a new cell above this cell in the notebook.
+        """
+        new_key = self.notebook.gen_cell_key()
+        cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
+        self.notebook.cells[new_key] = cell
+        # Rerank the new cell to be just before this cell
+        cell.rerank(self.rank)
+        st.toast(f"Created cell {new_key} above", icon="➕")
+        rerun(delay=1.5)
+
+    def insert_below(self):
+        """
+        Inserts a new cell below this cell in the notebook.
+        """
+        new_key = self.notebook.gen_cell_key()
+        cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
+        self.notebook.cells[new_key] = cell
+        # Rerank the new cell to be just after this cell
+        cell.rerank(self.rank + 1)
+        st.toast(f"Created cell {new_key} below", icon="➕")
+        rerun(delay=1.5)
 
     def delete(self):
         """

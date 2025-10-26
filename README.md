@@ -142,36 +142,54 @@ def widgets():
 
 ## Real-World Example
 
-Building a dashboard for 1M rows of sales data:
+Building a stock price analysis dashboard. This example uses real data from the vega_datasets package (included) and can be copy-pasted and run directly:
 
 ```python
 from streamlit_notebook import get_notebook, render_notebook
 import streamlit as st
 
-st.set_page_config(page_title="Sales Dashboard", layout="wide")
-nb = get_notebook(title='sales_dashboard')
+st.set_page_config(page_title="Stock Dashboard", layout="wide")
+nb = get_notebook(title='stock_dashboard')
 
 @nb.cell(type='code')
 def setup():
     import pandas as pd
-    import plotly.express as px
+    import altair as alt
+    from vega_datasets import data
 
 @nb.cell(type='code')
 def load_data():
-    df = pd.read_csv("sales_data.csv")
+    df = data.stocks()
     df['date'] = pd.to_datetime(df['date'])
-    print(f"Loaded {len(df):,} records")
+    print(f"Loaded {len(df):,} records for {df['symbol'].nunique()} stocks")
 
 @nb.cell(type='code', reactive=True)
 def filters():
-    region = st.multiselect("Regions", df['region'].unique())
+    st.markdown("### Stock Analysis Dashboard")
+    symbols = st.multiselect("Select stocks", df['symbol'].unique(), default=['AAPL', 'GOOG'])
     date_range = st.date_input("Date range", [df['date'].min(), df['date'].max()])
 
 @nb.cell(type='code', reactive=True)
 def dashboard():
-    filtered = df[df['region'].isin(region)] if region else df
-    st.metric("Total Sales", f"${filtered['amount'].sum():,.2f}")
-    st.plotly_chart(px.line(filtered.groupby('date')['amount'].sum()))
+    filtered = df[df['symbol'].isin(symbols)] if symbols else df
+    if date_range and len(date_range) == 2:
+        filtered = filtered[(filtered['date'] >= pd.Timestamp(date_range[0])) &
+                           (filtered['date'] <= pd.Timestamp(date_range[1]))]
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Selected Stocks", len(symbols))
+    with col2:
+        st.metric("Avg Price", f"${filtered['price'].mean():.2f}")
+    with col3:
+        st.metric("Total Records", f"{len(filtered):,}")
+
+    chart = alt.Chart(filtered).mark_line().encode(
+        x='date:T',
+        y='price:Q',
+        color='symbol:N'
+    ).properties(height=400)
+    st.altair_chart(chart, use_container_width=True);
 
 render_notebook()
 ```
