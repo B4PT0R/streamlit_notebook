@@ -72,11 +72,16 @@ class Cell:
         self._code=Code(value=code)
         self.last_code=None
         self.key=key
+        self.ui_key=short_id()
         self.reactive=reactive
         self.language=None
         self.type=None
         self.fragment=fragment
         self.prepare_ui()
+
+    @property
+    def id(self):
+        return f"Cell[{self.rank}]({self.key})"
 
     @property
     def code(self):
@@ -97,6 +102,7 @@ class Cell:
             value (str): The new code content to set for the cell.
         """
         self._code.from_backend(value)
+        self.ui_key=short_id()
         rerun()
 
     @property
@@ -143,7 +149,7 @@ class Cell:
         """
         Initializes the CellUI object and sets up the cell's user interface components.
         """
-        self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{short_id()}",response_mode="blur")
+        self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{self.ui_key}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
         self.ui.buttons["Reactive"].callback=self.toggle_reactive
         self.ui.buttons["Reactive"].toggled=self.reactive
@@ -167,7 +173,7 @@ class Cell:
         self.ui.lang=self.language
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         #self.ui.buttons['Has_run'].visible=self.has_run_once
-        self.ui.info_bar.set_info(dict(name=f"Cell[{self.key}]:",style=dict(fontSize="14px",width="100%")))
+        self.ui.info_bar.set_info(dict(name=f"{self.id}:",style=dict(fontSize="14px",width="100%")))
 
         # Update type buttons to highlight current type with bold font
         for type_name, button_name in [("code", "TypeCode"), ("markdown", "TypeMarkdown"), ("html", "TypeHTML")]:
@@ -225,7 +231,7 @@ class Cell:
         if self.notebook.run_on_submit:
             self.has_run=False
             self.run()
-            self.notebook.notify(f"Executed cell {self.key}", icon="▶️")
+            self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def run_callback(self):
         """
@@ -235,7 +241,7 @@ class Cell:
         """
         self.has_run=False
         self.run()
-        self.notebook.notify(f"Executed cell {self.key}", icon="▶️")
+        self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def run(self):
         """
@@ -278,7 +284,7 @@ class Cell:
         Executes the code returned by self.get_exec_code()
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
         self.set_output(response)       
 
     def set_output(self,response):
@@ -320,12 +326,12 @@ class Cell:
     @property
     def rank(self):
         """
-        Gets the current rank of the cell in the cells dict.
+        Gets the current rank of the cell in the cells list.
 
         Returns:
             int: The index of the cell in the notebook's cell list.
         """
-        return list(self.notebook.cells.keys()).index(self.key)
+        return self.notebook.cells.index(self)
     
     def rerank(self,rank):
         """
@@ -335,11 +341,11 @@ class Cell:
             rank (int): The new rank (position) for the cell in the notebook.
         """
         if 0<=rank<len(self.notebook.cells) and not rank==self.rank:
-            keys=list(self.notebook.cells.keys())
-            del keys[self.rank]
-            keys.insert(rank,self.key)
-            self.notebook.cells={k:self.notebook.cells[k] for k in keys}
-            self.notebook.notify(f"Moved cell {self.key} to position {rank}", icon="↕️")
+            # Remove from current position
+            self.notebook.cells.remove(self)
+            # Insert at new position
+            self.notebook.cells.insert(rank, self)
+            self.notebook.notify(f"Moved {self.id} to position {rank}", icon="↕️")
             rerun()
 
     def move_up(self):
@@ -382,24 +388,18 @@ class Cell:
         if new_type == self.type:
             return  # Already this type, nothing to do
 
-        # Store current code
+        # Store current code and position
         current_code = self.code
-
-        # Get current position
         current_rank = self.rank
 
-        # Create a new cell of the target type
-        new_key = self.key  # Keep the same key
-        cell = new_cell(self.notebook, new_key, type=new_type, code=current_code,
+        # Create a new cell of the target type with same key
+        cell = new_cell(self.notebook, self.key, type=new_type, code=current_code,
                        reactive=self.reactive, fragment=self.fragment)
 
-        # Replace in notebook
-        self.notebook.cells[new_key] = cell
+        # Replace in notebook list
+        self.notebook.cells[current_rank] = cell
 
-        # Restore position
-        cell.rerank(current_rank)
-
-        self.notebook.notify(f"Changed cell {new_key} to {new_type}", icon="🔄")
+        self.notebook.notify(f"Changed cell {self.key} to {new_type}", icon="🔄")
         rerun()
 
     def insert_above(self):
@@ -408,9 +408,8 @@ class Cell:
         """
         new_key = self.notebook.gen_cell_key()
         cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
-        self.notebook.cells[new_key] = cell
-        # Rerank the new cell to be just before this cell
-        cell.rerank(self.rank)
+        # Insert at current position (pushing this cell down)
+        self.notebook.cells.insert(self.rank, cell)
         self.notebook.notify(f"Created cell {new_key} above", icon="➕")
         rerun()
 
@@ -420,9 +419,8 @@ class Cell:
         """
         new_key = self.notebook.gen_cell_key()
         cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
-        self.notebook.cells[new_key] = cell
-        # Rerank the new cell to be just after this cell
-        cell.rerank(self.rank + 1)
+        # Insert after current position
+        self.notebook.cells.insert(self.rank + 1, cell)
         self.notebook.notify(f"Created cell {new_key} below", icon="➕")
         rerun()
 
@@ -430,8 +428,8 @@ class Cell:
         """
         Deletes the cell from the notebook.
         """
-        if self.key in self.notebook.cells:
-            del self.notebook.cells[self.key]
+        if self in self.notebook.cells:
+            self.notebook.cells.remove(self)
             self.notebook.notify(f"Deleted cell {self.key}", icon="🗑️")
             rerun()
 
@@ -509,7 +507,7 @@ class CodeCell(Cell):
         the cell's code within a Streamlit fragment context.
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
         self.set_output(response)
 
     def exec_code(self):
@@ -519,7 +517,7 @@ class CodeCell(Cell):
         This method runs the cell's code in the normal execution context.
         """
         with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<Cell[{self.key}]>")
+            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
         self.set_output(response)
 
 class MarkdownCell(Cell):

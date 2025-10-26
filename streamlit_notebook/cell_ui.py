@@ -603,9 +603,9 @@ class CellUI(Editor):
         self.add_button(name="InsertAbove",caption="Insert Above",icon="Plus",event="insert_above",style=dict(top="0px",left="50%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_button(name="InsertBelow",caption="Insert Below",icon="Plus",event="insert_below",style=dict(bottom="0px",left="50%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
         # Type switching buttons (next to Cell[i]: info on bottom bar, caption only, no icon)
-        self.add_button(name="TypeCode",caption="PY",event="type_code",style=dict(bottom="0px",left="60px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
-        self.add_button(name="TypeMarkdown",caption="MD",event="type_markdown",style=dict(bottom="0px",left="85px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
-        self.add_button(name="TypeHTML",caption="HTML",event="type_html",style=dict(bottom="0px",left="110px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeCode",caption="PY",event="type_code",style=dict(bottom="0px",left="95px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeMarkdown",caption="MD",event="type_markdown",style=dict(bottom="0px",left="120px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeHTML",caption="HTML",event="type_html",style=dict(bottom="0px",left="145px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
     
 
     

@@ -56,7 +56,7 @@ class Notebook:
             show_stderr=False
         ):
         self.title=title
-        self.cells={}
+        self.cells=[]
         self._current_cell=None
         self.app_mode=app_mode  # Whether to hide code cells (can be toggled in dev)
         self.locked=locked  # Whether app mode is locked (deployment mode, can't toggle back)
@@ -204,7 +204,7 @@ class Notebook:
 
         self.sidebar()
 
-        for cell in list(self.cells.values()):
+        for cell in self.cells:
             cell.show()
 
         self.control_bar()
@@ -576,7 +576,7 @@ class Notebook:
         Provides user feedback via toast.
         """
         count = len(self.cells)
-        self.cells = {}
+        self.cells = []
         self.notify(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
         rerun()
 
@@ -586,7 +586,7 @@ class Notebook:
 
         This method clears the outputs and state of all cells without deleting them.
         """
-        for cell in self.cells.values():
+        for cell in self.cells:
             cell.has_run=False
 
     def reset_cells(self):
@@ -595,7 +595,7 @@ class Notebook:
 
         This method clears the outputs and state of all cells without deleting them.
         """
-        for cell in self.cells.values():
+        for cell in self.cells:
             cell.reset()
 
     def run_all_cells(self):
@@ -606,7 +606,7 @@ class Notebook:
         Provides user feedback via toast.
         """
         count = 0
-        for cell in list(self.cells.values()):
+        for cell in self.cells:
             if not cell.has_run_once:
                 cell.run()
                 count += 1
@@ -622,11 +622,11 @@ class Notebook:
         Provides user feedback via toast.
         """
         executed = False
-        for cell in list(self.cells.values()):
+        for cell in self.cells:
             if not cell.has_run_once:
                 cell.run()
                 executed = True
-                self.notify(f"Executed cell {cell.key}", icon="▶️")
+                self.notify(f"Executed `{cell.id}`", icon="▶️")
                 break
 
         if not executed:
@@ -642,17 +642,41 @@ class Notebook:
         self.notify("Session restarted", icon="🔄")
         rerun()
 
+    def get_cell(self,rank_or_key):
+        """
+        Finds a cell given either its rank or unique key
+
+        Args:
+            rank_or_key (int or str): the int rank or 4 char string key of the cell.
+        Returns:
+            (Cell): the corresponding cell, or None if not found
+        """
+        if isinstance(rank_or_key,int):
+            if rank_or_key<len(self.cells):
+                return self.cells[rank_or_key]
+            else:
+                return None
+        elif isinstance(rank_or_key,str):
+            for cell in self.cells:
+                if cell.key==rank_or_key:
+                    return cell
+            return None
+        else:
+            raise TypeError("rank_or_key must be either int or str.")
+
     def gen_cell_key(self):
         """
         Generates a unique key for the cell.
 
         Returns:
-            int: A unique integer used as a cell key in the cells dict
+            str: A unique string ID for the cell
         """
-        i=0
-        while i in self.cells:
-            i+=1
-        return i
+        from .utils import short_id
+        # Generate unique short_id (collision is extremely unlikely but check anyway)
+        while True:
+            key = short_id(4)  # 4 chars should be plenty
+            if not any(cell.key == key for cell in self.cells):
+                return key
 
     def new_cell(self,type="code",code="",reactive=False,fragment=False):
         """
@@ -669,7 +693,7 @@ class Notebook:
         """
         key=self.gen_cell_key()
         cell=new_cell(self,key,type=type,code=code,reactive=reactive,fragment=fragment)
-        self.cells[key]=cell
+        self.cells.append(cell)
         rerun()
         return cell
     
@@ -836,13 +860,12 @@ class Notebook:
         lines.append(f"nb = get_notebook({params_str})")
 
         # Use @cell decorator to recreate cells from functions
-        # Sort by key to ensure consistent ordering
-        for key in sorted(self.cells.keys()):
-            cell = self.cells[key]
+        # Cells are already in order in the list
+        for cell in self.cells:
             if cell.type in ("markdown", "html"):
                 lines.append("")
                 lines.append(f"@nb.cell(type='{cell.type}', reactive={cell.reactive}, fragment={cell.fragment})")
-                lines.append("def cell_{}():".format(cell.key))
+                lines.append("def cell_{}():".format(cell.rank))
                 if cell.code.strip() == "":
                     lines.append("    pass")
                 else:
@@ -865,7 +888,7 @@ class Notebook:
             else:  # code cell
                 lines.append("")
                 lines.append(f"@nb.cell(type='code', reactive={cell.reactive}, fragment={cell.fragment})")
-                lines.append("def cell_{}():".format(cell.key))
+                lines.append("def cell_{}():".format(cell.rank))
                 if cell.code.strip() == "":
                     lines.append("    pass")
                 else:
@@ -898,8 +921,9 @@ class Notebook:
         Args:
             key: The unique identifier of the cell to be deleted.
         """
-        if key in self.cells:
-            self.cells[key].delete()
+        cell = next((c for c in self.cells if c.key == key), None)
+        if cell:
+            cell.delete()
 
 def get_notebook(
     title="new_notebook",
