@@ -129,7 +129,7 @@ Cell 1 loads data once. Cell 2 reruns on slider changes. Both execute in the sam
 
 ### Standard Streamlit APIs
 
-Every Streamlit widget, chart, and component works out of the box. Copy-paste your existing Streamlit code into cells.
+Every Streamlit widget, chart, and component works out of the box. Just copy-paste your existing Streamlit code into cells.
 
 ```python
 @nb.cell(type='code', reactive=True)
@@ -220,7 +220,7 @@ Useful when you can't modify the command directly (e.g., in Streamlit cloud plat
 
 **Notebook Mode** (development):
 - Code editor for each cell
-- Cell management (create, delete, reorder)
+- Cell management (create, delete, change type, reorder)
 - Execution controls (Run Next, Run All, Restart Session, Clear All Cells)
 - Save/Open notebooks
 - Demo notebooks library
@@ -253,6 +253,7 @@ You may also :
 **Markdown/HTML cells** 
 
 Add rich formatted text or layouts to your notebook with Markdown and HTML cells. They support variable interpolation using the `<<any_expression>>` syntax. The expression will be evaluated and replaced in the code.
+If the value changes, the displayed content will change as well.
 
 ```markdown
 # Analysis Results
@@ -340,12 +341,11 @@ def fast_widget():
     st.write(f"Selected: {value}")
 ```
 
-This way the page reloads only the UI fragment in which interaction happens.
-It just won't refresh other widgets on the page even if they depend on variables changed by the fragment.
-So, in general, it's better to group in a same fragment subsets of widgets that are supposed to react to eachother.
+This way the page reloads only the UI fragment in which the interaction happens.
+Beware that other widgets on the page won't refresh even if they depend on variables changed by the fragment.
+So, in general, it's better to group in a same fragment subsets of widgets and that are supposed to react to eachother.
 
-Note: A variable that's changed by a fragment is immediately updated in the namespace and can be used elsewhere in the notebook.
-So that the isolation is just ui-side, not backend-side.
+Note: A variable that's changed by a fragment is immediately updated in the namespace and can be used elsewhere in the notebook. The isolation is just ui-side, not backend-side.
 
 ### Programmatic API
 
@@ -374,7 +374,7 @@ Not really possible in Jupyter or very hacky!
 
 **From the interface:**
 - **Save** button: saves to `./notebook_title.py`
-- **Open** button: dropdown of all `.py` notebooks in current directory
+- **Open** button: dropdown of all `.py` notebooks in current directory or drag/drop/browse
 - **Demo notebooks**: load pre-built examples
 
 **From code:**
@@ -383,7 +383,6 @@ __notebook__.save()
 __notebook__.save("my_notebook.py")
 __notebook__.open("my_notebook.py")
 ```
-
 
 ## Deployment
 
@@ -401,7 +400,6 @@ st_notebook my_notebook.py --app
 1. Create `requirements.txt`:
     ```
     streamlit-notebook
-    pandas
     # ... other dependencies
     ```
 

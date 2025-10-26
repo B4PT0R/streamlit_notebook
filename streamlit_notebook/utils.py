@@ -94,22 +94,21 @@ def rerun(delay=0):
         st.toast("Action 2")
         rerun(delay=2.0)  # This will execute at 2.0s from now
 
-        # Progress bar that needs to be seen
-        progress = st.progress(0)
-        for i in range(100):
-            progress.progress(i + 1)
-        rerun(delay=1.0)  # Let user see 100% completion
+        # After a wait() call - accounts for prior delay
+        wait(1.5)  # Request 1.5s delay
+        # ... some code ...
+        rerun()  # Will wait the remaining time from the wait() call
     """
     import time
     current_time = time.time()
 
-    # If there's already a pending rerun, merge intelligently
+    # If there's already a pending delay or rerun, merge intelligently
     if 'rerun' in state and state.rerun:
         existing = state.rerun
         existing_requested_at = existing.get('requested_at', current_time)
         existing_delay = existing.get('delay', 0)
 
-        # Calculate when the existing rerun would execute
+        # Calculate when the existing would execute
         existing_execute_at = existing_requested_at + existing_delay
 
         # Calculate when this new rerun would execute
@@ -120,21 +119,94 @@ def rerun(delay=0):
             # New request requires longer wait - update to new timestamp and delay
             state.rerun = {
                 'requested_at': current_time,
-                'delay': delay
+                'delay': delay,
+                'requested': True
             }
         else:
-            # Existing request already waits long enough
-            # Keep the existing request but adjust delay to account for time passed
+            # Existing delay already waits long enough
+            # Keep the existing delay but mark as requested
             elapsed = current_time - existing_requested_at
             state.rerun = {
                 'requested_at': current_time,
-                'delay': max(0, existing_delay - elapsed)
+                'delay': max(0, existing_delay - elapsed),
+                'requested': True
             }
     else:
-        # First rerun request
+        # First request
         state.rerun = {
             'requested_at': current_time,
-            'delay': delay
+            'delay': delay,
+            'requested': True
+        }
+
+def wait(delay):
+    """
+    Requests a minimum delay before any future rerun, without triggering a rerun.
+
+    This function sets a delay requirement that will be honored by any subsequent
+    rerun() call. If a rerun() is called later, it will account for this delay.
+
+    Useful when you want to ensure temporal space (e.g., for toasts/animations)
+    without causing a rerun yourself.
+
+    Args:
+        delay (float): Minimum delay in seconds to ensure before any rerun executes.
+
+    Examples:
+        # Request delay, someone else will trigger rerun
+        st.toast("Processing complete", icon="✅")
+        wait(1.5)  # Ensures toast is visible
+        # ... later, someone calls rerun() which will honor the 1.5s delay
+
+        # Multiple operations requesting delays
+        st.toast("Step 1")
+        wait(1.0)
+        # ... more code ...
+        st.toast("Step 2")
+        wait(1.5)  # Extends to 1.5s total
+        # ... eventually rerun() is called ...
+
+        # Ensure animation completes
+        st.balloons()
+        wait(2.0)  # Balloons get full duration before any rerun
+    """
+    import time
+    current_time = time.time()
+
+    # Check if there's already a delay or rerun request
+    if 'rerun' in state and state.rerun:
+        existing = state.rerun
+        existing_requested_at = existing.get('requested_at', current_time)
+        existing_delay = existing.get('delay', 0)
+        existing_requested = existing.get('requested', False)
+
+        # Calculate when the existing would execute
+        existing_execute_at = existing_requested_at + existing_delay
+
+        # Calculate when we want it to execute (at least delay from now)
+        desired_execute_at = current_time + delay
+
+        # If our desired delay is longer, update it
+        if desired_execute_at > existing_execute_at:
+            state.rerun = {
+                'requested_at': current_time,
+                'delay': delay,
+                'requested': existing_requested  # Preserve requested flag
+            }
+        else:
+            # Keep existing but update timestamp
+            elapsed = current_time - existing_requested_at
+            state.rerun = {
+                'requested_at': current_time,
+                'delay': max(0, existing_delay - elapsed),
+                'requested': existing_requested
+            }
+    else:
+        # First delay request - create entry with requested=False
+        state.rerun = {
+            'requested_at': current_time,
+            'delay': delay,
+            'requested': False
         }
 
 def check_rerun():
@@ -142,26 +214,33 @@ def check_rerun():
     Checks whether a rerun has been commanded and reruns the app if so.
 
     This function should be placed as the last command in a Streamlit main script.
-    It checks for the rerun flag and triggers a rerun if it's set, waiting
-    for the requested delay if necessary.
+    It checks for the rerun flag and triggers a rerun if it's set (requested=True),
+    waiting for the requested delay if necessary.
+
+    If only delay() was called (requested=False), no rerun occurs - the delay
+    requirement is just stored for any future rerun() call.
     """
     import time
     if 'rerun' in state and state.rerun:
         rerun_info = state.rerun
-        requested_at = rerun_info.get('requested_at', 0)
-        delay = rerun_info.get('delay', 0)
+        requested = rerun_info.get('requested', False)
 
-        # Calculate elapsed time since rerun was requested
-        elapsed = time.time() - requested_at
+        # Only execute rerun if it was actually requested (not just a delay)
+        if requested:
+            requested_at = rerun_info.get('requested_at', 0)
+            delay_time = rerun_info.get('delay', 0)
 
-        # Wait for remaining delay if needed
-        remaining_delay = delay - elapsed
-        if remaining_delay > 0:
-            time.sleep(remaining_delay)
+            # Calculate elapsed time since rerun was requested
+            elapsed = time.time() - requested_at
 
-        # Clear the rerun flag and execute rerun
-        state.rerun = None
-        st.rerun()
+            # Wait for remaining delay if needed
+            remaining_delay = delay_time - elapsed
+            if remaining_delay > 0:
+                time.sleep(remaining_delay)
+
+            # Clear the rerun flag and execute rerun
+            state.rerun = None
+            st.rerun()
 
 def format(string, **kwargs):
     """

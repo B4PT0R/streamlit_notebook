@@ -1,6 +1,6 @@
 from .cell import new_cell, display
 from .echo import echo
-from .utils import format, rerun, check_rerun, root_join, state
+from .utils import format, rerun, check_rerun, root_join, state, wait
 from .shell import Shell
 import streamlit as st
 import os
@@ -52,6 +52,7 @@ class Notebook:
             locked=False,
             run_on_submit=True,
             show_logo=True,
+            show_stdout=True,
             show_stderr=False
         ):
         self.title=title
@@ -61,6 +62,7 @@ class Notebook:
         self.locked=locked  # Whether app mode is locked (deployment mode, can't toggle back)
         self.run_on_submit=run_on_submit
         self.show_logo=show_logo
+        self.show_stdout=show_stdout
         self.show_stderr=show_stderr
         self.current_code=None
         self.initialized=False
@@ -103,6 +105,25 @@ class Notebook:
     def current_cell(self,value):
         self._current_cell=value
 
+    def notify(self, message, icon="ℹ️", delay=1.0):
+        """
+        Shows a toast notification and ensures it's visible before any pending rerun.
+
+        This is a convenience method that combines st.toast() with wait()
+        to ensure notifications are visible to the user.
+
+        Args:
+            message (str): The message to display in the toast
+            icon (str): The emoji icon to show. Defaults to "ℹ️"
+            delay (float): How long to ensure the toast is visible (seconds). Defaults to 1.0
+
+        Examples:
+            self.notify("Saved successfully", icon="💾")
+            self.notify("Error occurred", icon="⚠️", delay=2.0)
+        """
+        st.toast(message, icon=icon)
+        wait(delay)
+
     def input_hook(self,code):
         """
         Shell hook called whenever code is inputted.
@@ -129,7 +150,7 @@ class Notebook:
             data (str): The data being written to stdout.
             buffer (str): The current content of the stdout buffer.
         """
-        if self.current_cell.ready:
+        if self.show_stdout and self.current_cell.ready:
             with self.current_cell.stdout_area:
                 if buffer:
                     st.code(buffer,language="text")
@@ -268,6 +289,30 @@ class Notebook:
             if self.locked:
                 st.caption("🔒 Running in locked app mode")
 
+    def settings_popover(self):
+        """
+        Renders the technical settings popover.
+
+        Contains advanced settings like run on submit, display mode, stdout/stderr output.
+        """
+        with st.popover("⚙️ Settings", use_container_width=True):
+            def on_change():
+                self.run_on_submit=not self.run_on_submit
+            st.toggle("Run cell on submit",value=self.run_on_submit,on_change=on_change,key="toggle_run_on_submit")
+
+            def on_change():
+                self.shell.display_mode=state.select_display_mode
+            options=['all','last','none']
+            st.selectbox("Display mode", options=options,index=options.index(self.shell.display_mode),on_change=on_change,key="select_display_mode")
+
+            def on_change():
+                self.show_stdout=state.toggle_show_stdout
+            st.toggle("Show stdout output",value=self.show_stdout,on_change=on_change,key="toggle_show_stdout")
+
+            def on_change():
+                self.show_stderr=state.toggle_show_stderr
+            st.toggle("Show stderr output",value=self.show_stderr,on_change=on_change,key="toggle_show_stderr")
+
     def sidebar_notebook_mode(self):
         """
         Renders the full development sidebar with all notebook controls.
@@ -298,7 +343,7 @@ class Notebook:
                     self.open_notebook()
 
             st.divider()
-    
+
             st.button("▶️​ Run next cell",on_click=self.run_next_cell,use_container_width=True,key="button_run_next_cell")
             st.button("⏩ Run all cells",on_click=self.run_all_cells,use_container_width=True,key="button_run_all_cells")
             st.button("🔄​ Restart session",on_click=self.restart_session,use_container_width=True,key="button_restart_session")
@@ -313,18 +358,13 @@ class Notebook:
                 st.toggle("App mode preview",value=self.app_mode,on_change=on_change, key="toggle_app_mode")
 
             def on_change():
-                self.run_on_submit=not self.run_on_submit
-            st.toggle("Run cell on submit",value=self.run_on_submit,on_change=on_change,key="toggle_run_on_submit")
-            def on_change():
                 self.show_logo=not self.show_logo
             st.toggle("Show logo",value=self.show_logo,on_change=on_change,key="toggle_show_logo")
-            def on_change():
-                self.shell.display_mode=state.select_display_mode
-            options=['all','last','none']
-            st.selectbox("Display mode", options=options,index=options.index(self.shell.display_mode),on_change=on_change,key="select_display_mode")
-            def on_change():
-                self.show_stderr=state.toggle_show_stderr
-            st.toggle("Show stderr output",value=self.show_stderr,on_change=on_change,key="toggle_show_stderr")
+
+            st.divider()
+
+            # Technical settings in popover
+            self.settings_popover()
 
     def logo(self):
         """
@@ -370,11 +410,11 @@ class Notebook:
                 filepath = os.path.join(demo_folder, state.demo_choice)
                 try:
                     self.open(filepath)
-                    st.toast(f"Loaded demo: {state.demo_choice}", icon="📚")
+                    self.notify(f"Loaded demo: {state.demo_choice}", icon="📚")
                 except ValueError as e:
-                    st.toast(str(e), icon="⚠️")
+                    self.notify(str(e), icon="⚠️")
                 except Exception as e:
-                    st.toast(f"Failed to load demo: {str(e)}", icon="⚠️")
+                    self.notify(f"Failed to load demo: {str(e)}", icon="⚠️")
 
         st.selectbox("Choose a demo notebook.", options=demos, index=None, on_change=on_change, key="demo_choice")
 
@@ -416,9 +456,9 @@ class Notebook:
             filepath = os.path.join(os.getcwd(), filename)
             try:
                 self.save(filepath)
-                st.toast(f"Saved to {filepath}", icon="💾")
+                self.notify(f"Saved to {filepath}", icon="💾")
             except Exception as e:
-                st.toast(f"Failed to save: {str(e)}", icon="⚠️")
+                self.notify(f"Failed to save: {str(e)}", icon="⚠️")
 
         st.button("Save notebook", use_container_width=True, key="button_save_notebook", on_click=on_click)
 
@@ -468,28 +508,29 @@ class Notebook:
         UI method: Opens a notebook .py file from the current working directory or via file upload.
         Provides user feedback via toast messages.
         """
-        # File uploader for drag and drop
-        uploaded_file = st.file_uploader(
-            "📎 Drop a notebook file here or browse",
-            type=['py'],
-            key="notebook_file_uploader",
-            help="Upload a .py notebook file"
-        )
+        # File uploader for drag and drop (only if not locked)
+        if not self.locked:
+            uploaded_file = st.file_uploader(
+                "📎 Drop a notebook file here or browse",
+                type=['py'],
+                key="notebook_file_uploader",
+                help="Upload a .py notebook file"
+            )
 
-        if uploaded_file is not None:
-            try:
-                # Read the uploaded file
-                code = uploaded_file.read().decode('utf-8')
+            if uploaded_file is not None:
+                try:
+                    # Read the uploaded file
+                    code = uploaded_file.read().decode('utf-8')
 
-                # Open the notebook from the code string
-                self.open(code)
-                st.toast(f"Opened notebook: {uploaded_file.name}", icon="📂")
-                # Close the open dialog
-                state.show_open_dialog = False
-            except ValueError as e:
-                st.toast(str(e), icon="⚠️")
-            except Exception as e:
-                st.toast(f"Failed to open uploaded file: {str(e)}", icon="⚠️")
+                    # Open the notebook from the code string
+                    self.open(code)
+                    self.notify(f"Opened notebook: {uploaded_file.name}", icon="📂")
+                    # Close the open dialog
+                    state.show_open_dialog = False
+                except ValueError as e:
+                    self.notify(str(e), icon="⚠️")
+                except Exception as e:
+                    self.notify(f"Failed to open uploaded file: {str(e)}", icon="⚠️")
 
         # Existing selectbox for local files
         cwd = os.getcwd()
@@ -511,13 +552,13 @@ class Notebook:
                 filepath = os.path.join(cwd, state.open_notebook_choice)
                 try:
                     self.open(filepath)
-                    st.toast(f"Opened notebook: {state.open_notebook_choice}", icon="📂")
+                    self.notify(f"Opened notebook: {state.open_notebook_choice}", icon="📂")
                     # Close the open dialog
                     state.show_open_dialog = False
                 except ValueError as e:
-                    st.toast(str(e), icon="⚠️")
+                    self.notify(str(e), icon="⚠️")
                 except Exception as e:
-                    st.toast(f"Failed to open: {str(e)}", icon="⚠️")
+                    self.notify(f"Failed to open: {str(e)}", icon="⚠️")
 
         st.selectbox(
             "Or select from current directory",
@@ -536,8 +577,8 @@ class Notebook:
         """
         count = len(self.cells)
         self.cells = {}
-        st.toast(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
-        rerun(delay=1.5)
+        self.notify(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
+        rerun()
 
     def reset_run_states(self):
         """
@@ -571,9 +612,9 @@ class Notebook:
                 count += 1
 
         if count > 0:
-            st.toast(f"Executed {count} cell{'s' if count > 1 else ''}", icon="⏩")
+            self.notify(f"Executed {count} cell{'s' if count > 1 else ''}", icon="⏩")
         else:
-            st.toast("All cells already executed", icon="✅")
+            self.notify("All cells already executed", icon="✅")
 
     def run_next_cell(self):
         """
@@ -585,11 +626,11 @@ class Notebook:
             if not cell.has_run_once:
                 cell.run()
                 executed = True
-                st.toast(f"Executed cell {cell.key}", icon="▶️")
+                self.notify(f"Executed cell {cell.key}", icon="▶️")
                 break
 
         if not executed:
-            st.toast("All cells have been executed", icon="✅")
+            self.notify("All cells have been executed", icon="✅")
 
     def restart_session(self):
         """
@@ -598,8 +639,8 @@ class Notebook:
         """
         self.reset_cells()
         self.init_shell()
-        st.toast("Session restarted", icon="🔄")
-        rerun(delay=1.5)
+        self.notify("Session restarted", icon="🔄")
+        rerun()
 
     def gen_cell_key(self):
         """
@@ -775,6 +816,7 @@ class Notebook:
             'locked': False,
             'run_on_submit': True,
             'show_logo': True,
+            'show_stdout': True,
             'show_stderr': False
         }
         params = dict(
@@ -783,6 +825,7 @@ class Notebook:
             locked=self.locked,
             run_on_submit=self.run_on_submit,
             show_logo=self.show_logo,
+            show_stdout=self.show_stdout,
             show_stderr=self.show_stderr
         )
         params_str = ", ".join([
@@ -864,6 +907,7 @@ def get_notebook(
     locked=False,
     run_on_submit=True,
     show_logo=True,
+    show_stdout=True,
     show_stderr=False
 ) -> Notebook:
     """
@@ -879,6 +923,7 @@ def get_notebook(
         locked (bool): If True, locks the notebook in app mode (prevents toggling back to notebook mode).
         run_on_submit (bool): If True, cells are executed immediately upon submission.
         show_logo (bool): If True, the notebook logo is displayed.
+        show_stdout (bool): If True, stdout output is shown.
         show_stderr (bool): If True, stderr output is shown.
 
     Returns:
@@ -908,6 +953,7 @@ def get_notebook(
              nb.locked != locked or
              nb.run_on_submit != run_on_submit or
              nb.show_logo != show_logo or
+             nb.show_stdout != show_stdout or
              nb.show_stderr != show_stderr)):
             should_create = True
 
@@ -918,6 +964,7 @@ def get_notebook(
             locked=locked,
             run_on_submit=run_on_submit,
             show_logo=show_logo,
+            show_stdout=show_stdout,
             show_stderr=show_stderr
         )
 

@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = get_notebook(title='interactive_julia_set_demo', app_mode=True)
+nb = get_notebook(title='interactive_julia_set_demo', app_mode=True, show_stdout=False)
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
@@ -57,11 +57,15 @@ def cell_1():
 
     # Compute and store Julia sets
     julia_sets = {}
+    progress_bar = st.progress(0, text='Computing Julia sets...')
     for i, c in enumerate(c_values):
-        print(f'Computing Julia set {i+1}/50...')
+        print(f'Computing Julia set {i+1}/{len(c_values)} for c = {c:.3f}')
+        progress_bar.progress((i + 1) / len(c_values), text=f'Computing Julia set {i+1}/{len(c_values)}...')
         julia_sets[c] = compute_julia(h, w, c, max_iter)
 
-    print('Computation complete!')
+    progress_bar.empty()
+    print('✓ All Julia sets computed successfully!')
+    st.success('Computation complete!');
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_2():

@@ -225,6 +225,7 @@ class Cell:
         if self.notebook.run_on_submit:
             self.has_run=False
             self.run()
+            self.notebook.notify(f"Executed cell {self.key}", icon="▶️")
 
     def run_callback(self):
         """
@@ -234,6 +235,7 @@ class Cell:
         """
         self.has_run=False
         self.run()
+        self.notebook.notify(f"Executed cell {self.key}", icon="▶️")
 
     def run(self):
         """
@@ -300,11 +302,11 @@ class Cell:
         displaying previous results without re-executing the code.
         """
         self.initialize_output_area()
-        if self.stdout:
+        if self.stdout and self.notebook.show_stdout:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
         if self.stderr and self.notebook.show_stderr:
-            with self.stderr_area:     
+            with self.stderr_area:
                 st.code(self.stderr,language="text")
         if self.results:
             with self.output:
@@ -337,6 +339,7 @@ class Cell:
             del keys[self.rank]
             keys.insert(rank,self.key)
             self.notebook.cells={k:self.notebook.cells[k] for k in keys}
+            self.notebook.notify(f"Moved cell {self.key} to position {rank}", icon="↕️")
             rerun()
 
     def move_up(self):
@@ -396,8 +399,8 @@ class Cell:
         # Restore position
         cell.rerank(current_rank)
 
-        st.toast(f"Changed cell {new_key} to {new_type}", icon="🔄")
-        rerun(delay=1.5)
+        self.notebook.notify(f"Changed cell {new_key} to {new_type}", icon="🔄")
+        rerun()
 
     def insert_above(self):
         """
@@ -408,8 +411,8 @@ class Cell:
         self.notebook.cells[new_key] = cell
         # Rerank the new cell to be just before this cell
         cell.rerank(self.rank)
-        st.toast(f"Created cell {new_key} above", icon="➕")
-        rerun(delay=1.5)
+        self.notebook.notify(f"Created cell {new_key} above", icon="➕")
+        rerun()
 
     def insert_below(self):
         """
@@ -420,8 +423,8 @@ class Cell:
         self.notebook.cells[new_key] = cell
         # Rerank the new cell to be just after this cell
         cell.rerank(self.rank + 1)
-        st.toast(f"Created cell {new_key} below", icon="➕")
-        rerun(delay=1.5)
+        self.notebook.notify(f"Created cell {new_key} below", icon="➕")
+        rerun()
 
     def delete(self):
         """
@@ -429,6 +432,7 @@ class Cell:
         """
         if self.key in self.notebook.cells:
             del self.notebook.cells[self.key]
+            self.notebook.notify(f"Deleted cell {self.key}", icon="🗑️")
             rerun()
 
     def reset(self):
