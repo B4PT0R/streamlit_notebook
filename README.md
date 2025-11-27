@@ -51,12 +51,15 @@ Create cells interactively, then click "Save notebook" to save as a `.py` file.
 **Option 2: Write the file directly**
 ```python
 # analysis.py
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="Analysis")
-nb = notebook(title='analysis')
 
+# Create a notebook instance
+nb = st_notebook(title='analysis')
+
+# Define cells
 @nb.cell(type='code')
 def setup():
     import pandas as pd
@@ -68,6 +71,7 @@ def explore():
     col = st.selectbox("Column", df.columns)
     st.line_chart(df[col])
 
+# Render the notebook
 nb.render()
 ```
 
@@ -90,11 +94,11 @@ streamlit run analysis.py --app  # Locked app mode
 ### How it works?
 
 A bit of magic needs to happen under the hood to make it possible
-- `notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
+- `st_notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
 - The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is no-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
 - `nb.render()` finally takes care of fetching and displaying the current notebook instance from state.
 
-Subsequent runs of the script will ignore the cell definitions and merely loop on `nb=notebook(...)` and `nb.render()` to refresh whatever notebook instance is living in the session's state.
+Subsequent runs of the script will ignore the cell definitions and merely loop on `nb = st_notebook(...)` and `nb.render()` to refresh whatever notebook instance is living in the session's state.
 
 Note: the functions defining the cells will never get called. Doing so would result in errors, as they refer to variables defined out of their local scopes (in other cells!). It's really a nice thing here that python allows to define erroneous function objects, even decorate them, without throwing an exception as long as we don't attempt to call them (lazy evaluation). They still know the file and line range in which they are defined, which is enough for the decorator to retrieve their raw source code. Makes them usable as mere "code bags", ie. containers for source code that gets extracted and executed elsewhere.
 
@@ -145,11 +149,11 @@ def widgets():
 Building a stock price analysis dashboard. This example uses real data from the vega_datasets package (included) and can be copy-pasted and run directly:
 
 ```python
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
-nb = notebook(title='stock_dashboard')
+nb = st_notebook(title='stock_dashboard')
 
 @nb.cell(type='code')
 def setup():

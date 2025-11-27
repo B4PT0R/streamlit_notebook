@@ -3,7 +3,6 @@ Main streamlit script of the notebook app
 """
 
 import streamlit as st
-from streamlit_notebook import notebook
 import os
 import sys
 
@@ -23,12 +22,12 @@ def get_default_notebook_template():
     return f"""# Streamlit Notebook
 # This is a self-contained notebook file
 
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = notebook({params_str})
+nb = st_notebook({params_str})
 
 # Add cells below using @nb.cell() decorator
 # Example:

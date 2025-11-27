@@ -48,9 +48,9 @@ Environment variable (alternative to --app flag):
             # Check if it's a valid notebook file
             try:
                 with open(args.notebook, 'r') as f:
-                    if 'from streamlit_notebook import notebook' not in f.read(500):
+                    if 'from streamlit_notebook import st_notebook' not in f.read(500):
                         print(f"Warning: {args.notebook} doesn't appear to be a notebook file.")
-                        print("Expected to find 'from streamlit_notebook import notebook'")
+                        print("Expected to find 'from streamlit_notebook import st_notebook'")
             except FileNotFoundError:
                 print(f"Error: File {args.notebook} not found.")
                 sys.exit(1)

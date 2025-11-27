@@ -2,12 +2,12 @@
 # Original notebook: dynamic_cell_control_demo_1
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = notebook(title='dynamic_cell_control_demo_1')
+nb = st_notebook(title='dynamic_cell_control_demo_1')
 
 @nb.cell(type='code', reactive=True, fragment=False)
 def cell_0():

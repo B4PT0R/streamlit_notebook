@@ -2,12 +2,12 @@
 # Original notebook: reactive_viz_demo
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = notebook(title='reactive_viz_demo')
+nb = st_notebook(title='reactive_viz_demo')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
@@ -60,6 +60,4 @@ def cell_4():
     st.pyplot(plt.gcf());
 
 # Render the notebook
-# Using render_notebook() instead of nb.render() allows the notebook
-# to be replaced dynamically (e.g., when loading a different file)
 nb.render()

@@ -2,12 +2,12 @@
 # Original notebook: stock_dashboard_demo
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-nb = notebook(title='stock_dashboard')
+nb = st_notebook(title='stock_dashboard')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():

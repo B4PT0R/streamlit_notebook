@@ -2,12 +2,12 @@
 # Original notebook: interactive_plot_demo
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import notebook
+from streamlit_notebook import st_notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = notebook(title='interactive_plot_demo')
+nb = st_notebook(title='interactive_plot_demo')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():

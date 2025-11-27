@@ -492,7 +492,7 @@ class Notebook:
                 code = source
 
             # Validate it's a notebook file by checking for the signature
-            return all(map(lambda x:x in code,['from streamlit_notebook import notebook']))
+            return all(map(lambda x:x in code,['from streamlit_notebook import st_notebook']))
 
         except Exception:
             return False
@@ -878,7 +878,7 @@ class Notebook:
         lines.append(f"# Original notebook: {self.title}")
         lines.append("# This file can be run directly with: streamlit run <filename>")
         lines.append("")
-        lines.append("from streamlit_notebook import notebook")
+        lines.append("from streamlit_notebook import st_notebook")
         lines.append("import streamlit as st")
         lines.append("")
         lines.append("st.set_page_config(page_title=\"st.notebook\", layout=\"centered\", initial_sidebar_state=\"collapsed\")")
@@ -908,7 +908,7 @@ class Notebook:
             for k, v in params.items()
             if v != defaults.get(k)
         ])
-        lines.append(f"nb = notebook({params_str})")
+        lines.append(f"nb = st_notebook({params_str})")
 
         # Use @cell decorator to recreate cells from functions
         # Cells are already in order in the list
@@ -974,7 +974,7 @@ class Notebook:
         if cell:
             cell.delete()
 
-def notebook(
+def st_notebook(
     title="new_notebook",
     app_mode=False,
     locked=False,
@@ -1050,7 +1050,7 @@ def set_page_config(*args, **kwargs):
     Patched version of st.set_page_config that only runs during exec context.
 
     When a notebook is run directly via 'streamlit run notebook.py', this becomes
-    a no-op. When render_notebook() re-execs the script with __file__ = '<notebook_script>',
+    a no-op. When nb.render() re-execs the script with __file__ = '<notebook_script>',
     the actual page config is set. This makes <notebook_script> the canonical execution context.
     """
     # Check if running from exec context (via <notebook_script>)
