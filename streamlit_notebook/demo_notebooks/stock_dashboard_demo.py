@@ -2,12 +2,12 @@
 # Original notebook: stock_dashboard_demo
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import streamlit as st
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-nb = get_notebook(title='stock_dashboard')
+nb = notebook(title='stock_dashboard')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
@@ -58,6 +58,4 @@ def cell_4():
     st.altair_chart(chart, use_container_width=True);
 
 # Render the notebook
-# Using render_notebook() instead of nb.render() allows the notebook
-# to be replaced dynamically (e.g., when loading a different file)
-render_notebook()
+nb.render()

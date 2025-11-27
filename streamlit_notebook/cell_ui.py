@@ -1,4 +1,5 @@
 from code_editor import code_editor
+from numpy import isin
 from .utils import state, short_id, rerun
 import streamlit as st
 
@@ -16,26 +17,24 @@ class editor_output_parser:
     Methods:
         __call__(output): Process the output and return event and content.
     """
-    def __init__(self,initial_code=""):
+    def __init__(self,editor):
         self.last_id=None
-        self.last_code=initial_code
+        self.editor=editor
 
     def __call__(self,output):
-        if output is None:
+        if output is None or not output.get('id'):
             event=None
-            content=self.last_code
         else:
-            content=self.last_code=output['text']
             if not output['id']==self.last_id:
-                self.last_code=output['text']
+                self.editor.code.from_ui(output['text'])
                 self.last_id=output['id']
-                if not output["type"]=='':
+                if output.get("type"):
                     event=output["type"]
                 else:
                     event=None
             else:
                 event=None
-        return event,content
+        return event
 
 class Code:
 
@@ -400,7 +399,17 @@ class Editor:
     _excluded=['parser','key','container','code','event','submitted_code','submit_callback','info_bar','menu_bar','kwargs','buttons']
 
     def __init__(self,code=None,buttons=None,submit_callback=None,key=None,**kwargs):
-        self.code=code or Code()
+
+        if code is None:
+            code=Code()
+        elif isinstance(code,Code):
+            pass
+        elif isinstance(code,str):
+            code=Code(code)
+        else:
+            raise TypeError(f"code must be a Code object or a string, got {type(code)}")
+        
+        self.code=code
         self.event=None
         self.buttons=buttons or dict()
         self.submit_callback=submit_callback
@@ -409,8 +418,7 @@ class Editor:
         self.container=None
         self.info_bar=InfoBar(self)
         self.menu_bar=MenuBar(self)
-        self.parser=editor_output_parser(self.code.get_value())
-        
+        self.parser=editor_output_parser(self)    
 
     def __getattr__(self,attr):
         if attr in self.kwargs:
@@ -520,8 +528,7 @@ class Editor:
         This method creates and displays the main code editing interface.
         """
         output=code_editor(self.code.get_value(),**self.get_params())
-        event,content=self.parser(self.get_output(output))
-        self.code.from_ui(content)
+        event=self.parser(self.get_output(output))
         self.event=event
 
     def submit(self):

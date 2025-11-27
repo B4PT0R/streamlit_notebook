@@ -204,12 +204,12 @@ class Notebook:
 
         self.sidebar()
 
-        for cell in self.cells:
+        for cell in list(self.cells): #list to prevent issues if cells are modified during iteration
             cell.show()
 
         self.control_bar()
 
-    def render(self):
+    def _render(self):
         """
         main rendering method called in each Streamlit run.
         """
@@ -226,6 +226,57 @@ class Notebook:
         # Causing potential DuplicateWidgetID errors and other issues.
         self.reset_run_states()
         check_rerun()
+
+    def render(self):
+        """
+        Renders the notebook currently stored in session state.
+
+        This function should be used instead of calling nb._render() directly
+        when you want to support dynamic notebook loading. It ensures that
+        even if the notebook object is replaced (e.g., when opening a new file),
+        the render call will always work on the current notebook in state.
+
+        This is particularly important when loading notebooks from .py files,
+        where exec() creates a new notebook instance that replaces the original.
+
+        Automatically handles direct runs via 'streamlit run notebook.py' by
+        bootstrapping the session state when needed.
+        """
+        # Check if running directly (not via main.py's <notebook_script>)
+        frame = inspect.currentframe()
+        caller_globals = frame.f_back.f_globals if frame else {}
+        caller_file = caller_globals.get('__file__', '<notebook_script>')
+
+        if caller_file != '<notebook_script>':
+            # Direct run - need to bootstrap
+            if 'notebook_script' not in state:
+                # First run - capture the script
+                if os.path.exists(caller_file):
+                    with open(caller_file, 'r') as f:
+                        state.notebook_script = f.read()
+                # Clear notebook on first bootstrap so exec creates it fresh
+                if 'notebook' in state:
+                    del state['notebook']
+
+            # Execute the notebook script
+            exec_globals = globals().copy()
+            exec_globals.update({
+                '__name__': '__main__',
+                '__file__': '<notebook_script>',
+            })
+            code_obj = compile(state.notebook_script, '<notebook_script>', 'exec')
+            exec(code_obj, exec_globals)
+            return  # New script already rendered
+
+        # Normal render
+        if 'notebook' not in state:
+            st.error("No notebook found in session state. Did you call notebook() first?")
+            return
+
+        state.notebook._render()
+
+    def rerun(self):
+        rerun()
 
     def sidebar(self):
         """
@@ -441,7 +492,7 @@ class Notebook:
                 code = source
 
             # Validate it's a notebook file by checking for the signature
-            return all(map(lambda x:x in code,['from streamlit_notebook import ','get_notebook','render_notebook']))
+            return all(map(lambda x:x in code,['from streamlit_notebook import notebook']))
 
         except Exception:
             return False
@@ -827,7 +878,7 @@ class Notebook:
         lines.append(f"# Original notebook: {self.title}")
         lines.append("# This file can be run directly with: streamlit run <filename>")
         lines.append("")
-        lines.append("from streamlit_notebook import get_notebook, render_notebook")
+        lines.append("from streamlit_notebook import notebook")
         lines.append("import streamlit as st")
         lines.append("")
         lines.append("st.set_page_config(page_title=\"st.notebook\", layout=\"centered\", initial_sidebar_state=\"collapsed\")")
@@ -857,7 +908,7 @@ class Notebook:
             for k, v in params.items()
             if v != defaults.get(k)
         ])
-        lines.append(f"nb = get_notebook({params_str})")
+        lines.append(f"nb = notebook({params_str})")
 
         # Use @cell decorator to recreate cells from functions
         # Cells are already in order in the list
@@ -896,9 +947,7 @@ class Notebook:
 
         lines.append("")
         lines.append("# Render the notebook")
-        lines.append("# Using render_notebook() instead of nb.render() allows the notebook")
-        lines.append("# to be replaced dynamically (e.g., when loading a different file)")
-        lines.append("render_notebook()")
+        lines.append("nb.render()")
         return "\n".join(lines)
     
     def save(self,filepath=None):
@@ -925,7 +974,7 @@ class Notebook:
         if cell:
             cell.delete()
 
-def get_notebook(
+def notebook(
     title="new_notebook",
     app_mode=False,
     locked=False,
@@ -1013,55 +1062,5 @@ def set_page_config(*args, **kwargs):
     if caller_file == '<notebook_script>':
         _original_set_page_config(*args, **kwargs)
 
-def render_notebook():
-    """
-    Renders the notebook currently stored in session state.
-
-    This function should be used instead of calling nb.render() directly
-    when you want to support dynamic notebook loading. It ensures that
-    even if the notebook object is replaced (e.g., when opening a new file),
-    the render call will always work on the current notebook in state.
-
-    This is particularly important when loading notebooks from .py files,
-    where exec() creates a new notebook instance that replaces the original.
-
-    Automatically handles direct runs via 'streamlit run notebook.py' by
-    bootstrapping the session state when needed.
-    """
-    # Check if running directly (not via main.py's <notebook_script>)
-    frame = inspect.currentframe()
-    caller_globals = frame.f_back.f_globals if frame else {}
-    caller_file = caller_globals.get('__file__', '<notebook_script>')
-
-    if caller_file != '<notebook_script>':
-        # Direct run - need to bootstrap
-        if 'notebook_script' not in state:
-            # First run - capture the script
-            if os.path.exists(caller_file):
-                with open(caller_file, 'r') as f:
-                    state.notebook_script = f.read()
-            # Clear notebook on first bootstrap so exec creates it fresh
-            if 'notebook' in state:
-                del state['notebook']
-
-        # Execute the notebook script
-        exec_globals = globals().copy()
-        exec_globals.update({
-            '__name__': '__main__',
-            '__file__': '<notebook_script>',
-            'st': st,
-            'get_notebook': get_notebook,
-            'render_notebook': render_notebook,
-        })
-        code_obj = compile(state.notebook_script, '<notebook_script>', 'exec')
-        exec(code_obj, exec_globals)
-        return  # New script already rendered
-
-    # Normal render
-    if 'notebook' not in state:
-        st.error("No notebook found in session state. Did you call get_notebook() first?")
-        return
-
-    state.notebook.render()
 
 

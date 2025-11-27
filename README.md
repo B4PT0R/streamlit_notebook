@@ -1,6 +1,6 @@
 # Streamlit Notebook
 
-The reactive notebook powered by Streamlit you've been waiting for.
+The reactive notebook powered by Streamlit.
 
 Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
 
@@ -51,11 +51,11 @@ Create cells interactively, then click "Save notebook" to save as a `.py` file.
 **Option 2: Write the file directly**
 ```python
 # analysis.py
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import streamlit as st
 
 st.set_page_config(page_title="Analysis")
-nb = get_notebook(title='analysis')
+nb = notebook(title='analysis')
 
 @nb.cell(type='code')
 def setup():
@@ -68,7 +68,7 @@ def explore():
     col = st.selectbox("Column", df.columns)
     st.line_chart(df[col])
 
-render_notebook()
+nb.render()
 ```
 
 ### Run it
@@ -90,11 +90,11 @@ streamlit run analysis.py --app  # Locked app mode
 ### How it works?
 
 A bit of magic needs to happen under the hood to make it possible
-- `get_notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
+- `notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
 - The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is no-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
-- `render_notebook` finally takes care of fetching and displaying the current notebook instance from state.
+- `nb.render()` finally takes care of fetching and displaying the current notebook instance from state.
 
-Subsequent runs of the script will ignore the cell definitions and merely loop on `get_notebook()` and `render_notebook()` to refresh whatever notebook instance is living in the session's state.
+Subsequent runs of the script will ignore the cell definitions and merely loop on `nb=notebook(...)` and `nb.render()` to refresh whatever notebook instance is living in the session's state.
 
 Note: the functions defining the cells will never get called. Doing so would result in errors, as they refer to variables defined out of their local scopes (in other cells!). It's really a nice thing here that python allows to define erroneous function objects, even decorate them, without throwing an exception as long as we don't attempt to call them (lazy evaluation). They still know the file and line range in which they are defined, which is enough for the decorator to retrieve their raw source code. Makes them usable as mere "code bags", ie. containers for source code that gets extracted and executed elsewhere.
 
@@ -145,11 +145,11 @@ def widgets():
 Building a stock price analysis dashboard. This example uses real data from the vega_datasets package (included) and can be copy-pasted and run directly:
 
 ```python
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import streamlit as st
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
-nb = get_notebook(title='stock_dashboard')
+nb = notebook(title='stock_dashboard')
 
 @nb.cell(type='code')
 def setup():
@@ -191,7 +191,7 @@ def dashboard():
     ).properties(height=400)
     st.altair_chart(chart, use_container_width=True);
 
-render_notebook()
+nb.render()
 ```
 
 ## Easy deployment

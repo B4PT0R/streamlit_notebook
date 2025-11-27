@@ -1,4 +1,4 @@
-from .notebook import Notebook, get_notebook, render_notebook, set_page_config
+from .notebook import Notebook, notebook, render_notebook, set_page_config
 
 # Load .env file if it exists (for ST_NOTEBOOK_APP_MODE and other env vars)
 try:

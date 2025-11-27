@@ -1,5 +1,6 @@
+from numpy import short
 import streamlit as st
-from streamlit.errors import DuplicateWidgetID
+from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
 from .utils import format, short_id, rerun
 from .cell_ui import CellUI, Code
 
@@ -101,8 +102,12 @@ class Cell:
         Args:
             value (str): The new code content to set for the cell.
         """
+        current_value=self._code.get_value()
+        if current_value==value:
+            return
         self._code.from_backend(value)
         self.ui_key=short_id()
+        self.reset()
         rerun()
 
     @property
@@ -171,6 +176,7 @@ class Cell:
         Updates the cell's UI components based on the current cell state.
         """
         self.ui.lang=self.language
+        self.ui.key=f"cell_ui_{self.ui_key}"
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         #self.ui.buttons['Has_run'].visible=self.has_run_once
         self.ui.info_bar.set_info(dict(name=f"{self.id}:",style=dict(fontSize="14px",width="100%")))
@@ -207,16 +213,15 @@ class Cell:
         This method is responsible for displaying the cell's UI components
         and managing its visibility based on notebook settings.
         """
-
         self.prepare_skeleton()
 
         if not self.notebook.app_mode and self.visible:
             with self.container.container():
                 self.update_ui()
                 self.ui.show()
-
+                
         # Rerun only if the cell has been run at least once with the current code
-        # This prevents premature execution when toggling auto-rerun on a cell that hasn't run yet
+        # This prevents premature execution when toggling "reactive" on a cell that hasn't run yet
         if self.reactive and self.has_run_once:
             self.run()
 

@@ -3,7 +3,7 @@ Main streamlit script of the notebook app
 """
 
 import streamlit as st
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import os
 import sys
 
@@ -23,12 +23,12 @@ def get_default_notebook_template():
     return f"""# Streamlit Notebook
 # This is a self-contained notebook file
 
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = get_notebook({params_str})
+nb = notebook({params_str})
 
 # Add cells below using @nb.cell() decorator
 # Example:
@@ -37,7 +37,7 @@ nb = get_notebook({params_str})
 #     st.write("Hello, World!")
 
 # Render the notebook
-render_notebook()
+nb.render()
 """
 
 def main():
@@ -64,8 +64,6 @@ def main():
         '__file__': '<notebook_script>',  # Special marker for get_source()
         'streamlit': st,
         'st': st,
-        'get_notebook': get_notebook,
-        'render_notebook': render_notebook,
     })
     try:
         # Compile with special filename

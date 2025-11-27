@@ -2,12 +2,12 @@
 # Original notebook: interactive_plot_demo
 # This file can be run directly with: streamlit run <filename>
 
-from streamlit_notebook import get_notebook, render_notebook
+from streamlit_notebook import notebook
 import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = get_notebook(title='interactive_plot_demo')
+nb = notebook(title='interactive_plot_demo')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
@@ -34,6 +34,4 @@ def cell_3():
     st.pyplot(plt.gcf());
 
 # Render the notebook
-# Using render_notebook() instead of nb.render() allows the notebook
-# to be replaced dynamically (e.g., when loading a different file)
-render_notebook()
+nb.render()
