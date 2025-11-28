@@ -41,188 +41,22 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, Literal
 import streamlit as st
 from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
-from .utils import format, short_id, rerun
+from .utils import format, short_id, rerun, display
 from .cell_ui import CellUI, Code
+from .cell_types import CellType, PyType, MDType, HTMLType
 
 if TYPE_CHECKING:
     from .notebook import Notebook
 
 state = st.session_state
 
-def display(obj: Any) -> None:
-    """Display an object using Streamlit's rendering system.
-
-    Attempts to display the object using ``st.write``, falling back to
-    ``st.text(repr(obj))`` if that fails. Used internally for displaying
-    cell execution results.
-
-    Args:
-        obj: The object to display. If None, nothing is displayed.
-
-    Note:
-        This is the default display hook for cells. Custom display behavior
-        can be implemented via the notebook's display_hook.
-
-    Examples:
-        Typical usage in shell execution::
-
-            result = 42
-            display(result)  # Shows "42" in the UI
-
-    See Also:
-        :meth:`~streamlit_notebook.notebook.Notebook.display_hook`: Custom display
-    """
-    if obj is not None:
-        try: 
-            st.write(obj)
-        except:
-            st.text(repr(obj))
-
-class CellType:
-
-    def __init__(self,cell):
-        self.cell:Cell=cell
-        self.has_fragment_toggle=True
-        self.has_reactive_toggle=True
-        self.language='python'
-
-    def is_reactive(self):
-        return self.cell._reactive
-    
-    def is_fragment(self):
-        return self.cell._fragment
-
-    def exec(self):
-        """
-        Executes the code returned by self.get_exec_code()
-        """
-        with self.cell:
-            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
-        self.cell.set_output(response)  
-
-
-    def get_exec_code(self):
-        return self.cell.code
-    
-class PyType(CellType):
-
-    def __init__(self,cell):
-        super().__init__(cell)
-        self.language='python'
-
-    def get_exec_code(self):
-        return self.cell.code
-    
-    def exec(self):
-        """
-        Executes the cell code.
-
-        This method chooses between normal execution and fragment execution
-        based on the cell's fragment attribute.
-        """
-        if self.cell.fragment:
-            self._exec_as_fragment()
-        else:
-            self._exec_normally()
-
-
-    @st.fragment
-    def _exec_as_fragment(self):
-        """
-        Executes the cell as a Streamlit fragment.
-
-        This method is decorated with @st.fragment and executes
-        the cell's code within a Streamlit fragment context.
-        """
-        with self.cell:
-            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
-        self.cell.set_output(response) 
-
-    def _exec_normally(self):
-        """
-        Executes the cell normally.
-
-        This method runs the cell's code in the normal execution context.
-        """
-        with self.cell:
-            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
-        self.cell.set_output(response) 
-
-class MDType(CellType):
-    
-    def __init__(self,cell):
-        super().__init__(cell)
-        self.language='markdown'
-        self.has_fragment_toggle=False
-        self.has_reactive_toggle=False
-
-    def is_reactive(self):
-        return True
-    
-    def is_fragment(self):
-        return False
-    
-    def get_exec_code(self):
-        """
-        Formats the Markdown code and converts it to a st.markdown call.
-
-        Returns:
-            str: A string containing a st.markdown() call with the formatted Markdown content.
-
-        This method processes the cell's content, formats any variables,
-        and wraps it in a Streamlit markdown function call.
-        """
-        formatted_code=format(self.cell.code,**self.cell.notebook.shell.namespace).replace("'''","\'\'\'")
-        code=f"st.markdown(r'''{formatted_code}''');"
-        return code 
-
-class HTMLType(CellType):
-    
-    def __init__(self,cell):
-        super().__init__(cell)
-        self.language='markdown'
-        self.has_fragment_toggle=False
-        self.has_reactive_toggle=False
-
-    def is_reactive(self):
-        return True
-    
-    def is_fragment(self):
-        return False
-    
-    def get_exec_code(self):
-        """
-        Formats the HTML code and converts it to a st.html call.
-
-        Returns:
-            str: A string containing a st.html() call with the formatted HTML content.
-
-        This method processes the cell's content, formats any variables,
-        and wraps it in a Streamlit html function call.
-        """
-        formatted_code=format(self.cell.code,**self.cell.notebook.shell.namespace).replace("'''","\'\'\'")
-        code=f"st.html(r'''{formatted_code}''');"
-        return code 
-
-_supported_types=dict(
-    code=PyType,
-    markdown=MDType,
-    html=HTMLType
-)
-
-def _type_to_class(type:str)-> CellType:
-    if type in _supported_types:
-        return _supported_types[type]
-    else:
-        raise ValueError(f"Unknown cell type: {type}")
-
 class Cell:
 
     """
-    The base class for all types of cells in the notebook.
+    Class implementing a notebook's cell.
 
     This class provides the core functionality for cells, including
-    code storage, execution, and UI management.
+    type management, code storage, execution, and UI management.
 
     Attributes:
         notebook (Notebook): The parent Notebook object.
@@ -246,6 +80,20 @@ class Cell:
         delete(): Removes the cell from the notebook.
         to_dict(): Returns a dictionary representation of the cell.
     """
+
+    _supported_types=dict(
+        code=PyType,
+        markdown=MDType,
+        html=HTMLType
+    )
+
+    @classmethod
+    def _type_to_class(cls,type:str)-> CellType:
+        if type in cls._supported_types:
+            return cls._supported_types[type]
+        else:
+            raise ValueError(f"Unknown cell type: {type}")
+
     def __init__(
         self,
         notebook: Notebook,
@@ -261,7 +109,7 @@ class Cell:
         self.output_area: Any = None
         self.stdout_area: Any = None
         self.stderr_area: Any = None
-        self.visible = True
+        self.visible:bool = True
         self.stdout: Optional[str] = None
         self.stderr: Optional[str] = None
         self.results: list[Any] = []
@@ -275,19 +123,50 @@ class Cell:
         self._reactive = reactive
         self._type: Optional[Literal['code', 'markdown', 'html']] = type
         self._fragment = fragment
+        self.__type_object: Optional[CellType] = None
         self.prepare_ui()
+
+    #Properties
 
     @property
     def _type_object(self) -> CellType:
-        return _type_to_class(self.type)(self)
+        if self.__type_object is None or self.__type_object.type != self.type:
+           self.__type_object = self._type_to_class(self.type)(self)
+        return self.__type_object
+    
+    @_type_object.setter
+    def _type_object(self, value: Any) -> None:
+        raise AttributeError("Cannot set _type_object directly. Updating type is probably what you want to do.")
 
     @property
     def language(self) -> str:
         return self._type_object.language
+    
+    @language.setter
+    def language(self, value: str) -> None:
+        raise AttributeError(f"Cannot set language directly. Use type instead.")
+
+    @property
+    def rank(self):
+        """
+        Gets the current rank of the cell in the cells list.
+
+        Returns:
+            int: The index of the cell in the notebook's cell list.
+        """
+        return self.notebook.cells.index(self)
+    
+    @rank.setter
+    def rank(self,value:int):
+        self._rerank(rank=value)
 
     @property
     def id(self) -> str:
         return f"Cell[{self.rank}]({self.key})"
+    
+    @id.setter
+    def id(self, value: str) -> None:
+        raise AttributeError("Cannot set id directly.")
 
     @property
     def type(self):
@@ -319,7 +198,7 @@ class Cell:
         if current_value == value:
             return
         self._code.from_backend(value)
-        self.ui_key = short_id()
+        self.ui_key = short_id() # Force rerender of the ui
         self.reset()
         rerun()
 
@@ -332,10 +211,18 @@ class Cell:
             bool: True if the cell has been run once with the current code, False otherwise.
         """
         return self.last_code is not None and self.last_code == self.code
+    
+    @has_run_once.setter
+    def has_run_once(self, value: Any) -> None:
+        raise AttributeError("has_run_once is a read-only property")
 
     @property
     def has_reactive_toggle(self):
         return self._type_object.has_reactive_toggle
+
+    @has_reactive_toggle.setter
+    def has_reactive_toggle(self, value: Any) -> None:
+        raise AttributeError("has_reactive_toggle is a read-only property")
 
     @property
     def reactive(self) -> bool:
@@ -355,6 +242,10 @@ class Cell:
     @property
     def has_fragment_toggle(self):
         return self._type_object.has_fragment_toggle
+    
+    @has_fragment_toggle.setter
+    def has_frament_toggle(self, value: Any) -> None:
+        raise AttributeError("has_fragment_toggle is a read-only property")
 
     @property
     def fragment(self) -> bool:
@@ -370,6 +261,8 @@ class Cell:
             if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Fragment' in self.ui.buttons:
                 self.ui.buttons['Fragment'].toggled = value
                 rerun()
+
+    # Context manager methods
 
     def __enter__(self) -> Cell:
         """
@@ -400,13 +293,14 @@ class Cell:
         """
         self.notebook.current_cell = self.saved_cell
 
+    # UI methods
 
     def prepare_ui(self):
         """
         Initializes the CellUI object and sets up the cell's user interface components.
         """
         self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{self.ui_key}",response_mode="blur")
-        self.ui.submit_callback=self.submit_callback
+        self.ui.submit_callback=self._submit_callback
         self.ui.buttons["Reactive"].callback=self._toggle_reactive
         self.ui.buttons["Reactive"].toggled=self.reactive
         self.ui.buttons["Fragment"].callback=self._toggle_fragment
@@ -414,14 +308,13 @@ class Cell:
         self.ui.buttons["Up"].callback=self.move_up
         self.ui.buttons["Down"].callback=self.move_down
         self.ui.buttons["Close"].callback=self.delete
-        self.ui.buttons["Run"].callback=self.run_callback
+        self.ui.buttons["Run"].callback=self._run_callback
         self.ui.buttons["InsertAbove"].callback=self.insert_above
         self.ui.buttons["InsertBelow"].callback=self.insert_below
         self.ui.buttons["TypeCode"].callback=lambda: self._set_type("code")
         self.ui.buttons["TypeMarkdown"].callback=lambda: self._set_type("markdown")
         self.ui.buttons["TypeHTML"].callback=lambda: self._set_type("html")
         
-
     def update_ui(self):
         """
         Updates the cell's UI components based on the current cell state.
@@ -478,62 +371,6 @@ class Cell:
             self.run()
 
         self.show_output()
-        
-    def submit_callback(self):
-        """
-        Callback used to deal with the "submit" event from the UI.
-
-        Runs the cell only if notebook.run_on_submit is true.
-        """
-        if self.notebook.run_on_submit:
-            self.has_run=False
-            self.run()
-            self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
-
-    def run_callback(self):
-        """
-        Callback used to deal with the "run" event from the ui.
-
-        Resets run_state to None and runs the cell.
-        """
-        self.has_run=False
-        self.run()
-        self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
-
-    def run(self):
-        """
-        Runs the cell's code.
-
-        This method executes the cell's content, captures the output,
-        and updates the cell's state accordingly.
-        """
-        if not self.has_run and self.code:
-            self.last_code=self.code
-            self.results=[]
-            self.has_run=True
-            if self.ready:
-                # The cell skeleton is on screen and can receive outputs
-                self.initialize_output_area()
-                with self.output:
-                    self.exec()
-            else:
-                # The cell skeleton isn't on screen yet
-                # The code runs anyway, but the outputs will be shown after a refresh
-                self.exec()
-                rerun()   
-
-    def set_output(self,response):
-        """
-        Assigns relevant fields of the shell response to the cell.
-
-        Args:
-            response (ShellResponse): The response object from code execution.
-
-        This method updates the cell's stdout, stderr, and exception attributes.
-        """
-        self.stdout=response.stdout
-        self.stderr=response.stderr
-        self.exception=response.exception
 
     def show_output(self):
         """
@@ -558,48 +395,86 @@ class Cell:
                 formatted_traceback=f"**{type(self.exception).__name__}**: {str(self.exception)}\n```\n{self.exception.enriched_traceback_string}\n```"
                 st.error(formatted_traceback)
 
-    @property
-    def rank(self):
+    # Excution workflow 
+
+    def run(self):
         """
-        Gets the current rank of the cell in the cells list.
+        Runs the cell's code.
+
+        This method executes the cell's content, captures the output,
+        and updates the cell's state accordingly.
+        """
+        if not self.has_run and self.code:
+            self.last_code=self.code
+            self.results=[]
+            self.has_run=True
+            if self.ready:
+                # The cell skeleton is on screen and can receive outputs
+                self.initialize_output_area()
+                with self.output:
+                    self._exec()
+            else:
+                # The cell skeleton isn't on screen yet
+                # The code runs anyway, but the outputs will be shown after a refresh
+                self._exec()
+                rerun()   
+
+    def _exec(self):
+        """
+        Execute the cell's code in the shell and handle the response.
+
+        This method delegates the execution workflow to the underlying type object.
+        """
+        return self._type_object.exec()
+
+    def _get_exec_code(self):
+        """
+        Get the code to execute.
 
         Returns:
-            int: The index of the cell in the notebook's cell list.
+            str: The code to be executed.
+
+        Note:
+            This method delegates to the type object to provide
+            type-specific code preparation.
         """
-        return self.notebook.cells.index(self)
-    
-    def rerank(self,rank):
+        return self._type_object.get_exec_code()  
+
+    def _set_output(self,response):
         """
-        Moves the cell to a new rank.
+        Assigns relevant fields of the shell response to the cell.
 
         Args:
-            rank (int): The new rank (position) for the cell in the notebook.
-        """
-        if 0<=rank<len(self.notebook.cells) and not rank==self.rank:
-            # Remove from current position
-            self.notebook.cells.remove(self)
-            # Insert at new position
-            self.notebook.cells.insert(rank, self)
-            self.notebook.notify(f"Moved {self.id} to position {rank}", icon="↕️")
-            rerun()
+            response (ShellResponse): The response object from code execution.
 
-    def move_up(self):
+        This method updates the cell's stdout, stderr, and exception attributes.
         """
-        Moves the cell up in the notebook.
+        self.stdout=response.stdout
+        self.stderr=response.stderr
+        self.exception=response.exception
 
-        This method changes the cell's position, moving it one place earlier in the execution order.
-        """
-        self.rerank(self.rank-1)
+    # Private Callbacks 
         
-
-    def move_down(self):
+    def _submit_callback(self):
         """
-        Moves the cell down in the notebook.
+        Callback used to deal with the "submit" event from the UI.
 
-        This method changes the cell's position, moving it one place later in the execution order.
+        Runs the cell only if notebook.run_on_submit is true.
         """
-        self.rerank(self.rank+1)
+        if self.notebook.run_on_submit:
+            self.has_run=False
+            self.run()
+            self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
+    def _run_callback(self):
+        """
+        Callback used to deal with the "run" event from the ui.
+
+        Resets run_state to None and runs the cell.
+        """
+        self.has_run=False
+        self.run()
+        self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def _toggle_reactive(self):
         """Toggles the 'Auto-Rerun' feature for the cell (internal)."""
@@ -619,13 +494,46 @@ class Cell:
         if new_type == self.type:
             return  # Already this type, nothing to do
         
-        if new_type in ("code","markdown", "html"):
+        if new_type in Cell._supported_types:
             self._type = new_type
         else:
             raise ValueError(f"Invalid cell type: {new_type}. Must be 'code', 'markdown', or 'html'")
 
         self.notebook.notify(f"Changed cell {self.key} to {new_type}", icon="🔄")
         rerun()
+
+    def _rerank(self,rank:int):
+        """
+        Moves the cell to a new rank.
+
+        Args:
+            rank (int): The new rank (position) for the cell in the notebook.
+        """
+        if 0<=rank<len(self.notebook.cells) and not rank==self.rank:
+            # Remove from current position
+            self.notebook.cells.remove(self)
+            # Insert at new position
+            self.notebook.cells.insert(rank, self)
+            self.notebook.notify(f"Moved {self.id} to position {rank}", icon="↕️")
+            rerun()
+
+    # Public methods
+
+    def move_up(self):
+        """
+        Moves the cell up in the notebook.
+
+        This method changes the cell's position, moving it one place earlier in the execution order.
+        """
+        self._rerank(self.rank-1)
+        
+    def move_down(self):
+        """
+        Moves the cell down in the notebook.
+
+        This method changes the cell's position, moving it one place later in the execution order.
+        """
+        self._rerank(self.rank+1)
 
     def insert_above(self):
         """
@@ -659,6 +567,10 @@ class Cell:
             rerun()
 
     def reset(self):
+        """
+        Resets the cell's state, clearing outputs and execution history.
+        This method is called when we need to clear all previous results and run states like we start with a fresh cell.
+        """
         self.initialize_output_area()
         self.has_run=False
         self.last_code=None
@@ -666,46 +578,99 @@ class Cell:
         self.stdout=None
         self.stderr=None
         self.exception=None
-    
-    def to_dict(self):
+
+    # Serialization methods
+
+    def to_dict(self, minimal: bool = True):
         """
-        Returns a minimal dict representation of the cell.
+        Returns a dictionary representation of the cell.
+
+        Args:
+            minimal: If True (default), returns only the minimal data needed
+                to recreate the cell (for saving notebooks). If False, includes
+                all execution outputs, metadata, and runtime state useful for
+                AI agents or state inspection.
 
         Returns:
-            dict: A dictionary containing the essential attributes of the cell.
+            dict: A dictionary containing the cell's attributes. When
+                ``minimal=False``, includes complete execution state, outputs,
+                and runtime metadata.
 
-        This method is used for serialization of the cell, containing only
-        what is necessary to recreate it.
+        Examples:
+            Minimal serialization (for saving notebooks)::
+
+                cell_data = cell.to_dict()  # minimal=True by default
+                # {'key': 'abc123', 'type': 'code', 'code': '...',
+                #  'reactive': False, 'fragment': False}
+
+            Full serialization (for AI agent context)::
+
+                cell_state = cell.to_dict(minimal=False)
+                # Includes: id, rank, language, has_run_once, visible, stdout,
+                # stderr, results (as repr strings), exception info
+
+        Note:
+            Results are converted to their string representations (via ``repr()``)
+            to ensure JSON serializability. Exception tracebacks are included
+            as formatted strings when ``minimal=False``.
         """
-        d=dict(
+        # Basic cell definition (always included)
+        d = dict(
             key=self.key,
             type=self.type,
             code=self.code,
             reactive=self.reactive,
             fragment=self.fragment
         )
+
+        # Add execution outputs and metadata if full state requested
+        if not minimal:
+            d.update(
+                id=self.id,
+                rank=self.rank,
+                language=self.language,
+                has_run_once=self.has_run_once,
+                visible=self.visible,
+                stdout=self.stdout,
+                stderr=self.stderr,
+                # Convert results to string representations for serializability
+                results=[repr(r) for r in self.results] if self.results else [],
+                # Include exception details if present
+                exception=dict(
+                    type=type(self.exception).__name__,
+                    message=str(self.exception),
+                    traceback=getattr(self.exception, 'enriched_traceback_string', str(self.exception))
+                ) if self.exception else None
+            )
+
         return d
     
-    # type dependent methods 
-
-    def exec(self):
-        return self._type_object.exec()
-
-
-    def get_exec_code(self):
+    @classmethod
+    def from_dict(cls, d):
         """
-        Get the code to execute.
+        Creates a cell from a dictionary representation.
+
+        Args:
+           d (dict): A dictionary containing the cell's attributes.
 
         Returns:
-            str: The code to be executed.
-
-        Note:
-            This method is overridden in subclasses to provide
-            type-specific code preparation.
+           Cell: A new Cell object created from the dictionary.
         """
-        return self._type_object.get_exec_code()  
-          
-
+        # Get the current notebook instance from state
+        notebook: Notebook = st.session_state.get("notebook", None)
+        if notebook is None:
+            raise ValueError("No notebook instance found in session state.")
+        
+        # Create a new cell with the dictionary values
+        cell = cls(
+            notebook, 
+            d.get("key",notebook._gen_cell_key()), 
+            d.get("type", "code"),
+            d.get("code", ""),
+            d.get("reactive", False),
+            d.get("fragment", False)
+        )
+        return cell
 
 def new_cell(notebook,key,type="code",code="",reactive=False,fragment=False):
     """
@@ -727,6 +692,6 @@ def new_cell(notebook,key,type="code",code="",reactive=False,fragment=False):
     Raises:
         NotImplementedError: If an unsupported cell type is specified.
     """
-    if not type in ("code","markdown","html"):
+    if not type in Cell._supported_types:
         raise NotImplementedError(f"Cell type {type} not implemented")
     return Cell(notebook,key,type=type,code=code,reactive=reactive,fragment=fragment)

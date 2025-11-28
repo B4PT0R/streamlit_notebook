@@ -422,3 +422,32 @@ def format(string: str, **kwargs: Any) -> str:
         except Exception as e:
             return '<<' + expr + '>>'
     return re.sub(r'<<(.*?)>>', replace_expr, string)
+
+def display(obj: Any) -> None:
+    """Display an object using Streamlit's rendering system.
+
+    Attempts to display the object using ``st.write``, falling back to
+    ``st.text(repr(obj))`` if that fails. Used internally for displaying
+    cell execution results.
+
+    Args:
+        obj: The object to display. If None, nothing is displayed.
+
+    Note:
+        This is the default display hook for cells. Custom display behavior
+        can be implemented via the notebook's display_hook.
+
+    Examples:
+        Typical usage in shell execution::
+
+            result = 42
+            display(result)  # Shows "42" in the UI
+
+    See Also:
+        :meth:`~streamlit_notebook.notebook.Notebook.display_hook`: Custom display
+    """
+    if obj is not None:
+        try:
+            st.write(obj)
+        except:
+            st.text(repr(obj))

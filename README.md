@@ -8,7 +8,7 @@ Streamlit Notebook combines the interactive development experience of Jupyter no
 
 We all know Jupyter as the go-to for interactive programming, but it comes with its own limitations:
 - JSON format notebooks
-- converting notebooks to deployable apps means rewriting everything. 
+- converting notebooks to deployable apps isn't straightforward. 
 - limited UI widget ecosystem, 
 - limited UI/namespace reactivity
 - limited dynamic creation of widgets
@@ -203,7 +203,7 @@ nb.render()
 Once you're done working on your notebook you may run it using:
 
 ```bash
-streamlit run sales_dashboard.py --app
+streamlit run stock_dashboard.py --app
 ```
 Now the same file runs as a locked production app with restricted interface and no visible/editable code.
 This prevents untrusted users to run arbitrary code in the cloud environment.
@@ -213,7 +213,7 @@ The dedicated environment variable does the same as the flag:
 
 ```bash
 export ST_NOTEBOOK_APP_MODE=true # or use a .env file
-streamlit run sales_dashboard.py
+streamlit run stock_dashboard.py
 ```
 
 Useful when you can't modify the command directly (e.g., in Streamlit cloud platform).
@@ -224,7 +224,7 @@ Useful when you can't modify the command directly (e.g., in Streamlit cloud plat
 
 **Notebook Mode** (development):
 - Code editor for each cell
-- Cell management (create, delete, change type, reorder)
+- Cell management (create, delete, insert, change type, reorder)
 - Execution controls (Run Next, Run All, Restart Session, Clear All Cells)
 - Save/Open notebooks
 - Demo notebooks library
@@ -233,9 +233,19 @@ Useful when you can't modify the command directly (e.g., in Streamlit cloud plat
 - Restricted interface
 - Code editors hidden
 - Interactive widgets remain functional
-- Clean Streamlit appearance
+- Clean Streamlit app appearance
 
 In development, you may toggle between modes with the sidebar switch, or run with enforced app mode to prevent users toggling back to notebook mode.
+
+### File Management
+
+**Save/Load from UI:**
+- **Save** button: saves notebook to `./notebook_title.py`
+- **Open** button: dropdown of all `.py` notebooks in current directory, or drag/drop/browse files
+- **Demo notebooks**: load pre-built example notebooks from the library
+
+**Save/Load from code:**
+See the Programmatic API section for file operations via code cells.
 
 ### Rich Content
 
@@ -253,6 +263,8 @@ Configurable in the sidebar settings.
 You may also :
 - add a trailing `;` at the end of a line to bypass automatic display
 - use the `display` function to selectively display a given result
+
+*Tip*: Use `display` instead of `st.write` to pretty print results in one-shot cells. They basically do the same, but the difference is that `display` is designed to store the reference to the object, allowing the notebook to redraw it on screen after every rerun without having to rerun the cell.  
 
 **Markdown/HTML cells** 
 
@@ -277,13 +289,14 @@ Let's demonstrate this by defining a new magic to integrate a basic AI assistant
 #system command to install the openai package
 !pip install openai
 
+from openai import OpenAI
+
 #simple agent class
 class Agent:
     
     def __init__(self):
-        from openai import OpenAI
         self.messages=[]
-        self.client=OpenAI() #we use the OPENAI_API_KEY provided as env variable
+        self.client=OpenAI() #will use the OPENAI_API_KEY provided as env variable if any
 
     def add_message(self,**kwargs):
         self.messages.append(kwargs)
@@ -353,40 +366,300 @@ Note: A variable that's changed by a fragment is immediately updated in the name
 
 ### Programmatic API
 
-The notebook object is exposed in the shell's namespace as `__notebook__` and can be controled programmaticaly from code cells — useful for automation or AI agents:
+The notebook instance is exposed in the shell's namespace as `__notebook__`, enabling full programmatic control from code cells. This is especially powerful for automation, AI agents, and dynamic notebook generation.
+
+#### Accessing the Notebook
 
 ```python
-# get the notebook instance
-nb=__notebook__
+# From any code cell
+nb = __notebook__
 
-# Create cells programmatically
+# Access notebook properties
+print(f"Title: {nb.title}")
+print(f"Number of cells: {len(nb.cells)}")
+print(f"App mode: {nb.app_mode}")
+```
+
+#### Creating Cells
+
+```python
+# Create a new code cell
 cell = nb.new_cell(
     type="code",
-    code="st.line_chart([1,2,3])",
-    reactive=True
+    code="import pandas as pd\ndf = pd.DataFrame({'x': [1,2,3]})",
+    reactive=False,
+    fragment=False
 )
+
+# Create a markdown cell
+md_cell = nb.new_cell(
+    type="markdown",
+    code="# Results\nThe data has <<len(df)>> rows."
+)
+
+# Create an HTML cell
+html_cell = nb.new_cell(
+    type="html",
+    code="<div style='color: red;'><<result>></div>"
+)
+```
+
+#### Modifying Cells
+
+```python
+# Access cells by index or key
+first_cell = nb.cells[0]
+specific_cell = nb.get_cell("my_cell_key")
+
+# Modify cell code (automatically updates UI)
+first_cell.code = "import numpy as np\nprint('Updated!')"
+
+# Change cell type
+first_cell.type = "markdown"  # "code", "markdown", or "html"
+
+# Toggle cell options
+first_cell.reactive = True
+first_cell.fragment = True
+
+# Get cell properties
+print(f"Cell ID: {first_cell.id}")
+print(f"Cell rank: {first_cell.rank}")
+print(f"Cell type: {first_cell.type}")
+print(f"Has run: {first_cell.has_run_once}")
+```
+
+#### Running Cells
+
+```python
+# Run a specific cell
 cell.run()
 
-# Edit existing cells
-nb.cells[0].code = "import pandas as pd"
-nb.cells[0].run()
+# Run all cells in order
+nb.run_all_cells()
+
+# Run the next unexecuted cell
+nb.run_next_cell()
 ```
 
-Not really possible in Jupyter or very hacky!
+#### Managing Cell Order
 
-### File Operations
-
-**From the interface:**
-- **Save** button: saves to `./notebook_title.py`
-- **Open** button: dropdown of all `.py` notebooks in current directory or drag/drop/browse
-- **Demo notebooks**: load pre-built examples
-
-**From code:**
 ```python
-__notebook__.save()
-__notebook__.save("my_notebook.py")
-__notebook__.open("my_notebook.py")
+# Move cells up/down
+first_cell.move_down()
+last_cell.move_up()
+
+# Change cell position directly
+cell.rank = 2  # Move to position 2
+
+# Insert new cells relative to existing ones
+cell.insert_above()  # Inserts a new cell above this one
+cell.insert_below()  # Inserts a new cell below this one
 ```
+
+#### Deleting Cells
+
+```python
+# Delete a specific cell
+cell.delete()
+
+# Delete by key
+nb.delete_cell("cell_key")
+
+# Clear all cells
+nb.clear_cells()
+
+# Reset a cell (clear outputs and execution state)
+cell.reset()
+```
+
+#### Session Management
+
+```python
+# Restart the Python session (clears namespace)
+nb.restart_session()
+
+# Control reruns with delays
+nb.rerun(delay=1.5)  # Requires a rerun once the current execution is complete, with a minimal 1.5s delay from the calling point
+nb.rerun(no_wait=True)  # Immediate rerun (when possible)
+
+# Request delay without triggering rerun
+nb.wait(2.0)  # Ensures any future rerun waits 2 seconds
+```
+
+#### File Operations
+
+```python
+# Save notebook to file
+nb.save()  # Saves to default location (./notebook_title.py)
+nb.save("custom_name.py")  # Save with custom filename
+
+# Open/load a notebook
+nb.open("my_notebook.py")
+
+# Check if a file is a valid notebook
+if nb.is_valid_notebook(source_code):
+    nb.open(source_code)
+```
+
+#### Notifications
+
+```python
+# Show toast notifications with guaranteed visibility
+nb.notify("Cell executed successfully!", icon="✅")
+nb.notify("Error occurred", icon="⚠️", delay=2.0)
+```
+
+#### Converting to Python Code
+
+```python
+# Get the complete Python code representation
+python_code = nb.to_python()
+print(python_code)  # Shows the @nb.cell decorated version
+```
+
+#### Inspecting Notebook State
+
+Get complete information about cells and their execution state:
+
+```python
+# Get full state of all cells (includes outputs and metadata)
+state = nb.get_cells_state()  # minimal=False by default
+
+for cell_state in state:
+    print(f"Cell {cell_state['id']} ({cell_state['type']}):")
+    print(f"  Has run: {cell_state['has_run_once']}")
+    print(f"  Code length: {len(cell_state['code'])} chars")
+
+    if cell_state.get('stdout'):
+        print(f"  Stdout: {cell_state['stdout'][:50]}...")
+
+    if cell_state.get('exception'):
+        print(f"  Error: {cell_state['exception']['message']}")
+
+# Get individual cell with full state
+cell = nb.cells[0]
+full_state = cell.to_dict(minimal=False)
+# Includes: id, rank, language, has_run_once, visible, stdout,
+# stderr, results, exception
+
+# Get minimal cell definition (for saving)
+minimal_state = cell.to_dict()  # minimal=True by default
+# Only: key, type, code, reactive, fragment
+```
+
+#### Complete Example: AI Agent Integration
+
+```python
+# Cell 1: Setup AI agent with context awareness
+from openai import OpenAI
+import json
+
+class NotebookAgent:
+    def __init__(self, notebook):
+        self.nb = notebook
+        self.client = OpenAI()
+
+    def get_context(self):
+        """Build context from notebook state for the AI"""
+        state = self.nb.get_cells_state()  # Get full state (minimal=False)
+
+        context = f"Notebook: {self.nb.title}\n"
+        context += f"Total cells: {len(state)}\n\n"
+
+        for cell in state:
+            context += f"Cell {cell['rank']} ({cell['type']}):\n"
+            context += f"Code:\n{cell['code']}\n"
+
+            if cell['has_run_once']:
+                if cell.get('stdout'):
+                    context += f"Output: {cell['stdout']}\n"
+                if cell.get('exception'):
+                    context += f"Error: {cell['exception']['message']}\n"
+
+            context += "\n"
+
+        return context
+
+    def create_new_cell(self, prompt):
+        # Get current notebook state as context
+        context = self.get_context()
+
+        # Ask AI to generate code with full context
+        response = self.client.chat.completions.create(
+            model="gpt-4.1",
+            messages=[
+                {"role": "system", "content": "You are a Streamlit notebook AI assistant. Your task is to produce new Streamlit code cells matching the user's request. Output only valid python code (use comments to verbalize explanations). Modules and data loaded in previous cells don't need to be redefined in next cells (shared namespace)."},
+                {"role":"system", "content":f"Current notebook state:\n{context}"}
+                {"role": "user", "content": prompt}
+            ]
+        )
+        code = response.choices[0].message.content
+
+        # Create and run the cell
+        cell = self.nb.new_cell(type="code", code=code, reactive=True)
+        cell.run()
+
+        return cell
+
+agent = NotebookAgent(__notebook__)
+
+@magic
+def ai(prompt):
+    agent.create_new_cell(prompt)
+
+# Cell 2: Use the agent with context awareness
+%ai Please create a dashboard to let me analyze the iris dataset using seaborn
+```
+
+A real life implementation would obviously be much more sophisticated, involving agentic tools and so on, but you get the basic idea. 
+
+This level of programmatic control is quite unique to streamlit-notebook and enables workflows not easily achievable in Jupyter or traditional notebooks.
+
+#### API Reference
+
+**Notebook Methods:**
+- `new_cell(type, code, reactive, fragment)` - Create a new cell
+- `get_cell(rank_or_key)` - Get cell by position or key
+- `get_cells_state(minimal)` - Get state of all cells as list of dicts (default: full state)
+- `delete_cell(key)` - Remove a cell by key
+- `clear_cells()` - Remove all cells
+- `run_all_cells()` - Execute all cells in order
+- `run_next_cell()` - Execute the next unexecuted cell
+- `restart_session()` - Clear namespace and restart Python session
+- `rerun(delay, no_wait)` - Trigger a Streamlit rerun
+- `wait(delay)` - Request delay before next rerun
+- `notify(message, icon, delay)` - Show toast notification
+- `save(filepath)` - Save notebook to file
+- `open(source)` - Load notebook from file or source code
+- `to_python()` - Get Python code representation
+- `is_valid_notebook(source)` - Check if source is valid notebook
+
+**Cell Methods:**
+- `run()` - Execute the cell
+- `reset()` - Clear outputs and execution state
+- `move_up()` - Move cell up one position
+- `move_down()` - Move cell down one position
+- `insert_above()` - Insert new cell above
+- `insert_below()` - Insert new cell below
+- `delete()` - Remove this cell
+- `to_dict(minimal)` - Get dictionary representation (default: minimal, set minimal=False for full state)
+
+**Cell Properties:**
+- `code` (read/write) - Cell code content
+- `type` (read/write) - Cell type: "code", "markdown", or "html"
+- `reactive` (read/write) - Auto-rerun on UI changes
+- `fragment` (read/write) - Run as Streamlit fragment
+- `id` (read-only) - Unique cell identifier
+- `rank` (read/write) - Cell position in notebook
+- `language` (read-only) - Cell language ("python" or "markdown")
+- `has_run_once` (read-only) - Whether cell has executed with current code
+
+**Notebook Properties:**
+- `cells` (list) - All cells in the notebook
+- `title` (str) - Notebook title
+- `app_mode` (bool) - Whether in locked app mode
+- `shell` - Python shell instance
+- `current_cell` - Currently executing cell
 
 ## Deployment
 
@@ -470,13 +743,13 @@ Deploy to AWS ECS, Google Cloud Run, Azure Container Apps, or any container plat
 ✅ **Do:**
 - Use one shot cells for expensive operations
 - Test with `--app` flag locally first
-- Add `--app` flag to deployment command or set environment variables
-- Include all dependencies in `requirements.txt`
+- Setup a `.env` file with `ST_NOTEBOOK_APP_MODE=true` to ensure locked app mode once deployed.
+- Include `streamlit-notebook` and all external dependencies in `requirements.txt`
 - Use `st.secrets` for secrets (API keys, database credentials, etc.)
 
 ❌ **Don't:**
 - Allow code editing in production deployments (the user could read `st.secrets` or run malicious scripts)
-- Hardcode API keys or credentials.
+- Hardcode API keys or credentials in any file exposed in the public repo.
 - Assume filesystem persistence. Changes you make to the files will be discarded when the container reboots. (use databases/cloud storage instead)
 
 ### Multi-Notebook Deployments
@@ -505,7 +778,7 @@ This is perfect for demos, dashboards, or sharing multiple analyses with stakeho
 
 ## Use Cases
 
-**Data Exploration → Dashboard:** Build analysis interactively, deploy as stakeholder dashboard.
+**Data Exploration → Dashboard:** Build analysis interactively, deploy as dashboard.
 
 **Prototyping → Production:** Develop proof-of-concept in notebook mode, deploy as locked app without rewriting.
 

@@ -43,9 +43,9 @@ See Also:
 
 from __future__ import annotations
 
-from .cell import Cell, display, new_cell
+from .cell import Cell, new_cell
 from .echo import echo
-from .utils import format, rerun, check_rerun, root_join, state, wait
+from .utils import display, format, rerun, check_rerun, root_join, state, wait
 from .shell import Shell
 import streamlit as st
 import os
@@ -145,7 +145,7 @@ class Notebook:
 
         Note:
             The constructor automatically:
-                - Patches ``st.echo`` to work with notebook context
+                - Patches ``st.echo``, ``st.rerun`` and ``st.stop`` to work within the notebook context
                 - Creates a :class:`~streamlit_notebook.shell.Shell` instance
                 - Initializes the execution namespace with ``st`` and ``__notebook__``
 
@@ -218,32 +218,37 @@ class Notebook:
         # Patch st.echo to fit the notebook environment
         st.echo = echo(self._get_current_code).__call__
 
-        # Patch st.rerun to use our custom rerun with a warning
-        def patched_rerun():
-            """Patched st.rerun that warns users to use the notebook's rerun method."""
-            import warnings
-            warnings.warn(
-                "Using st.rerun() directly may disrupt the notebook's rerun strategy. "
-                "Consider using __notebook__.rerun() or importing from streamlit_notebook: "
-                "from streamlit_notebook import rerun",
-                UserWarning,
-                stacklevel=2
-            )
-            # Use our custom rerun instead
-            from .utils import rerun as utils_rerun
-            utils_rerun()
+        if not hasattr(st.rerun,'_patched'):
+            # Patch st.rerun to use our custom rerun with a warning
+            def patched_rerun():
+                """Patched st.rerun that warns users to use the notebook's rerun method."""
+                import warnings
+                warnings.warn(
+                    "Using st.rerun() directly may disrupt the notebook's rerun strategy."
+                    "Consider using __notebook__.rerun() or importing it from streamlit_notebook: "
+                    "from streamlit_notebook import rerun",
+                    UserWarning,
+                    stacklevel=2
+                )
+                # Use our custom rerun instead
+                rerun()
+            
+            patched_rerun._patched=True
 
-        st.rerun = patched_rerun
+            st.rerun = patched_rerun
 
-        # Patch st.stop to raise an exception that the shell can catch
-        def patched_stop():
-            """Patched st.stop that raises RuntimeError to stop cell execution."""
-            raise RuntimeError(
-                "st.stop() is not supported in notebook mode. "
-                "Cell execution has been stopped."
-            )
+        if not hasattr(st.stop,'_patched'):
+            # Patch st.stop to raise an exception that the shell can catch
+            def patched_stop():
+                """Patched st.stop that raises RuntimeError to stop cell execution."""
+                raise RuntimeError(
+                    "st.stop() is not supported in notebook mode. "
+                    "Cell execution has been stopped."
+                )
+            
+            patched_stop._patched=True
 
-        st.stop = patched_stop
+            st.stop = patched_stop
 
         # Replace streamlit module in sys.modules to ensure the interactive shell
         # uses the patched version
@@ -1059,6 +1064,49 @@ class Notebook:
         cell = next((c for c in self.cells if c.key == key), None)
         if cell:
             cell.delete()
+
+    def get_cells_state(self, minimal: bool = False) -> list[dict]:
+        """Get the state of all cells in the notebook.
+
+        Returns a list of dictionaries containing cell information.
+        By default includes complete execution outputs and metadata,
+        useful for AI agents or external tools that need to inspect
+        notebook state.
+
+        Args:
+            minimal: If False (default), includes execution outputs, stdout,
+                stderr, exceptions, and runtime metadata for each cell.
+                If True, returns only the minimal cell definitions needed
+                to recreate cells.
+
+        Returns:
+            A list of dictionaries, one per cell, in notebook order.
+            Each dictionary follows the format of :meth:`Cell.to_dict`.
+
+        Examples:
+            Get complete notebook state for AI agent::
+
+                nb = __notebook__
+                state = nb.get_cells_state()  # minimal=False by default
+
+                for cell_state in state:
+                    print(f"Cell {cell_state['id']}:")
+                    print(f"  Code: {cell_state['code'][:50]}...")
+                    print(f"  Executed: {cell_state['has_run_once']}")
+                    if cell_state.get('stdout'):
+                        print(f"  Output: {cell_state['stdout']}")
+                    if cell_state.get('exception'):
+                        print(f"  Error: {cell_state['exception']['message']}")
+
+            Get minimal cell definitions::
+
+                definitions = nb.get_cells_state(minimal=True)
+                # [{'key': 'abc1', 'type': 'code', 'code': '...', ...}, ...]
+
+        See Also:
+            :meth:`Cell.to_dict`: Individual cell serialization
+        """
+        return [cell.to_dict(minimal=minimal) for cell in self.cells]
 
 def st_notebook(
     title: str = "new_notebook",

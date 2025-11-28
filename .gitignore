@@ -1,6 +1,7 @@
 # Custom exclusions
 .tmp/
 .documents/
+.claude/
 compile_package.py
 compiled/
 all.txt
