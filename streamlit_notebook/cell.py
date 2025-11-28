@@ -631,7 +631,7 @@ class Cell:
         """
         Inserts a new cell above this cell in the notebook.
         """
-        new_key = self.notebook.gen_cell_key()
+        new_key = self.notebook._gen_cell_key()
         cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
         # Insert at current position (pushing this cell down)
         self.notebook.cells.insert(self.rank, cell)
@@ -642,7 +642,7 @@ class Cell:
         """
         Inserts a new cell below this cell in the notebook.
         """
-        new_key = self.notebook.gen_cell_key()
+        new_key = self.notebook._gen_cell_key()
         cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
         # Insert after current position
         self.notebook.cells.insert(self.rank + 1, cell)
