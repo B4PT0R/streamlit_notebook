@@ -1,4 +1,5 @@
 from .notebook import Notebook, st_notebook, set_page_config
+from .utils import rerun, wait
 
 # Load .env file if it exists (for ST_NOTEBOOK_APP_MODE and other env vars)
 try:

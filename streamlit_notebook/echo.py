@@ -1,48 +1,97 @@
+"""Echo code execution context manager for Streamlit notebooks.
+
+This module provides an adaptation of Streamlit's echo functionality
+customized for the notebook interactive environment.
+
+The :class:`echo` context manager displays the code being executed
+alongside its output, making it perfect for tutorials and demonstrations.
+
+Examples:
+    Basic usage::
+
+        with st.echo():
+            st.write("This code will be shown above the output")
+            x = 42
+            st.write(f"The answer is {x}")
+
+Note:
+    This is an adapted version of Streamlit's echo module.
+    All credits to the Streamlit developers.
 """
-Adaptation of Streamlit's echo module to fit the notebook interactive environment
-All credits to Streamlit developers.
-"""
+
+from __future__ import annotations
 
 import ast
 import contextlib
 import textwrap
 import traceback
+from typing import Callable, Optional, Iterator, Literal
 import streamlit as st
 
 class echo:
-    """
-    A context manager for echoing code execution in Streamlit.
+    """Context manager for displaying code alongside its execution.
 
     This class provides functionality to display the code being executed
-    along with its output in a Streamlit app.
+    along with its output in a Streamlit app, perfect for tutorials and demonstrations.
 
     Attributes:
-        current_code_hook (callable): Optional function to retrieve the current code.
+        current_code_hook: Optional function to retrieve the current code.
+            If provided, this function will be called to get the source code
+            instead of reading from the file system.
 
-    Methods:
-        __call__(code_location="above"): The main method to use the echo functionality.
+    Examples:
+        Basic usage (code shown above output)::
+
+            with st.echo():
+                st.write('This code will be printed')
+                x = 1 + 1
+
+        Show code below output::
+
+            with st.echo(code_location="below"):
+                st.write('Output appears first')
+
+    Note:
+        The echo instance must be callable. When used as ``st.echo()``,
+        it calls the :meth:`__call__` method which returns the context manager.
     """
 
-    def __init__(self,current_code_hook=None):
-        self.current_code_hook=current_code_hook
-
-    @contextlib.contextmanager
-    def __call__(self,code_location="above"):
-
-        """
-        Use in a `with` block to draw some code on the app, then execute it.
+    def __init__(self, current_code_hook: Optional[Callable[[], str]] = None) -> None:
+        """Initialize the echo context manager.
 
         Args:
-            code_location (str): Whether to show the echoed code before or after the results.
-                                 Can be "above" or "below". Defaults to "above".
+            current_code_hook: Optional function that returns the current code
+                as a string. If None, code is read from the file system.
+        """
+        self.current_code_hook = current_code_hook
 
-        Returns:
-            A context manager that displays and executes the code.
+    @contextlib.contextmanager
+    def __call__(self, code_location: Literal["above", "below"] = "above") -> Iterator[None]:
+        """Create a context manager that displays and executes code.
 
-        Example:
-            >>> import streamlit as st
-            >>> with st.echo():
-            >>>     st.write('This code will be printed')
+        Use in a ``with`` block to draw code on the app, then execute it.
+
+        Args:
+            code_location: Whether to show the echoed code before (``"above"``)
+                or after (``"below"``) the execution results. Defaults to ``"above"``.
+
+        Yields:
+            None - This is a context manager, code is executed in its context.
+
+        Examples:
+            Show code above output (default)::
+
+                with st.echo():
+                    st.write('This text appears below the code')
+
+            Show code below output::
+
+                with st.echo(code_location="below"):
+                    st.write('This text appears above the code')
+
+        Note:
+            If the code cannot be retrieved (e.g., file not found), a warning
+            will be displayed instead of the code.
         """
 
         from streamlit import source_util
@@ -68,10 +117,10 @@ class echo:
             root_node = ast.parse("".join(source_lines))
             line_to_node_map = {}
 
-            def collect_body_statements(node):
+            def collect_body_statements(node: ast.AST) -> None:
                 if not hasattr(node, "body"):
                     return
-                for child in node.body:
+                for child in node.body:  # type: ignore
                     line_to_node_map[child.lineno] = child
                     collect_body_statements(child)
 

@@ -531,6 +531,36 @@ MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 2025-11
+
+**Code Quality & API Improvements:**
+- **Cell Types**: Improved type management using internal `CellType` mixins (instead of direct `Cell` subclasses), making it straightforward to support new cell types with custom behaviour while still being able to change a cell's type dynamically without having to recreate the cell instance.
+- **UI/Logic Separation**: Moved all UI rendering logic to dedicated `NotebookUI` class (following the `Cell`/`CellUI` pattern)
+- **Public/Private API Distinction**: Renamed internal methods with `_` prefix for clear API boundaries
+- **Template-Based Code Generation**: Refactored `to_python()` to use clean string templates instead of manual concatenation
+- **Enhanced Documentation**: Added comprehensive Google-style docstrings with examples for all public methods (~85% coverage)
+- **Streamlit Patches**: Centralized all Streamlit module patches in `_apply_patches()` method:
+  - `st.echo` - Transparent patching for code execution tracking
+  - `st.rerun` - UserWarning guiding users to `__notebook__.rerun()` or package-level import
+  - `st.stop` - RuntimeError to properly stop cell execution
+- **Rerun API Enhancements**:
+  - Added `no_wait` parameter to `rerun()` for immediate reruns (when possible)
+  - Exposed `rerun()` and `wait()` as both public notebook methods and package-level exports
+  - Improved delay merging logic with clear documentation
+
+**Bug Fixes & UX Improvements:**
+
+- Cell type can now be manually changed after creation ('code', 'markdown', or 'html')
+- Fixed bug when inserting new cells above/below existing ones
+- Safer UI behavior for dynamic cell creation and execution
+- Programmatic cell code modifications now automatically reflect in the editor UI
+- Updated `.gitignore` to track Sphinx documentation source files while ignoring build artifacts
+
+**Breaking Changes:**
+
+- Saved notebook `.py` files now use simpler API with `st_notebook()` factory and `nb.render()` method directly, instead of previous `get_notebook()` and `render_notebook()` helpers
+  - **Migration**: Update existing notebook files to use new pattern shown in Quick Start
+
 ### 2025-10
 
 **Major update:** Notebooks are now pure Python files (`.py`), not JSON.

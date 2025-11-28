@@ -1,70 +1,158 @@
+"""Utility functions for streamlit_notebook.
+
+This module provides core utility functions for state management, UI feedback,
+code formatting, and path handling within the streamlit_notebook package.
+
+Key Features:
+    - Session state management (init_state, update_state)
+    - Smart rerun control with delays (rerun, wait, check_rerun)
+    - Template string formatting with <<expression>> syntax
+    - Unique ID generation
+    - Package path utilities
+
+Examples:
+    Basic usage::
+
+        from streamlit_notebook.utils import rerun, wait, format
+
+        # Smart rerun with delay
+        st.toast("Saved!")
+        rerun(delay=1.5)  # Ensures toast is visible
+
+        # Format strings with expressions
+        formatted = format("Result: <<x + y>>", x=10, y=20)
+        # Returns: "Result: 30"
+"""
+
+from __future__ import annotations
+
 import re
 import streamlit as st
 import random
 import string
 import os
+from typing import Any
 
-os.environ['ROOT_PACKAGE_FOLDER']=os.path.dirname(os.path.abspath(__file__))
+os.environ['ROOT_PACKAGE_FOLDER'] = os.path.dirname(os.path.abspath(__file__))
 
-def root_join(*args):
-    """
-    Joins path components with the root package folder.
+def root_join(*args: str) -> str:
+    """Join path components with the root package folder.
 
-    This utility function is used to construct file paths relative to the package's root folder.
+    This utility function constructs file paths relative to the package's root folder,
+    which is automatically set to the directory containing this module.
 
     Args:
         *args: Path components to join.
 
     Returns:
-        str: The joined path string.
+        The joined absolute path string.
+
+    Examples:
+        Access package resources::
+
+            # Get path to demo notebooks directory
+            demo_path = root_join("demo_notebooks")
+
+            # Get path to a specific image
+            img_path = root_join("app_images", "logo.png")
+
+    Note:
+        The root package folder is stored in the ``ROOT_PACKAGE_FOLDER``
+        environment variable and points to the ``streamlit_notebook`` directory.
     """
-    return os.path.join(os.getenv('ROOT_PACKAGE_FOLDER'),*args)
+    return os.path.join(os.getenv('ROOT_PACKAGE_FOLDER'), *args)
 
 # shortcut for st.session_state
 state=st.session_state
 
-def short_id(length=16):
-    """
-    Generates a (most-likely) unique string id of specified length.
+def short_id(length: int = 16) -> str:
+    """Generate a random unique identifier string.
+
+    Creates a random string of ASCII letters (both uppercase and lowercase)
+    of the specified length. Useful for generating unique keys for UI elements.
 
     Args:
-        length (int): The length of the ID to generate. Defaults to 16.
+        length: The length of the ID to generate. Defaults to 16.
 
     Returns:
-        str: A random string of the specified length.
+        A random string of the specified length containing only ASCII letters.
+
+    Examples:
+        Generate default 16-character ID::
+
+            id1 = short_id()
+            # Returns something like: "aBcDeFgHiJkLmNoP"
+
+        Generate shorter ID::
+
+            id2 = short_id(8)
+            # Returns something like: "XyZaBcDe"
+
+    Note:
+        This uses :func:`random.choices` which is not cryptographically secure.
+        Do not use for security-sensitive purposes like passwords or tokens.
     """
     return ''.join(random.choices(string.ascii_letters, k=length))
 
-def init_state(**kwargs):
-    """
-    Initializes st.session_state with given kwargs.
+def init_state(**kwargs: Any) -> None:
+    """Initialize session state variables if they don't exist.
+
+    Sets initial values in ``st.session_state`` for the provided keys,
+    but only if those keys haven't been set already. Useful for initializing
+    state on first run without overwriting existing values.
 
     Args:
-        **kwargs: Keyword arguments to initialize in the session state.
+        **kwargs: Keyword arguments where keys are state variable names
+            and values are their initial values.
 
-    This function sets initial values in the Streamlit session state
-    if they haven't been set already.
-    """
-    for key,value in kwargs.items():
-        if not key in state:
-            state[key]=value
+    Examples:
+        Initialize state on first run::
 
-def update_state(**kwargs):
+            init_state(
+                counter=0,
+                user_name="Guest",
+                items=[]
+            )
+
+            # On first run: sets all values
+            # On subsequent runs: preserves existing values
+
+    See Also:
+        :func:`update_state`: Update state unconditionally
     """
-    Updates st.session_state with given kwargs.
+    for key, value in kwargs.items():
+        if key not in state:
+            state[key] = value
+
+def update_state(**kwargs: Any) -> None:
+    """Update session state variables unconditionally.
+
+    Updates values in ``st.session_state`` with the provided key-value pairs,
+    overwriting any existing values. Use this when you want to force-update state.
 
     Args:
-        **kwargs: Keyword arguments to update in the session state.
+        **kwargs: Keyword arguments where keys are state variable names
+            and values are their new values.
 
-    This function updates values in the Streamlit session state,
-    overwriting existing values if they exist.
-    """
-    for key,value in kwargs.items():
-        state[key]=value
+    Examples:
+        Force update state values::
 
-def rerun(delay=0):
+            update_state(
+                counter=counter + 1,
+                last_action="submit",
+                timestamp=time.time()
+            )
+
+    See Also:
+        :func:`init_state`: Initialize state only if not exists
     """
-    Commands a rerun of the app at the end of the current run.
+    for key, value in kwargs.items():
+        state[key] = value
+
+_original_rerun=st.rerun # save before we patch it in notebook.py
+
+def rerun(delay: float = 0, no_wait: bool = False) -> None:
+    """Command a rerun of the app with an optional delay.
 
     This function sets a flag in the session state to trigger a rerun
     of the Streamlit app after the current execution is complete.
@@ -73,32 +161,61 @@ def rerun(delay=0):
     the requests to ensure the longest total delay is respected.
 
     Args:
-        delay (float): Minimum delay in seconds before executing the rerun.
-                      Useful to ensure UI feedback (toasts, animations, etc.)
-                      is visible before the rerun.
-                      Defaults to 0 (immediate rerun).
+        delay: Minimum delay in seconds before executing the rerun.
+            Useful to ensure UI feedback (toasts, animations, etc.)
+            is visible before the rerun. Defaults to 0 (as soon as possible).
+            Note: This parameter is ignored when ``no_wait=True``.
+        no_wait: If True, execute the rerun immediately without waiting for
+            the current execution to complete, bypassing any pending delays.
+            Defaults to False.
+
+    Note:
+        - Multiple calls to :func:`rerun` during the same execution will merge
+          intelligently - the longest total delay will be respected.
+        - When ``no_wait=True``, the ``delay`` parameter is ignored and all
+          pending delayed reruns are cleared, triggering an immediate rerun.
 
     Examples:
-        # Ensure toast is visible before rerun
-        st.toast("File saved!", icon="💾")
-        rerun(delay=1.5)
+        Ensure toast is visible before rerun::
 
-        # Wait for animation to complete
-        with st.spinner("Processing..."):
-            process_data()
-        rerun(delay=0.5)  # Let spinner disappear gracefully
+            st.toast("File saved!", icon="💾")
+            rerun(delay=1.5)
 
-        # Multiple calls - longest delay wins
-        st.toast("Action 1")
-        rerun(delay=1.0)
-        st.toast("Action 2")
-        rerun(delay=2.0)  # This will execute at 2.0s from now
+        Wait for animation to complete::
 
-        # After a wait() call - accounts for prior delay
-        wait(1.5)  # Request 1.5s delay
-        # ... some code ...
-        rerun()  # Will wait the remaining time from the wait() call
+            with st.spinner("Processing..."):
+                process_data()
+            rerun(delay=0.5)  # Let spinner disappear gracefully
+
+        Multiple calls - longest delay wins::
+
+            st.toast("Action 1")
+            rerun(delay=1.0)
+            st.toast("Action 2")
+            rerun(delay=2.0)  # This will execute at 2.0s from now
+
+        Immediate rerun (useful in callbacks)::
+
+            st.button("Click me", on_click=lambda: rerun(no_wait=True))
+
+    See Also:
+        :func:`wait`: Request delay without triggering rerun
+        :func:`check_rerun`: Execute pending reruns
     """
+
+    if no_wait:
+        # Execute immediately without waiting for current execution
+        # This clears any pending delayed reruns and triggers an immediate rerun
+        try:
+            state.rerun = None  # Clear any pending rerun
+            _original_rerun()  # Trigger immediate rerun
+        except Exception:
+            # st.rerun() raises an exception when called from within a callback context
+            # In this case, fall back to delayed rerun with zero delay
+            rerun(delay=0)
+        return
+        
+
     import time
     current_time = time.time()
 
@@ -139,36 +256,37 @@ def rerun(delay=0):
             'requested': True
         }
 
-def wait(delay):
-    """
-    Requests a minimum delay before any future rerun, without triggering a rerun.
+def wait(delay: float) -> None:
+    """Request a minimum delay before any future rerun, without triggering one.
 
     This function sets a delay requirement that will be honored by any subsequent
-    rerun() call. If a rerun() is called later, it will account for this delay.
+    :func:`rerun` call. Unlike :func:`rerun`, this does not trigger a rerun itself.
 
     Useful when you want to ensure temporal space (e.g., for toasts/animations)
     without causing a rerun yourself.
 
     Args:
-        delay (float): Minimum delay in seconds to ensure before any rerun executes.
+        delay: Minimum delay in seconds to ensure before any rerun executes.
+
+    Note:
+        Multiple calls to :func:`wait` will use the longest delay.
+        The delay is only enforced when :func:`rerun` is eventually called.
 
     Examples:
-        # Request delay, someone else will trigger rerun
-        st.toast("Processing complete", icon="✅")
-        wait(1.5)  # Ensures toast is visible
-        # ... later, someone calls rerun() which will honor the 1.5s delay
+        Request delay, someone else will trigger rerun::
 
-        # Multiple operations requesting delays
-        st.toast("Step 1")
-        wait(1.0)
-        # ... more code ...
-        st.toast("Step 2")
-        wait(1.5)  # Extends to 1.5s total
-        # ... eventually rerun() is called ...
+            st.toast("Processing complete", icon="✅")
+            wait(1.5)  # Ensures toast is visible
+            # ... later, someone calls rerun() which will honor the 1.5s delay
 
-        # Ensure animation completes
-        st.balloons()
-        wait(2.0)  # Balloons get full duration before any rerun
+        Ensure animation completes::
+
+            st.balloons()
+            wait(2.0)  # Balloons get full duration before any rerun
+
+    See Also:
+        :func:`rerun`: Trigger a rerun with delay
+        :func:`check_rerun`: Execute pending reruns
     """
     import time
     current_time = time.time()
@@ -209,16 +327,33 @@ def wait(delay):
             'requested': False
         }
 
-def check_rerun():
-    """
-    Checks whether a rerun has been commanded and reruns the app if so.
+def check_rerun() -> None:
+    """Check for pending reruns and execute them with delays.
 
     This function should be placed as the last command in a Streamlit main script.
     It checks for the rerun flag and triggers a rerun if it's set (requested=True),
     waiting for the requested delay if necessary.
 
-    If only delay() was called (requested=False), no rerun occurs - the delay
-    requirement is just stored for any future rerun() call.
+    If only :func:`wait` was called (requested=False), no rerun occurs - the delay
+    requirement is just stored for any future :func:`rerun` call.
+
+    Note:
+        This function is typically called automatically at the end of notebook
+        execution. You rarely need to call it manually.
+
+    Examples:
+        Typical usage at the end of a Streamlit script::
+
+            # Your Streamlit app code here
+            st.title("My App")
+            # ...
+
+            # Check and execute any pending reruns
+            check_rerun()
+
+    See Also:
+        :func:`rerun`: Command a rerun with delay
+        :func:`wait`: Request delay without rerun
     """
     import time
     if 'rerun' in state and state.rerun:
@@ -240,26 +375,47 @@ def check_rerun():
 
             # Clear the rerun flag and execute rerun
             state.rerun = None
-            st.rerun()
+            _original_rerun()
 
-def format(string, **kwargs):
-    """
-    Formats all occurrences of <<...>> tagged parts found in a string.
+def format(string: str, **kwargs: Any) -> str:
+    """Format string by evaluating <<expression>> tags.
+
+    This function finds all occurrences of ``<<...>>`` in the string and evaluates
+    the expressions within them using the provided keyword arguments as context.
 
     Args:
-        string (str): The input string containing <<...>> tags.
+        string: The input string containing ``<<...>>`` tags.
         **kwargs: Keyword arguments used as the context namespace for evaluating expressions.
 
     Returns:
-        str: The formatted string with all <<...>> tags replaced by their evaluated expressions.
+        The formatted string with all ``<<...>>`` tags replaced by their evaluated results.
+        If an expression fails to evaluate, the original ``<<expression>>`` is preserved.
 
-    This function evaluates the expressions within <<...>> tags using the provided kwargs as context.
+    Examples:
+        Basic expression evaluation::
+
+            result = format("Result: <<x + y>>", x=10, y=20)
+            # Returns: "Result: 30"
+
+        Multiple expressions::
+
+            text = format("Hello <<name>>, you are <<age>> years old", name="Alice", age=25)
+            # Returns: "Hello Alice, you are 25 years old"
+
+        With error handling::
+
+            result = format("Value: <<undefined_var>>", x=5)
+            # Returns: "Value: <<undefined_var>>" (original preserved)
+
+    Note:
+        Expressions are evaluated using Python's ``eval()`` function.
+        Only use this with trusted input as it can execute arbitrary code.
     """
     if not kwargs:
-        context = {}
+        context: dict[str, Any] = {}
     else:
-        context=kwargs
-    def replace_expr(match):
+        context = kwargs
+    def replace_expr(match: re.Match[str]) -> str:
         expr = match.group(1)
         try:
             return str(eval(expr, context))

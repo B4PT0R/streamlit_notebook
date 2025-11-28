@@ -1,5 +1,7 @@
+from __future__ import annotations
+
+from typing import Any, Optional, Literal
 from code_editor import code_editor
-from numpy import isin
 from .utils import state, short_id, rerun
 import streamlit as st
 
@@ -17,23 +19,23 @@ class editor_output_parser:
     Methods:
         __call__(output): Process the output and return event and content.
     """
-    def __init__(self,editor):
-        self.last_id=None
-        self.editor=editor
+    def __init__(self, editor: Editor) -> None:
+        self.last_id: Optional[str] = None
+        self.editor = editor
 
-    def __call__(self,output):
+    def __call__(self, output: Optional[dict[str, Any]]) -> Optional[str]:
         if output is None or not output.get('id'):
-            event=None
+            event = None
         else:
-            if not output['id']==self.last_id:
+            if output['id'] != self.last_id:
                 self.editor.code.from_ui(output['text'])
-                self.last_id=output['id']
+                self.last_id = output['id']
                 if output.get("type"):
-                    event=output["type"]
+                    event = output["type"]
                 else:
-                    event=None
+                    event = None
             else:
-                event=None
+                event = None
         return event
 
 class Code:
@@ -54,11 +56,11 @@ class Code:
         from_backend(value): Updates the code content from the backend.
     """
 
-    def __init__(self,value=""):
-        self._value=value
-        self.new_code_flag=False
+    def __init__(self, value: str = "") -> None:
+        self._value = value
+        self.new_code_flag = False
 
-    def get_value(self):
+    def get_value(self) -> str:
         """
         Returns the current code content.
 
@@ -66,8 +68,8 @@ class Code:
             str: The current code content stored in the object.
         """
         return self._value
-    
-    def from_ui(self,value):
+
+    def from_ui(self, value: str) -> None:
         """
         Updates the code content from the UI.
 
@@ -81,11 +83,11 @@ class Code:
             """
             Avoid incoming code from ui to overwrite the code value when it has just been set to a new value by a backend callback
             """
-            self.new_code_flag=False
+            self.new_code_flag = False
         else:
-            self._value=value
+            self._value = value
 
-    def from_backend(self,value):
+    def from_backend(self, value: str) -> None:
         """
         Updates the code content from the backend.
 
@@ -95,8 +97,8 @@ class Code:
         This method updates the code content and sets the new_code_flag to True,
         indicating that the content has been updated by the backend.
         """
-        self._value=value
-        self.new_code_flag=True
+        self._value = value
+        self.new_code_flag = True
 
 css_string = '''
     background-color: #bee1e5;
@@ -600,8 +602,8 @@ class CellUI(Editor):
 
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
-        self.add_toggle(name="Reactive",caption="Reactive",event="toggle_reactive",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
-        self.add_toggle(name="Fragment",caption="Fragment",event="toggle_fragment",style=dict(top="0px",left="80px",fontSize="14px"),has_caption=True)
+        self.add_toggle(name="Reactive",caption="Reactive",event="_toggle_reactive",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
+        self.add_toggle(name="Fragment",caption="Fragment",event="_toggle_fragment",style=dict(top="0px",left="80px",fontSize="14px"),has_caption=True)
         self.add_button(name="Run",caption="Run",icon="Play",event="run",style=dict(bottom="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
         #self.add_button(name="Has_run",caption="Has_Run",icon="Check",event="Check",style=dict(bottom="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px",hover=False)
         self.add_button(name="Close",caption="Close",icon="X",event="close",style=dict(top="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")

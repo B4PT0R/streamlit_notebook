@@ -1,29 +1,220 @@
-from numpy import short
+"""Cell classes for streamlit-notebook.
+
+This module provides the cell abstraction for streamlit-notebook,
+including base :class:`Cell` class and specialized subclasses for
+different content types.
+
+Cell Types:
+    - :class:`CodeCell`: Python code execution with output capture
+    - :class:`MarkdownCell`: Formatted text with variable interpolation
+    - :class:`HTMLCell`: Raw HTML rendering with variable interpolation
+
+Cells support:
+    - Selective reactivity (auto-rerun on changes)
+    - Fragment execution (Streamlit fragments for performance)
+    - One-shot execution (run once, then skip)
+    - Output capture (stdout, stderr, results, exceptions)
+
+Examples:
+    Cells are typically created via notebook decorators::
+
+        @nb.cell(type='code')
+        def analyze():
+            import pandas as pd
+            df = pd.DataFrame({'x': [1, 2, 3]})
+            st.dataframe(df)
+
+        @nb.cell(type='markdown')
+        def explanation():
+            '''
+            # Results
+            The data has <<len(df)>> rows.
+            '''
+
+See Also:
+    :class:`~streamlit_notebook.notebook.Notebook`: Notebook orchestrator
+    :class:`~streamlit_notebook.cell_ui.CellUI`: Cell UI components
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional, Literal
 import streamlit as st
 from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
 from .utils import format, short_id, rerun
 from .cell_ui import CellUI, Code
 
-state=st.session_state
+if TYPE_CHECKING:
+    from .notebook import Notebook
 
-def display(obj):
-    """
-    Display an object using st.write as a default backend.
+state = st.session_state
 
-    This function attempts to display the object using Streamlit's st.write function.
-    If that fails, it falls back to displaying the object's string representation.
+def display(obj: Any) -> None:
+    """Display an object using Streamlit's rendering system.
+
+    Attempts to display the object using ``st.write``, falling back to
+    ``st.text(repr(obj))`` if that fails. Used internally for displaying
+    cell execution results.
 
     Args:
-        obj: The object to be displayed.
+        obj: The object to display. If None, nothing is displayed.
 
-    This function is used internally to handle the display of various types of objects
-    within the notebook cells.
+    Note:
+        This is the default display hook for cells. Custom display behavior
+        can be implemented via the notebook's display_hook.
+
+    Examples:
+        Typical usage in shell execution::
+
+            result = 42
+            display(result)  # Shows "42" in the UI
+
+    See Also:
+        :meth:`~streamlit_notebook.notebook.Notebook.display_hook`: Custom display
     """
     if obj is not None:
         try: 
             st.write(obj)
         except:
             st.text(repr(obj))
+
+class CellType:
+
+    def __init__(self,cell):
+        self.cell:Cell=cell
+        self.has_fragment_toggle=True
+        self.has_reactive_toggle=True
+        self.language='python'
+
+    def is_reactive(self):
+        return self.cell._reactive
+    
+    def is_fragment(self):
+        return self.cell._fragment
+
+    def exec(self):
+        """
+        Executes the code returned by self.get_exec_code()
+        """
+        with self.cell:
+            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
+        self.cell.set_output(response)  
+
+
+    def get_exec_code(self):
+        return self.cell.code
+    
+class PyType(CellType):
+
+    def __init__(self,cell):
+        super().__init__(cell)
+        self.language='python'
+
+    def get_exec_code(self):
+        return self.cell.code
+    
+    def exec(self):
+        """
+        Executes the cell code.
+
+        This method chooses between normal execution and fragment execution
+        based on the cell's fragment attribute.
+        """
+        if self.cell.fragment:
+            self._exec_as_fragment()
+        else:
+            self._exec_normally()
+
+
+    @st.fragment
+    def _exec_as_fragment(self):
+        """
+        Executes the cell as a Streamlit fragment.
+
+        This method is decorated with @st.fragment and executes
+        the cell's code within a Streamlit fragment context.
+        """
+        with self.cell:
+            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
+        self.cell.set_output(response) 
+
+    def _exec_normally(self):
+        """
+        Executes the cell normally.
+
+        This method runs the cell's code in the normal execution context.
+        """
+        with self.cell:
+            response=self.cell.notebook.shell.run(self.cell.get_exec_code(),filename=f"<{self.cell.id}>")
+        self.cell.set_output(response) 
+
+class MDType(CellType):
+    
+    def __init__(self,cell):
+        super().__init__(cell)
+        self.language='markdown'
+        self.has_fragment_toggle=False
+        self.has_reactive_toggle=False
+
+    def is_reactive(self):
+        return True
+    
+    def is_fragment(self):
+        return False
+    
+    def get_exec_code(self):
+        """
+        Formats the Markdown code and converts it to a st.markdown call.
+
+        Returns:
+            str: A string containing a st.markdown() call with the formatted Markdown content.
+
+        This method processes the cell's content, formats any variables,
+        and wraps it in a Streamlit markdown function call.
+        """
+        formatted_code=format(self.cell.code,**self.cell.notebook.shell.namespace).replace("'''","\'\'\'")
+        code=f"st.markdown(r'''{formatted_code}''');"
+        return code 
+
+class HTMLType(CellType):
+    
+    def __init__(self,cell):
+        super().__init__(cell)
+        self.language='markdown'
+        self.has_fragment_toggle=False
+        self.has_reactive_toggle=False
+
+    def is_reactive(self):
+        return True
+    
+    def is_fragment(self):
+        return False
+    
+    def get_exec_code(self):
+        """
+        Formats the HTML code and converts it to a st.html call.
+
+        Returns:
+            str: A string containing a st.html() call with the formatted HTML content.
+
+        This method processes the cell's content, formats any variables,
+        and wraps it in a Streamlit html function call.
+        """
+        formatted_code=format(self.cell.code,**self.cell.notebook.shell.namespace).replace("'''","\'\'\'")
+        code=f"st.html(r'''{formatted_code}''');"
+        return code 
+
+_supported_types=dict(
+    code=PyType,
+    markdown=MDType,
+    html=HTMLType
+)
+
+def _type_to_class(type:str)-> CellType:
+    if type in _supported_types:
+        return _supported_types[type]
+    else:
+        raise ValueError(f"Unknown cell type: {type}")
 
 class Cell:
 
@@ -55,37 +246,59 @@ class Cell:
         delete(): Removes the cell from the notebook.
         to_dict(): Returns a dictionary representation of the cell.
     """
-    def __init__(self,notebook,key,code="",reactive=False,fragment=False):
-        self.notebook=notebook
-        self.container=None
-        self.output=None
-        self.output_area=None
-        self.stdout_area=None
-        self.stderr_area=None
-        self.visible=True
-        self.stdout=None
-        self.stderr=None
-        self.results=[]
-        self.exception=None
-        self.ready=False
-        self.has_run=False
-        self.has_fragment_toggle=True
-        self._code=Code(value=code)
-        self.last_code=None
-        self.key=key
-        self.ui_key=short_id()
-        self.reactive=reactive
-        self.language=None
-        self.type=None
-        self.fragment=fragment
+    def __init__(
+        self,
+        notebook: Notebook,
+        key: str,
+        type: str = "code",  # code, markdown, html
+        code: str = "",
+        reactive: bool = False,
+        fragment: bool = False
+    ) -> None:
+        self.notebook = notebook
+        self.container: Any = None
+        self.output: Any = None
+        self.output_area: Any = None
+        self.stdout_area: Any = None
+        self.stderr_area: Any = None
+        self.visible = True
+        self.stdout: Optional[str] = None
+        self.stderr: Optional[str] = None
+        self.results: list[Any] = []
+        self.exception: Optional[Exception] = None
+        self.ready = False
+        self.has_run = False
+        self._code = Code(value=code)
+        self.last_code: Optional[str] = None
+        self.key = key
+        self.ui_key = short_id()
+        self._reactive = reactive
+        self._type: Optional[Literal['code', 'markdown', 'html']] = type
+        self._fragment = fragment
         self.prepare_ui()
 
     @property
-    def id(self):
+    def _type_object(self) -> CellType:
+        return _type_to_class(self.type)(self)
+
+    @property
+    def language(self) -> str:
+        return self._type_object.language
+
+    @property
+    def id(self) -> str:
         return f"Cell[{self.rank}]({self.key})"
 
     @property
-    def code(self):
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, value):
+        self._set_type(value)
+
+    @property
+    def code(self) -> str:
         """
         The code written in the cell.
 
@@ -93,34 +306,72 @@ class Cell:
             str: The current code content of the cell.
         """
         return self._code.get_value()
-    
+
     @code.setter
-    def code(self,value):
+    def code(self, value: str) -> None:
         """
         Setter for the code property.
 
         Args:
             value (str): The new code content to set for the cell.
         """
-        current_value=self._code.get_value()
-        if current_value==value:
+        current_value = self._code.get_value()
+        if current_value == value:
             return
         self._code.from_backend(value)
-        self.ui_key=short_id()
+        self.ui_key = short_id()
         self.reset()
         rerun()
 
     @property
-    def has_run_once(self):
+    def has_run_once(self) -> bool:
         """
         Checks if the cell has been run at least once with the current code.
 
         Returns:
             bool: True if the cell has been run once with the current code, False otherwise.
         """
-        return self.last_code is not None and self.last_code==self.code
+        return self.last_code is not None and self.last_code == self.code
 
-    def __enter__(self):
+    @property
+    def has_reactive_toggle(self):
+        return self._type_object.has_reactive_toggle
+
+    @property
+    def reactive(self) -> bool:
+        """Whether the cell automatically reruns on changes."""
+        return self._type_object.is_reactive()
+
+    @reactive.setter
+    def reactive(self, value: bool) -> None:
+        """Set the reactive state of the cell."""
+        if self._reactive != value:
+            self._reactive = value
+            # Trigger UI update if needed
+            if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Reactive' in self.ui.buttons:
+                self.ui.buttons['Reactive'].toggled = value
+                rerun()
+
+    @property
+    def has_fragment_toggle(self):
+        return self._type_object.has_fragment_toggle
+
+    @property
+    def fragment(self) -> bool:
+        """Whether the cell runs as a Streamlit fragment."""
+        return self._type_object.is_fragment()
+
+    @fragment.setter
+    def fragment(self, value: bool) -> None:
+        """Set the fragment state of the cell."""
+        if self._fragment != value:
+            self._fragment = value
+            # Trigger UI update if needed
+            if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Fragment' in self.ui.buttons:
+                self.ui.buttons['Fragment'].toggled = value
+                rerun()
+
+    def __enter__(self) -> Cell:
         """
         Allows using the cell as a context manager.
 
@@ -134,11 +385,11 @@ class Cell:
             with cell:
                 notebook.shell.run(code)  # all shell outputs will be directed to the cell
         """
-        self.saved_cell=self.notebook.current_cell
-        self.notebook.current_cell=self
+        self.saved_cell = self.notebook.current_cell
+        self.notebook.current_cell = self
         return self
-    
-    def __exit__(self,exc_type,exc_value,exc_tb):
+
+    def __exit__(self, exc_type: Any, exc_value: Any, exc_tb: Any) -> None:
         """
         Restores the notebook.current_cell property to its initial value.
 
@@ -147,7 +398,7 @@ class Cell:
             exc_value: The exception instance that was raised, if any.
             exc_tb: The traceback object encapsulating the call stack at the point where the exception occurred.
         """
-        self.notebook.current_cell=self.saved_cell
+        self.notebook.current_cell = self.saved_cell
 
 
     def prepare_ui(self):
@@ -156,9 +407,9 @@ class Cell:
         """
         self.ui=CellUI(code=self._code,lang=self.language,key=f"cell_ui_{self.ui_key}",response_mode="blur")
         self.ui.submit_callback=self.submit_callback
-        self.ui.buttons["Reactive"].callback=self.toggle_reactive
+        self.ui.buttons["Reactive"].callback=self._toggle_reactive
         self.ui.buttons["Reactive"].toggled=self.reactive
-        self.ui.buttons["Fragment"].callback=self.toggle_fragment
+        self.ui.buttons["Fragment"].callback=self._toggle_fragment
         self.ui.buttons["Fragment"].toggled=self.fragment
         self.ui.buttons["Up"].callback=self.move_up
         self.ui.buttons["Down"].callback=self.move_down
@@ -166,9 +417,9 @@ class Cell:
         self.ui.buttons["Run"].callback=self.run_callback
         self.ui.buttons["InsertAbove"].callback=self.insert_above
         self.ui.buttons["InsertBelow"].callback=self.insert_below
-        self.ui.buttons["TypeCode"].callback=lambda: self.set_type("code")
-        self.ui.buttons["TypeMarkdown"].callback=lambda: self.set_type("markdown")
-        self.ui.buttons["TypeHTML"].callback=lambda: self.set_type("html")
+        self.ui.buttons["TypeCode"].callback=lambda: self._set_type("code")
+        self.ui.buttons["TypeMarkdown"].callback=lambda: self._set_type("markdown")
+        self.ui.buttons["TypeHTML"].callback=lambda: self._set_type("html")
         
 
     def update_ui(self):
@@ -178,15 +429,16 @@ class Cell:
         self.ui.lang=self.language
         self.ui.key=f"cell_ui_{self.ui_key}"
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
-        #self.ui.buttons['Has_run'].visible=self.has_run_once
+        self.ui.buttons['Reactive'].visible=self.has_reactive_toggle
+
         self.ui.info_bar.set_info(dict(name=f"{self.id}:",style=dict(fontSize="14px",width="100%")))
 
         # Update type buttons to highlight current type with bold font
         for type_name, button_name in [("code", "TypeCode"), ("markdown", "TypeMarkdown"), ("html", "TypeHTML")]:
             if self.type == type_name:
-                self.ui.buttons[button_name].style['fontWeight'] = 'bold'
+                self.ui.buttons[button_name].style.update(fontWeight = 'bold',opacity='1')
             else:
-                self.ui.buttons[button_name].style['fontWeight'] = 'normal'
+                self.ui.buttons[button_name].style.update(fontWeight = 'normal',opacity='0.5')
 
     def initialize_output_area(self):
         """
@@ -268,29 +520,7 @@ class Cell:
                 # The cell skeleton isn't on screen yet
                 # The code runs anyway, but the outputs will be shown after a refresh
                 self.exec()
-                rerun()
-            
-
-    def get_exec_code(self):
-        """
-        Get the code to execute.
-
-        Returns:
-            str: The code to be executed.
-
-        Note:
-            This method is overridden in subclasses to provide
-            type-specific code preparation.
-        """
-        return self.code
-
-    def exec(self):
-        """
-        Executes the code returned by self.get_exec_code()
-        """
-        with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
-        self.set_output(response)       
+                rerun()   
 
     def set_output(self,response):
         """
@@ -371,19 +601,15 @@ class Cell:
         self.rerank(self.rank+1)
 
 
-    def toggle_reactive(self):
-        """
-        Toggles the 'Auto-Rerun' feature for the cell.
-        """
-        self.reactive=self.ui.buttons["Reactive"].toggled
+    def _toggle_reactive(self):
+        """Toggles the 'Auto-Rerun' feature for the cell (internal)."""
+        self._reactive = self.ui.buttons["Reactive"].toggled
 
-    def toggle_fragment(self):
-        """
-        Toggles the 'Fragment' feature for the cell.
-        """
-        self.fragment=self.ui.buttons["Fragment"].toggled
+    def _toggle_fragment(self):
+        """Toggles the 'Fragment' feature for the cell (internal)."""
+        self._fragment = self.ui.buttons["Fragment"].toggled
 
-    def set_type(self, new_type):
+    def _set_type(self, new_type):
         """
         Changes the type of the cell (code, markdown, or html).
 
@@ -392,17 +618,11 @@ class Cell:
         """
         if new_type == self.type:
             return  # Already this type, nothing to do
-
-        # Store current code and position
-        current_code = self.code
-        current_rank = self.rank
-
-        # Create a new cell of the target type with same key
-        cell = new_cell(self.notebook, self.key, type=new_type, code=current_code,
-                       reactive=self.reactive, fragment=self.fragment)
-
-        # Replace in notebook list
-        self.notebook.cells[current_rank] = cell
+        
+        if new_type in ("code","markdown", "html"):
+            self._type = new_type
+        else:
+            raise ValueError(f"Invalid cell type: {new_type}. Must be 'code', 'markdown', or 'html'")
 
         self.notebook.notify(f"Changed cell {self.key} to {new_type}", icon="🔄")
         rerun()
@@ -465,161 +685,27 @@ class Cell:
             fragment=self.fragment
         )
         return d
-            
-class CodeCell(Cell):
-
-    """
-    A subclass of Cell implementing a code cell.
-
-    This class represents a cell containing Python code that can be executed
-    within the notebook environment.
-
-    Attributes:
-        language (str): Always set to "python" for code cells.
-        type (str): Always set to "code" for code cells.
-
-    Methods:
-        exec(): Executes the cell code, either as a fragment or normally.
-        exec_code_as_fragment(): Executes the cell as a Streamlit fragment.
-        exec_code(): Executes the cell normally.
-    """
-
-    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
-        super().__init__(notebook,key,code=code,reactive=reactive,fragment=fragment)
-        self.has_fragment_toggle=True
-        self.language="python"
-        self.type="code"
+    
+    # type dependent methods 
 
     def exec(self):
-        """
-        Executes the cell code.
+        return self._type_object.exec()
 
-        This method chooses between normal execution and fragment execution
-        based on the cell's fragment attribute.
-        """
-        if self.fragment:
-            self.exec_code_as_fragment()
-        else:
-            self.exec_code()
-
-
-    @st.fragment
-    def exec_code_as_fragment(self):
-        """
-        Executes the cell as a Streamlit fragment.
-
-        This method is decorated with @st.fragment and executes
-        the cell's code within a Streamlit fragment context.
-        """
-        with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
-        self.set_output(response)
-
-    def exec_code(self):
-        """
-        Executes the cell normally.
-
-        This method runs the cell's code in the normal execution context.
-        """
-        with self:
-            response=self.notebook.shell.run(self.get_exec_code(),filename=f"<{self.id}>")
-        self.set_output(response)
-
-class MarkdownCell(Cell):
-
-    """
-    A subclass of Cell implementing a Markdown cell.
-
-    This class represents a cell containing Markdown content that is
-    rendered as formatted text in the notebook.
-
-    Attributes:
-        language (str): Always set to "markdown" for Markdown cells.
-        type (str): Always set to "markdown" for Markdown cells.
-
-    Methods:
-        get_exec_code(): Formats the Markdown code and converts it to a st.markdown call.
-    """
-
-    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
-        super().__init__(notebook,key,code=code,reactive=reactive,fragment=False)
-        self.has_fragment_toggle=False
-        self.language="markdown"
-        self.type="markdown"
 
     def get_exec_code(self):
         """
-        Formats the Markdown code and converts it to a st.markdown call.
+        Get the code to execute.
 
         Returns:
-            str: A string containing a st.markdown() call with the formatted Markdown content.
+            str: The code to be executed.
 
-        This method processes the cell's content, formats any variables,
-        and wraps it in a Streamlit markdown function call.
+        Note:
+            This method is overridden in subclasses to provide
+            type-specific code preparation.
         """
-        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
-        code=f"st.markdown(r'''{formatted_code}''');"
-        return code
+        return self._type_object.get_exec_code()  
+          
 
-class HTMLCell(Cell):
-
-    """
-    A subclass of Cell implementing an HTML cell.
-
-    This class represents a cell containing HTML content that is
-    rendered directly in the notebook.
-
-    Attributes:
-        language (str): Always set to "html" for HTML cells.
-        type (str): Always set to "html" for HTML cells.
-
-    Methods:
-        get_exec_code(): Formats the HTML code and converts it to a st.html call.
-    """
-
-    def __init__(self,notebook,key,code="",reactive=True,fragment=False):
-        super().__init__(notebook,key,code=code,reactive=reactive,fragment=False)
-        self.has_fragment_toggle=False
-        self.language="html"
-        self.type="html"
-
-    def get_exec_code(self):
-        """
-        Formats the HTML code and converts it to a st.html call.
-
-        Returns:
-            str: A string containing a st.html() call with the formatted HTML content.
-
-        This method processes the cell's content, formats any variables,
-        and wraps it in a Streamlit HTML function call.
-        """
-        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
-        code=f"st.html(r'''{formatted_code}''');"
-        return code
-
-def type_to_class(cell_type):
-    """
-    Routes a cell type to the appropriate class.
-
-    This function maps cell type strings to their corresponding Cell subclasses.
-
-    Args:
-        cell_type (str): The type of cell ("code", "markdown", or "html").
-
-    Returns:
-        type: The Cell subclass corresponding to the given type.
-
-    Raises:
-        NotImplementedError: If an unsupported cell type is specified.
-    """
-    if cell_type=="code":
-        return CodeCell
-    elif cell_type=="markdown":
-        return MarkdownCell
-    elif cell_type=="html":
-        return HTMLCell
-    else:
-        raise NotImplementedError(f"Unsupported cell type: {cell_type}")
 
 def new_cell(notebook,key,type="code",code="",reactive=False,fragment=False):
     """
@@ -641,4 +727,6 @@ def new_cell(notebook,key,type="code",code="",reactive=False,fragment=False):
     Raises:
         NotImplementedError: If an unsupported cell type is specified.
     """
-    return type_to_class(type)(notebook,key,code=code,reactive=reactive,fragment=fragment)
+    if not type in ("code","markdown","html"):
+        raise NotImplementedError(f"Cell type {type} not implemented")
+    return Cell(notebook,key,type=type,code=code,reactive=reactive,fragment=fragment)

@@ -58,6 +58,8 @@ agents that need controllable Python execution without the dependency weight of
 IPython.
 """
 
+from __future__ import annotations
+
 import sys
 import traceback
 import io
@@ -68,46 +70,49 @@ from asttokens import ASTTokens
 import asyncio
 import tokenize
 import subprocess
-import hashlib, random,string
+import hashlib
+import random
+import string
 from contextlib import contextmanager
+from typing import Any, Callable, Optional, Union, Literal
 
-def content_hash(content):
+def content_hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
-def short_id(length=8):
-    return "".join(random.choices(string.ascii_letters,k=length))
+def short_id(length: int = 8) -> str:
+    return "".join(random.choices(string.ascii_letters, k=length))
 
-def debug_print(*args, sep=" ", end="\n", flush=False):
+def debug_print(*args: Any, sep: str = " ", end: str = "\n", flush: bool = False) -> None:
     sys.__stdout__.write(sep.join(map(str, args)) + end)
     if flush:
         sys.__stdout__.flush()
 
 
-def stdout_write(data,buffer):
-    if isinstance(sys.stdout,Stream):
+def stdout_write(data: str, buffer: str) -> None:
+    if isinstance(sys.stdout, Stream):
         sys.__stdout__.write(data)
         sys.__stdout__.flush()
     else:
         sys.stdout.write(data)
         sys.stdout.flush()
 
-def stderr_write(data,buffer):
-    if isinstance(sys.stderr,Stream):
+def stderr_write(data: str, buffer: str) -> None:
+    if isinstance(sys.stderr, Stream):
         sys.__stderr__.write(data)
         sys.__stderr__.flush()
     else:
         sys.stderr.write(data)
         sys.stderr.flush()
 
-def stdin_readline():
-    if isinstance(sys.stdin,StdinProxy):
-        return prompt("",multiline=False)
+def stdin_readline() -> str:
+    if isinstance(sys.stdin, StdinProxy):
+        return prompt("", multiline=False)
     else:
         return sys.stdin.readline()
     
-PTK_SESSION=None
+PTK_SESSION: Any = None
 
-def ensure_ptk_session():
+def ensure_ptk_session() -> Any:
     global PTK_SESSION
     if PTK_SESSION is None:
         try:
@@ -117,14 +122,14 @@ def ensure_ptk_session():
         PTK_SESSION = PromptSession()
     return PTK_SESSION
 
-def prompt(prompt, multiline=True, prompt_continuation="", wrap_lines=False):
+def prompt(prompt: str, multiline: bool = True, prompt_continuation: str = "", wrap_lines: bool = False) -> str:
     session = ensure_ptk_session()
     try:
         from prompt_toolkit.patch_stdout import patch_stdout
     except ImportError as exc:
         raise RuntimeError("prompt_toolkit is required for interactive shell mode. Install it via 'pip install prompt-toolkit'.") from exc
     with patch_stdout():
-        answer=session.prompt(message=prompt, multiline=multiline, prompt_continuation=prompt_continuation, wrap_lines=wrap_lines, refresh_interval=1)
+        answer = session.prompt(message=prompt, multiline=multiline, prompt_continuation=prompt_continuation, wrap_lines=wrap_lines, refresh_interval=1)
     return answer
 
 class Stream(io.IOBase):
@@ -151,14 +156,14 @@ class Stream(io.IOBase):
         flush(data_to_flush=None): Flushes the given data to the hook and caches it.
         get_value(): Returns all text that has been written to this stream.
     """
-    def __init__(self, hook=None, buffer_size=2048):
+    def __init__(self, hook: Optional[Callable[[str, str], None]] = None, buffer_size: int = 2048) -> None:
         super().__init__()
         self.hook = hook
         self.buffer_size = buffer_size
         self.buffer = ""
         self.cache_buffer = ""
 
-    def write(self, data):
+    def write(self, data: str) -> int:
         """
         Writes data to the stream, managing buffering and flushing.
 
@@ -189,7 +194,9 @@ class Stream(io.IOBase):
             self.flush(self.buffer[:self.buffer_size])
             self.buffer = self.buffer[self.buffer_size:]
 
-    def flush(self, data_to_flush=None):
+        return len(data)
+
+    def flush(self, data_to_flush: Optional[str] = None) -> None:
         """
         Flushes the given data to the hook and caches it.
 
@@ -208,7 +215,7 @@ class Stream(io.IOBase):
             self.hook(data_to_flush,self.cache_buffer)
         
 
-    def get_value(self):
+    def get_value(self) -> str:
         """
         Returns all text that has been written to this stream.
 
@@ -226,26 +233,26 @@ class StdinProxy(io.TextIOBase):
     newline-terminated lines so consumers that read line-by-line keep working.
     """
 
-    def __init__(self, hook, *, encoding="utf-8"):
+    def __init__(self, hook: Callable[[], str], *, encoding: str = "utf-8") -> None:
         super().__init__()
         if not callable(hook):
             raise TypeError("provider must be callable")
         self._hook = hook
         self._encoding = encoding
-        self._buffer = deque()
+        self._buffer: deque[str] = deque()
         self._eof = False
 
     @property
-    def encoding(self):
+    def encoding(self) -> str:
         return self._encoding
 
-    def readable(self):
+    def readable(self) -> bool:
         return True
 
-    def isatty(self):
+    def isatty(self) -> bool:
         return True
 
-    def fileno(self):
+    def fileno(self) -> int:
         raise io.UnsupportedOperation("StdinProxy does not expose a file descriptor")
 
     def close(self):
@@ -428,22 +435,30 @@ class ShellResponse:
         result (Any): The result of the last executed expression.
         exception (Exception): Any exception that occurred during execution.
     """
-    def __init__(self, input=None, processed_input=None, stdout=None, stderr=None, result=None, exception=None):
+    def __init__(
+        self,
+        input: Optional[str] = None,
+        processed_input: Optional[str] = None,
+        stdout: Optional[str] = None,
+        stderr: Optional[str] = None,
+        result: Any = None,
+        exception: Optional[Exception] = None
+    ) -> None:
         self.input = input
-        self.processed_input=processed_input
+        self.processed_input = processed_input
         self.stdout = stdout
         self.stderr = stderr
         self.result = result
         self.exception = exception
 
     @staticmethod
-    def _short_repr(value, *, limit=100):
+    def _short_repr(value: Any, *, limit: int = 100) -> str:
         text = repr(value)
         if len(text) <= limit:
             return text
         return text[: limit - 3] + "..."
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         parts = [self.__class__.__name__ + "("]
         fields = []
         if self.result is not None:
@@ -462,7 +477,7 @@ class ShellResponse:
         parts.append(")")
         return "".join(parts)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.__repr__()
 
 class Shell:
@@ -527,27 +542,28 @@ class Shell:
         
     """
 
-    def __init__(self,
-            # Configuration
-            namespace=None,
-            display_mode='last',
-            history_size=200,
-            # Hooks 
-            stdout_hook=None, 
-            stderr_hook=None,
-            stdin_hook=None,  
-            display_hook=None, 
-            exception_hook=None, 
-            input_hook=None,
-            pre_run_hook=None, 
-            code_block_hook=None,
-            pre_execute_hook=None, 
-            post_execute_hook=None, 
-            namespace_change_hook=None,
-            post_run_hook=None,
-            add_script_run_ctx_hook=None,
-            get_script_run_ctx_hook=None,
-        ):
+    def __init__(
+        self,
+        # Configuration
+        namespace: Optional[dict[str, Any]] = None,
+        display_mode: Literal['all', 'last', 'none'] = 'last',
+        history_size: int = 200,
+        # Hooks
+        stdout_hook: Optional[Callable[[str, str], None]] = None,
+        stderr_hook: Optional[Callable[[str, str], None]] = None,
+        stdin_hook: Optional[Callable[[], str]] = None,
+        display_hook: Optional[Callable[[Any], None]] = None,
+        exception_hook: Optional[Callable[[Exception], None]] = None,
+        input_hook: Optional[Callable[[str], None]] = None,
+        pre_run_hook: Optional[Callable[[str], str]] = None,
+        code_block_hook: Optional[Callable[[str], None]] = None,
+        pre_execute_hook: Optional[Callable[[ast.AST, str], ast.AST]] = None,
+        post_execute_hook: Optional[Callable[[ast.AST, Any], None]] = None,
+        namespace_change_hook: Optional[Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], None]] = None,
+        post_run_hook: Optional[Callable[[ShellResponse], ShellResponse]] = None,
+        add_script_run_ctx_hook: Optional[Callable[..., Any]] = None,
+        get_script_run_ctx_hook: Optional[Callable[..., Any]] = None,
+    ) -> None:
         
         self.namespace = namespace or {}
         self.display_mode = display_mode        

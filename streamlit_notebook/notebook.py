@@ -1,91 +1,276 @@
-from .cell import new_cell, display
+"""Notebook orchestration and management for Streamlit.
+
+This module provides the core :class:`Notebook` class which orchestrates
+the entire notebook experience, managing cells, execution, UI, and persistence.
+
+The notebook supports two modes:
+    - **Development mode**: Full interactive notebook with code editor
+    - **App mode**: Locked, production-ready deployment without editor
+
+Key Features:
+    - Pure Python ``.py`` file format (version control friendly)
+    - Cell-by-cell execution with persistent namespace
+    - Selective reactivity control per cell
+    - Fragment support for performance optimization
+    - Built-in save/load functionality
+    - Demo notebooks for quick start
+
+Examples:
+    Create and use a notebook::
+
+        from streamlit_notebook import st_notebook
+        import streamlit as st
+
+        # Create notebook instance
+        nb = st_notebook(title="My Notebook")
+
+        # Define cells using decorator
+        @nb.cell(type='code')
+        def hello():
+            st.write("Hello from a code cell!")
+
+        # Render the notebook
+        nb.render()
+
+    Run in app mode (locked for deployment)::
+
+        nb = st_notebook(title="Dashboard", app_mode=True, locked=True)
+
+See Also:
+    :class:`~streamlit_notebook.cell.Cell`: Individual cell management
+    :class:`~streamlit_notebook.shell.Shell`: Code execution engine
+"""
+
+from __future__ import annotations
+
+from .cell import Cell, display, new_cell
 from .echo import echo
 from .utils import format, rerun, check_rerun, root_join, state, wait
 from .shell import Shell
 import streamlit as st
 import os
 from textwrap import dedent, indent
-from typing import Union, Dict
+from typing import Any, Callable, Optional, Literal, TYPE_CHECKING
 import inspect
 
+if TYPE_CHECKING:
+    from .notebook_ui import NotebookUI
+
 class Notebook:
+    """Main notebook orchestrator managing cells, execution, and UI.
 
-    """
-    The main Streamlit notebook object.
+    This class is the central component of streamlit-notebook, coordinating
+    all aspects of the notebook experience from cell management to execution
+    to UI rendering.
 
-    This class orchestrates the entire notebook, managing cells, execution,
-    and overall notebook state.
+    The notebook can operate in two modes:
+        - **Development mode** (``app_mode=False``): Interactive editing with full UI
+        - **App mode** (``app_mode=True``): Clean deployment view, optionally locked
 
     Attributes:
-        title (str): The title of the notebook.
-        cells (dict): A dictionary of Cell objects, keyed by their unique identifiers.
-        hide_code_cells (bool): If True, code cells are hidden in the UI.
-        run_on_submit (bool): If True, cells are executed immediately upon submission.
-        show_logo (bool): If True, the notebook logo is displayed.
-        shell (Shell): The Shell object used for code execution.
+        title: The title of the notebook displayed in the UI.
+        cells: List of :class:`Cell` objects in execution order.
+        app_mode: Whether to hide code cells for clean app view.
+        locked: Whether app mode is locked (prevents toggling back).
+        run_on_submit: Whether cells auto-execute on code changes.
+        show_logo: Whether to display the streamlit-notebook logo.
+        show_stdout: Whether to display stdout output from cells.
+        show_stderr: Whether to display stderr output from cells.
+        shell: The :class:`~streamlit_notebook.shell.Shell` instance for code execution.
+        current_cell: The cell currently being executed (for output routing).
+        ui: The :class:`~streamlit_notebook.notebook_ui.NotebookUI` instance for rendering.
 
-    Methods:
-        render(): Renders the entire notebook (with required pre and post actions).
-        show(): Renders the UI (sidebar, logo, cells, controls)
-        sidebar(): Renders the notebook's sidebar with controls.
-        logo(): Renders the notebook's logo.
-        control_bar(): Renders the control bar for adding new cells.
-        load_demo(): Loads a demo notebook (UI method).
-        save_notebook(): Saves the notebook with UI feedback (UI method).
-        open_notebook(): Opens a notebook with file upload and UI feedback (UI method).
-        clear_cells(): Deletes all cells in the notebook.
-        run_next_cell(): runs the first cell encountered that hasn't run yet.
-        run_all_cells(): Executes all cells in the notebook.
-        restart_session(): reinitializes the shell and resets the cells to initial state
-        save(filepath=None): save the current notebook as a .py file (UI-agnostic).
-        open(source): opens a notebook from a .py file or code string (UI-agnostic).
-        is_valid_notebook(source): static method to check if a source is a valid notebook.
-        new_cell(type, code, reactive, fragment): Creates a new cell.
-        delete_cell(key): Deletes a specific cell.
-        @cell: decorator used to declare new cells in the .py notebook script
-        to_python(): Converts the notebook to a Python script.
+    Examples:
+        Create a notebook and define cells::
+
+            nb = Notebook(title="My Analysis")
+
+            @nb.cell(type='markdown')
+            def intro():
+                '''# Data Analysis
+                Let's analyze some data.'''
+
+            @nb.cell(type='code', reactive=True)
+            def plot():
+                import numpy as np
+                import streamlit as st
+                data = np.random.randn(100)
+                st.line_chart(data)
+
+            nb.render()
+
+        Deploy as locked app::
+
+            nb = Notebook(
+                title="Production Dashboard",
+                app_mode=True,
+                locked=True,
+                show_logo=False
+            )
+
+    See Also:
+        :func:`st_notebook`: Factory function for notebook creation
+        :class:`~streamlit_notebook.cell.Cell`: Individual cell management
     """
 
-    def __init__(self,
-            title="new_notebook",
-            app_mode=False,
-            locked=False,
-            run_on_submit=True,
-            show_logo=True,
-            show_stdout=True,
-            show_stderr=False
-        ):
-        self.title=title
-        self.cells=[]
-        self._current_cell=None
-        self.app_mode=app_mode  # Whether to hide code cells (can be toggled in dev)
-        self.locked=locked  # Whether app mode is locked (deployment mode, can't toggle back)
-        self.run_on_submit=run_on_submit
-        self.show_logo=show_logo
-        self.show_stdout=show_stdout
-        self.show_stderr=show_stderr
-        self.current_code=None
-        self.initialized=False
-        # patch st.echo in streamlit module to fit the notebook environment
-        st.echo=echo(self.get_current_code).__call__
-        # replace streamlit module in sys.modules to ensure the interactive shell uses the patched version
+    def __init__(
+        self,
+        title: str = "new_notebook",
+        app_mode: bool = False,
+        locked: bool = False,
+        run_on_submit: bool = True,
+        show_logo: bool = True,
+        show_stdout: bool = True,
+        show_stderr: bool = False
+    ) -> None:
+        """Initialize a new Notebook instance.
+
+        Args:
+            title: The notebook title displayed in the UI and used for filenames.
+                Defaults to "new_notebook".
+            app_mode: If True, hides code editor and shows clean app view.
+                Can be toggled via UI unless ``locked=True``. Defaults to False.
+            locked: If True, prevents toggling out of app mode. Use this for
+                production deployments to ensure users can't access the editor.
+                Defaults to False.
+            run_on_submit: If True, cells execute immediately when code changes.
+                If False, cells require manual execution via Run button.
+                Defaults to True.
+            show_logo: If True, displays the streamlit-notebook logo in the sidebar.
+                Defaults to True.
+            show_stdout: If True, displays stdout output from code cells.
+                Defaults to True.
+            show_stderr: If True, displays stderr output from code cells.
+                Useful for debugging. Defaults to False.
+
+        Note:
+            The constructor automatically:
+                - Patches ``st.echo`` to work with notebook context
+                - Creates a :class:`~streamlit_notebook.shell.Shell` instance
+                - Initializes the execution namespace with ``st`` and ``__notebook__``
+
+        Examples:
+            Development notebook::
+
+                nb = Notebook(title="My Analysis")
+
+            Production app (locked, no logo)::
+
+                nb = Notebook(
+                    title="Dashboard",
+                    app_mode=True,
+                    locked=True,
+                    show_logo=False
+                )
+
+            Debug mode (show stderr)::
+
+                nb = Notebook(
+                    title="Debug Session",
+                    show_stderr=True
+                )
+        """
+        self.title = title
+        self.cells: list[Cell] = []
+        self._current_cell: Optional[Cell] = None
+        self.app_mode = app_mode  # Whether to hide code cells (can be toggled in dev)
+        self.locked = locked  # Whether app mode is locked (deployment mode, can't toggle back)
+        self.run_on_submit = run_on_submit
+        self.show_logo = show_logo
+        self.show_stdout = show_stdout
+        self.show_stderr = show_stderr
+        self.current_code: Optional[str] = None
+        self.initialized = False
+
+        # Apply patches to Streamlit module
+        self._apply_patches()
+
+        self._init_shell()
+
+        # Initialize UI component (imported here to avoid circular import)
+        from .notebook_ui import NotebookUI
+        self.ui: NotebookUI = NotebookUI(self)
+
+    def _apply_patches(self) -> None:
+        """Apply patches to Streamlit module for notebook integration (internal).
+
+        This method patches several Streamlit functions to integrate properly with
+        the notebook environment:
+
+        1. **st.echo**: Patches to work with the notebook's code execution tracking
+        2. **st.rerun**: Patches to use the notebook's rerun strategy with user guidance
+        3. **st.stop**: Raises ``RuntimeError`` to stop cell execution
+
+        The patched ``st`` module is also updated in ``sys.modules`` to ensure the
+        interactive shell uses the patched version.
+
+        Note:
+            This is an internal method called during notebook initialization.
+            The ``st.stop()`` patch raises a ``RuntimeError`` that the shell catches,
+            stopping cell execution immediately and displaying an error message.
+
+        See Also:
+            :meth:`rerun`: Public rerun method
+            :func:`~streamlit_notebook.utils.rerun`: Underlying rerun implementation
+        """
         import sys
-        sys.modules['streamlit']=st
 
-        self.init_shell()
+        # Patch st.echo to fit the notebook environment
+        st.echo = echo(self._get_current_code).__call__
 
-    def init_shell(self):
+        # Patch st.rerun to use our custom rerun with a warning
+        def patched_rerun():
+            """Patched st.rerun that warns users to use the notebook's rerun method."""
+            import warnings
+            warnings.warn(
+                "Using st.rerun() directly may disrupt the notebook's rerun strategy. "
+                "Consider using __notebook__.rerun() or importing from streamlit_notebook: "
+                "from streamlit_notebook import rerun",
+                UserWarning,
+                stacklevel=2
+            )
+            # Use our custom rerun instead
+            from .utils import rerun as utils_rerun
+            utils_rerun()
+
+        st.rerun = patched_rerun
+
+        # Patch st.stop to raise an exception that the shell can catch
+        def patched_stop():
+            """Patched st.stop that raises RuntimeError to stop cell execution."""
+            raise RuntimeError(
+                "st.stop() is not supported in notebook mode. "
+                "Cell execution has been stopped."
+            )
+
+        st.stop = patched_stop
+
+        # Replace streamlit module in sys.modules to ensure the interactive shell
+        # uses the patched version
+        sys.modules['streamlit'] = st
+
+    def _init_shell(self) -> None:
+        """Initialize or reinitialize the execution shell (internal).
+
+        Creates a new :class:`~streamlit_notebook.shell.Shell` instance with
+        hooks for stdout, stderr, display, exceptions, and input. Updates the
+        shell namespace with Streamlit (``st``) and the notebook instance (``__notebook__``).
+
+        This method is called automatically during initialization.
+
+        Note:
+            This is an internal method. Use :meth:`restart_session` for public API.
+
+        See Also:
+            :meth:`restart_session`: Public method for full reset
+            :class:`~streamlit_notebook.shell.Shell`: Execution engine documentation
         """
-        (Re)Initializes the shell to startup state.
-
-        This method creates a new Shell instance with the necessary hooks and updates the namespace.
-        """
-        self.shell=Shell(
-            stdout_hook=self.stdout_hook,
-            stderr_hook=self.stderr_hook,
-            display_hook=self.display_hook,
-            exception_hook=self.exception_hook, 
-            input_hook=self.input_hook
+        self.shell = Shell(
+            stdout_hook=self._stdout_hook,
+            stderr_hook=self._stderr_hook,
+            display_hook=self._display_hook,
+            exception_hook=self._exception_hook,
+            input_hook=self._input_hook
         )
         self.shell.update_namespace(
             st=st,
@@ -93,138 +278,134 @@ class Notebook:
         )
 
     @property
-    def current_cell(self):
+    def current_cell(self) -> Optional[Cell]:
         """
         The cell currently executing code.
 
         This property is used in the shell hooks to know where to direct outputs of execution
         """
         return self._current_cell
-    
+
     @current_cell.setter
-    def current_cell(self,value):
-        self._current_cell=value
+    def current_cell(self, value: Optional[Cell]) -> None:
+        self._current_cell = value
 
-    def notify(self, message, icon="ℹ️", delay=1.0):
-        """
-        Shows a toast notification and ensures it's visible before any pending rerun.
+    def notify(self, message: str, icon: str = "ℹ️", delay: float = 1.0) -> None:
+        """Show a toast notification with guaranteed visibility.
 
-        This is a convenience method that combines st.toast() with wait()
-        to ensure notifications are visible to the user.
+        This is a convenience method that combines ``st.toast()`` with :meth:`wait`
+        to ensure notifications are visible to the user before any rerun.
 
         Args:
-            message (str): The message to display in the toast
-            icon (str): The emoji icon to show. Defaults to "ℹ️"
-            delay (float): How long to ensure the toast is visible (seconds). Defaults to 1.0
+            message: The message to display in the toast.
+            icon: The emoji icon to show. Defaults to "ℹ️".
+            delay: How long to ensure the toast is visible (seconds). Defaults to 1.0.
 
         Examples:
-            self.notify("Saved successfully", icon="💾")
-            self.notify("Error occurred", icon="⚠️", delay=2.0)
+            From a code cell using ``__notebook__``::
+
+                __notebook__.notify("Saved successfully", icon="💾")
+                __notebook__.notify("Error occurred", icon="⚠️", delay=2.0)
+
+        See Also:
+            :meth:`wait`: Request delay before pending rerun
+            :meth:`rerun`: Trigger a rerun
         """
         st.toast(message, icon=icon)
-        wait(delay)
+        self.wait(delay)
 
-    def input_hook(self,code):
-        """
-        Shell hook called whenever code is inputted.
+    def _input_hook(self, code: str) -> None:
+        """Shell hook called whenever code is inputted (internal).
 
         Args:
-            code (str): The inputted code.
+            code: The inputted code.
         """
-        self.current_code=code
+        self.current_code = code
 
-    def get_current_code(self):
-        """
-        Returns the code being currently executed.
+    def _get_current_code(self) -> Optional[str]:
+        """Get the code being currently executed (internal).
 
         Returns:
-            str: The current code being executed.
+            The current code being executed.
         """
         return self.current_code
 
-    def stdout_hook(self,data,buffer):
-        """
-        Shell hook called whenever the shell attempts to write to stdout.
+    def _stdout_hook(self, data: str, buffer: str) -> None:
+        """Shell hook called whenever the shell writes to stdout (internal).
 
         Args:
-            data (str): The data being written to stdout.
-            buffer (str): The current content of the stdout buffer.
+            data: The data being written to stdout.
+            buffer: The current content of the stdout buffer.
         """
         if self.show_stdout and self.current_cell.ready:
             with self.current_cell.stdout_area:
                 if buffer:
-                    st.code(buffer,language="text")
+                    st.code(buffer, language="text")
 
-    def stderr_hook(self,data,buffer):
-        """
-        Shell hook called whenever the shell attempts to write to stderr.
+    def _stderr_hook(self, data: str, buffer: str) -> None:
+        """Shell hook called whenever the shell writes to stderr (internal).
 
         Args:
-            data (str): The data being written to stderr.
-            buffer (str): The current content of the stderr buffer.
+            data: The data being written to stderr.
+            buffer: The current content of the stderr buffer.
         """
         if self.show_stderr and self.current_cell.ready:
             with self.current_cell.stderr_area:
                 if buffer:
-                    st.code(buffer,language="text")
+                    st.code(buffer, language="text")
 
-    def display_hook(self,result):
-        """
-        Shell hook called whenever the shell attempts to display a result.
+    def _display_hook(self, result: Any) -> None:
+        """Shell hook called whenever the shell displays a result (internal).
 
         Args:
             result: The result to be displayed.
         """
         self.current_cell.results.append(result)
         if self.current_cell.ready:
-            with self.current_cell.output:    
+            with self.current_cell.output:
                 display(result)
 
-    def exception_hook(self,exception):
-        """
-        Shell hook called whenever the shell catches an exception.
+    def _exception_hook(self, exception: Exception) -> None:
+        """Shell hook called whenever the shell catches an exception (internal).
 
         Args:
-            exception (Exception): The caught exception.
+            exception: The caught exception.
         """
         if self.current_cell.ready:
             with self.current_cell.output:
-                formatted_traceback=f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
+                formatted_traceback = f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
                 st.error(formatted_traceback)
 
-    def show(self):
+    def _show(self) -> None:
+        """Render the notebook's UI (internal).
+
+        This method displays all components of the notebook including the logo,
+        sidebar, cells, and control bar. Delegates to the NotebookUI component.
+
+        Note:
+            This is an internal method. Use :meth:`render` for public API.
         """
-        Renders the notebook's UI.
+        self.ui.show()
 
-        This method is responsible for displaying all components of the notebook,
-        including the logo, sidebar, cells, and control bar.
+    def _render(self) -> None:
+        """Main rendering method called in each Streamlit run (internal).
+
+        Note:
+            This resets cells' 'has_run' state AFTER show() to prevent duplicate
+            execution. Streamlit callbacks fire at the beginning of the run, so
+            resetting before would cause cells to run twice.
         """
+        self.initialized = True
 
-        self.logo()        
-
-        self.sidebar()
-
-        for cell in list(self.cells): #list to prevent issues if cells are modified during iteration
-            cell.show()
-
-        self.control_bar()
-
-    def _render(self):
-        """
-        main rendering method called in each Streamlit run.
-        """
-
-        self.initialized=True
-
-        self.show()
+        self._show()
 
         # Though not very intuitive, resetting cells 'has_run' state AFTER show()
-        # instead of before ensures that a cell isn't executed twice in the same run 
+        # instead of before ensures that a cell isn't executed twice in the same run
         # Indeed, in Streamlit, callbacks triggered by UI events are fired AT THE VERY BEGINNING of the current run.
         # So if a callback caused a cell to run during this run, resetting 'has_run' before cells show in the for
         # loop would cause the cell to run AGAIN in the same run when we reach it in the loop.
         # Causing potential DuplicateWidgetID errors and other issues.
-        self.reset_run_states()
+        self._reset_run_states()
         check_rerun()
 
     def render(self):
@@ -270,207 +451,90 @@ class Notebook:
 
         # Normal render
         if 'notebook' not in state:
-            st.error("No notebook found in session state. Did you call notebook() first?")
+            st.error("No notebook found in session state. Did you call st_notebook() first?")
             return
 
         state.notebook._render()
 
-    def rerun(self):
-        rerun()
+    def rerun(self, delay: float = 0, no_wait: bool = False) -> None:
+        """Trigger a rerun of the notebook.
 
-    def sidebar(self):
+        This is the recommended way to trigger reruns in notebook cells,
+        as it integrates with the notebook's rerun strategy using the
+        ``wait()`` and ``check_rerun()`` helpers.
+
+        Args:
+            delay: Minimum delay in seconds before executing the rerun.
+                Defaults to 0. Note: This parameter is ignored when ``no_wait=True``.
+            no_wait: If True, execute the rerun immediately without waiting for
+                the current execution to complete, bypassing any pending delays.
+                Defaults to False.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Immediate rerun
+                __notebook__.rerun()
+
+                # Delayed rerun (useful after showing toast)
+                st.toast("Saved!", icon="💾")
+                __notebook__.rerun(delay=1.5)
+
+                # Force immediate rerun (if possible)
+                __notebook__.rerun(no_wait=True)
+
+            Or import directly::
+
+                from streamlit_notebook import rerun
+                rerun(delay=1.0)
+                rerun(no_wait=True)
+
+        Note:
+            Prefer this over ``st.rerun()`` to avoid disrupting the notebook's
+            UI lifecycle and rerun strategy.
+
+        See Also:
+            :func:`~streamlit_notebook.utils.rerun`: Underlying implementation
+            :meth:`wait`: Add delay without triggering rerun
         """
-        Renders the notebook's sidebar.
+        from .utils import rerun as utils_rerun
+        utils_rerun(delay=delay, no_wait=no_wait)
 
-        Chooses between app mode sidebar and notebook mode sidebar based on current state.
+    def wait(self, delay: float) -> None:
+        """Request a delay before any pending rerun.
+
+        Ensures that UI elements (like toasts) are visible for a specified
+        duration before the next rerun occurs.
+
+        Args:
+            delay: Minimum delay in seconds.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Show toast and ensure it's visible
+                st.toast("Processing...", icon="⚙️")
+                __notebook__.wait(2.0)
+
+            Or import directly::
+
+                from streamlit_notebook import wait
+                wait(1.5)
+
+        Note:
+            This is automatically called by :meth:`notify` to ensure
+            toast visibility.
+
+        See Also:
+            :func:`~streamlit_notebook.utils.wait`: Underlying implementation
+            :meth:`rerun`: Trigger a rerun
+            :meth:`notify`: Show toast with automatic wait
         """
-        if self.app_mode:
-            self.sidebar_app_mode()
-        else:
-            self.sidebar_notebook_mode()
-
-    def sidebar_app_mode(self):
-        """
-        Renders the app mode sidebar with minimal controls.
-
-        In app mode, users can only interact with the notebook, not edit it.
-        Shows execution controls and basic settings.
-        """
-        with st.sidebar:
-            st.image(root_join("app_images","st_notebook.png"),use_container_width=True)
-            st.divider()
-
-            st.text_input("Notebook title:",value=self.title,key="notebook_title_show",disabled=True)
-
-            # Open button with expandable section
-            if st.button("Open notebook", use_container_width=True, key="button_open_notebook_trigger"):
-                state.show_open_dialog = not state.get('show_open_dialog', False)
-
-            if state.get('show_open_dialog', False):
-                with st.container():
-                    self.open_notebook()
-
-            st.divider()
-
-            # Execution controls
-            st.markdown("**Execution**")
-            if st.button("▶️ Run Next Cell", use_container_width=True, key="app_run_next"):
-                self.run_next_cell()
-            if st.button("⏩​ Run All Cells", use_container_width=True, key="app_run_all"):
-                self.run_all_cells()
-            if st.button("🔄 Reset", use_container_width=True, key="app_reset_run"):
-                self.restart_session()
-
-
-            st.divider()
-
-            # Display settings
-            if not self.locked:
-                # In preview mode, allow toggling back to notebook mode
-                def on_toggle_app_mode():
-                    self.app_mode=not self.app_mode
-                st.toggle("App mode preview", value=True, on_change=on_toggle_app_mode, key="toggle_app_preview")
-
-            def on_change():
-                self.show_logo=not self.show_logo
-            st.toggle("Show logo",value=self.show_logo,on_change=on_change,key="toggle_show_logo_app")
-
-            st.divider()
-
-            if self.locked:
-                st.caption("🔒 Running in locked app mode")
-
-    def settings_popover(self):
-        """
-        Renders the technical settings popover.
-
-        Contains advanced settings like run on submit, display mode, stdout/stderr output.
-        """
-        with st.popover("⚙️ Settings", use_container_width=True):
-            def on_change():
-                self.run_on_submit=not self.run_on_submit
-            st.toggle("Run cell on submit",value=self.run_on_submit,on_change=on_change,key="toggle_run_on_submit")
-
-            def on_change():
-                self.shell.display_mode=state.select_display_mode
-            options=['all','last','none']
-            st.selectbox("Display mode", options=options,index=options.index(self.shell.display_mode),on_change=on_change,key="select_display_mode")
-
-            def on_change():
-                self.show_stdout=state.toggle_show_stdout
-            st.toggle("Show stdout output",value=self.show_stdout,on_change=on_change,key="toggle_show_stdout")
-
-            def on_change():
-                self.show_stderr=state.toggle_show_stderr
-            st.toggle("Show stderr output",value=self.show_stderr,on_change=on_change,key="toggle_show_stderr")
-
-    def sidebar_notebook_mode(self):
-        """
-        Renders the full development sidebar with all notebook controls.
-
-        In notebook mode, users have full access to editing, cell management,
-        and all configuration options.
-        """
-        with st.sidebar:
-            st.image(root_join("app_images","st_notebook.png"),use_container_width=True)
-            st.divider()
-            def on_title_change_edit():
-                self.title = state.notebook_title_edit
-            st.text_input("Notebook title:",value=self.title,key="notebook_title_edit",on_change=on_title_change_edit)
-
-            # Demo notebooks
-            if st.button("Demo notebooks", use_container_width=True, key="button_load_demo"):
-                self.load_demo()
-
-            # Save button
-            self.save_notebook()
-
-            # Open button with expandable section
-            if st.button("Open notebook", use_container_width=True, key="button_open_notebook_trigger"):
-                state.show_open_dialog = not state.get('show_open_dialog', False)
-
-            if state.get('show_open_dialog', False):
-                with st.container():
-                    self.open_notebook()
-
-            st.divider()
-
-            st.button("▶️​ Run next cell",on_click=self.run_next_cell,use_container_width=True,key="button_run_next_cell")
-            st.button("⏩ Run all cells",on_click=self.run_all_cells,use_container_width=True,key="button_run_all_cells")
-            st.button("🔄​ Restart session",on_click=self.restart_session,use_container_width=True,key="button_restart_session")
-            st.button("🗑️​ Clear all cells",on_click=self.clear_cells,use_container_width=True,key="button_clear_cells")
-
-            st.divider()
-
-            # App mode preview toggle (only if not locked)
-            if not self.locked:
-                def on_change():
-                    self.app_mode=not self.app_mode
-                st.toggle("App mode preview",value=self.app_mode,on_change=on_change, key="toggle_app_mode")
-
-            def on_change():
-                self.show_logo=not self.show_logo
-            st.toggle("Show logo",value=self.show_logo,on_change=on_change,key="toggle_show_logo")
-
-            st.divider()
-
-            # Technical settings in popover
-            self.settings_popover()
-
-    def logo(self):
-        """
-        Renders the app's logo.
-
-        Displays the notebook logo if show_logo is True.
-        """
-        if self.show_logo:
-            _,c,_=st.columns([40,40,40])
-            c.image(root_join("app_images","st_notebook.png"),use_container_width=True)
-
-    def control_bar(self):
-        """
-        Renders the notebooks "New XXX cell" buttons.
-
-        This bar allows users to add new code, markdown, or HTML cells to the notebook.
-        Only shown in notebook mode (not in app mode).
-        """
-        if not self.app_mode:
-            c1,c2,c3=st.columns(3)
-
-            code_button=c1.button("New code cell",use_container_width=True,key="new_code_cell_button")
-            mkdwn_button=c2.button("New Markdown cell",use_container_width=True,key="new_mkdwn_cell_button")
-            html_button=c3.button("New HTML cell",use_container_width=True,key="new_html_cell_button")
-
-            if code_button:
-                self.new_cell(type="code")
-            if mkdwn_button:
-                self.new_cell(type="markdown")
-            if html_button:
-                self.new_cell(type="html")
-
-    def load_demo(self):
-        """
-        UI method: Loads a demo notebook from the package's demo folder.
-        Provides user feedback via toast messages.
-        """
-        demo_folder = root_join("demo_notebooks")
-        demos = [f for f in os.listdir(demo_folder) if f.endswith('.py')]
-
-        def on_change():
-            if state.demo_choice:
-                filepath = os.path.join(demo_folder, state.demo_choice)
-                try:
-                    self.open(filepath)
-                    self.notify(f"Loaded demo: {state.demo_choice}", icon="📚")
-                except ValueError as e:
-                    self.notify(str(e), icon="⚠️")
-                except Exception as e:
-                    self.notify(f"Failed to load demo: {str(e)}", icon="⚠️")
-
-        st.selectbox("Choose a demo notebook.", options=demos, index=None, on_change=on_change, key="demo_choice")
+        from .utils import wait as utils_wait
+        utils_wait(delay)
 
     @staticmethod
-    def is_valid_notebook(source):
+    def is_valid_notebook(source: str) -> bool:
         """
         Checks if a source (file path or code string) is a valid notebook.
 
@@ -496,22 +560,6 @@ class Notebook:
 
         except Exception:
             return False
-
-    def save_notebook(self):
-        """
-        UI method: Saves the current notebook to a .py file in the current working directory.
-        Provides user feedback via toast messages.
-        """
-        def on_click():
-            filename = f"{self.title}.py"
-            filepath = os.path.join(os.getcwd(), filename)
-            try:
-                self.save(filepath)
-                self.notify(f"Saved to {filepath}", icon="💾")
-            except Exception as e:
-                self.notify(f"Failed to save: {str(e)}", icon="⚠️")
-
-        st.button("Save notebook", use_container_width=True, key="button_save_notebook", on_click=on_click)
 
     def open(self, source):
         """
@@ -554,110 +602,63 @@ class Notebook:
         # Rerun to execute the new script (with delay to show toast if called from UI)
         rerun(delay=1.5)
 
-    def open_notebook(self):
-        """
-        UI method: Opens a notebook .py file from the current working directory or via file upload.
-        Provides user feedback via toast messages.
-        """
-        # File uploader for drag and drop (only if not locked)
-        if not self.locked:
-            uploaded_file = st.file_uploader(
-                "📎 Drop a notebook file here or browse",
-                type=['py'],
-                key="notebook_file_uploader",
-                help="Upload a .py notebook file"
-            )
+    def clear_cells(self) -> None:
+        """Delete all cells in the notebook.
 
-            if uploaded_file is not None:
-                try:
-                    # Read the uploaded file
-                    code = uploaded_file.read().decode('utf-8')
+        Removes all cells from the notebook, resetting it to an empty state.
+        This is a public API method accessible from code cells.
 
-                    # Open the notebook from the code string
-                    self.open(code)
-                    self.notify(f"Opened notebook: {uploaded_file.name}", icon="📂")
-                    # Close the open dialog
-                    state.show_open_dialog = False
-                except ValueError as e:
-                    self.notify(str(e), icon="⚠️")
-                except Exception as e:
-                    self.notify(f"Failed to open uploaded file: {str(e)}", icon="⚠️")
+        Provides user feedback via toast notification.
 
-        # Existing selectbox for local files
-        cwd = os.getcwd()
-        all_files = [f for f in os.listdir(cwd) if f.endswith('.py')]
+        Examples:
+            From a code cell using ``__notebook__``::
 
-        # Filter .py files to only show those that look like notebooks
-        notebook_files = []
-        for f in all_files:
-            filepath = os.path.join(cwd, f)
-            if self.is_valid_notebook(filepath):
-                notebook_files.append(f)
-
-        if not notebook_files:
-            st.info("No notebook files (.py) found in current directory")
-            return
-
-        def on_change():
-            if state.open_notebook_choice:
-                filepath = os.path.join(cwd, state.open_notebook_choice)
-                try:
-                    self.open(filepath)
-                    self.notify(f"Opened notebook: {state.open_notebook_choice}", icon="📂")
-                    # Close the open dialog
-                    state.show_open_dialog = False
-                except ValueError as e:
-                    self.notify(str(e), icon="⚠️")
-                except Exception as e:
-                    self.notify(f"Failed to open: {str(e)}", icon="⚠️")
-
-        st.selectbox(
-            "Or select from current directory",
-            options=notebook_files,
-            index=None,
-            on_change=on_change,
-            key="open_notebook_choice"
-        )
-
-    def clear_cells(self):
-        """
-        Deletes all cells in the notebook.
-
-        This method removes all cells from the notebook, resetting it to an empty state.
-        Provides user feedback via toast.
+                # Clear all cells programmatically
+                __notebook__.clear_cells()
         """
         count = len(self.cells)
         self.cells = []
         self.notify(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
         rerun()
 
-    def reset_run_states(self):
-        """
-        Resets all cells in the notebook.
+    def _reset_run_states(self) -> None:
+        """Reset run states for all cells (internal).
 
-        This method clears the outputs and state of all cells without deleting them.
+        This method resets the has_run flag without deleting cells.
+
+        Note:
+            This is an internal method called during render cycle.
         """
         for cell in self.cells:
-            cell.has_run=False
+            cell.has_run = False
 
-    def reset_cells(self):
-        """
-        Resets all cells in the notebook.
+    def _reset_cells(self) -> None:
+        """Reset all cells in the notebook (internal).
 
         This method clears the outputs and state of all cells without deleting them.
+
+        Note:
+            This is an internal method. Use :meth:`restart_session` for public API.
         """
         for cell in self.cells:
             cell.reset()
 
-    def run_all_cells(self):
-        """
-        (Re)Runs all the cells in the notebook.
+    def run_all_cells(self) -> None:
+        """Run all cells in the notebook.
 
-        This method executes all cells in the notebook in order, updating their outputs.
-        Provides user feedback via toast.
+        Executes all cells that haven't been run yet in order, updating their outputs.
+        This is a public API method accessible from code cells.
+
+        Provides user feedback via toast notification.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Run all cells programmatically
+                __notebook__.run_all_cells()
         """
         count = 0
-        for cell in self.cells:
+        for cell in list(self.cells):  # Convert to list to avoid modification during iteration
             if not cell.has_run_once:
                 cell.run()
                 count += 1
@@ -667,13 +668,22 @@ class Notebook:
         else:
             self.notify("All cells already executed", icon="✅")
 
-    def run_next_cell(self):
-        """
-        Runs the first cell that hasn't been run yet.
-        Provides user feedback via toast.
+    def run_next_cell(self) -> None:
+        """Run the next unexecuted cell.
+
+        Executes the first cell that hasn't been run yet.
+        This is a public API method accessible from code cells.
+
+        Provides user feedback via toast notification.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Run next cell programmatically
+                __notebook__.run_next_cell()
         """
         executed = False
-        for cell in self.cells:
+        for cell in list(self.cells):
             if not cell.has_run_once:
                 cell.run()
                 executed = True
@@ -683,44 +693,66 @@ class Notebook:
         if not executed:
             self.notify("All cells have been executed", icon="✅")
 
-    def restart_session(self):
+    def restart_session(self) -> None:
+        """Restart the Python session and reset all cells.
+
+        This public method clears all cell outputs and reinitializes the
+        execution environment, providing a fresh start.
+
+        Provides user feedback via toast notification.
         """
-        Restarts the Python session and resets all cells.
-        Provides user feedback via toast.
-        """
-        self.reset_cells()
-        self.init_shell()
+        self._reset_cells()
+        self._init_shell()
         self.notify("Session restarted", icon="🔄")
         rerun()
 
-    def get_cell(self,rank_or_key):
-        """
-        Finds a cell given either its rank or unique key
+    def get_cell(self, rank_or_key: int | str) -> Optional[Cell]:
+        """Find a cell by rank or unique key.
+
+        Retrieves a cell from the notebook using either its position (rank)
+        or its unique identifier (key). This is a public API method accessible
+        from code cells.
 
         Args:
-            rank_or_key (int or str): the int rank or 4 char string key of the cell.
+            rank_or_key: Either the integer rank (0-indexed position) or
+                the 4-character string key of the cell.
+
         Returns:
-            (Cell): the corresponding cell, or None if not found
+            The corresponding cell, or None if not found.
+
+        Raises:
+            TypeError: If rank_or_key is neither int nor str.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Get cell by rank
+                cell = __notebook__.get_cell(0)
+
+                # Get cell by key
+                cell = __notebook__.get_cell("a1b2")
         """
-        if isinstance(rank_or_key,int):
-            if rank_or_key<len(self.cells):
+        if isinstance(rank_or_key, int):
+            if rank_or_key < len(self.cells):
                 return self.cells[rank_or_key]
             else:
                 return None
-        elif isinstance(rank_or_key,str):
+        elif isinstance(rank_or_key, str):
             for cell in self.cells:
-                if cell.key==rank_or_key:
+                if cell.key == rank_or_key:
                     return cell
             return None
         else:
             raise TypeError("rank_or_key must be either int or str.")
 
-    def gen_cell_key(self):
-        """
-        Generates a unique key for the cell.
+    def _gen_cell_key(self) -> str:
+        """Generate a unique key for a cell (internal).
 
         Returns:
-            str: A unique string ID for the cell
+            A unique string ID for the cell (4 characters).
+
+        Note:
+            This is an internal method used by :meth:`new_cell`.
         """
         from .utils import short_id
         # Generate unique short_id (collision is extremely unlikely but check anyway)
@@ -729,21 +761,41 @@ class Notebook:
             if not any(cell.key == key for cell in self.cells):
                 return key
 
-    def new_cell(self,type="code",code="",reactive=False,fragment=False):
-        """
-        Adds a new cell of the chosen type at the bottom of the notebook.
+    def new_cell(
+        self,
+        type: Literal["code", "markdown", "html"] = "code",
+        code: str = "",
+        reactive: bool = False,
+        fragment: bool = False
+    ) -> Cell:
+        """Add a new cell to the notebook.
+
+        Creates a new cell of the specified type and appends it to the notebook.
+        This is a public API method for programmatic cell creation from code cells.
 
         Args:
-            type (str): The type of cell to create ("code", "markdown", or "html").
-            code (str): Initial code or content for the cell.
-            reactive (bool): If True, the cell will automatically re-run when changed.
-            fragment (bool): If True, the cell will run as a Streamlit fragment.
+            type: The type of cell to create ("code", "markdown", or "html").
+                Defaults to "code".
+            code: Initial code or content for the cell. Defaults to empty string.
+            reactive: If True, the cell will automatically re-run when changed.
+                Defaults to False.
+            fragment: If True, the cell will run as a Streamlit fragment.
+                Defaults to False.
 
         Returns:
-            Cell: The newly created cell object.
+            The newly created cell object.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Create a new code cell
+                __notebook__.new_cell(type="code", code="import pandas as pd")
+
+                # Create a markdown cell
+                __notebook__.new_cell(type="markdown", code="# My Title")
         """
-        key=self.gen_cell_key()
-        cell=new_cell(self,key,type=type,code=code,reactive=reactive,fragment=fragment)
+        key = self._gen_cell_key()
+        cell = new_cell(self, key, type=type, code=code, reactive=reactive, fragment=fragment)
         self.cells.append(cell)
         rerun()
         return cell
@@ -785,7 +837,7 @@ class Notebook:
                 # Extract docstring for markdown and html cells
                 code=dedent(inspect.getdoc(func) or "")
             else:
-                source=self.get_source(func)
+                source=self._get_source(func)
                 # source includes the function definition line (def my_function():)
                 # we need to remove it to get the actual function body
                 # skipping first line only
@@ -803,21 +855,23 @@ class Notebook:
             return self.new_cell(type=type,code=code,reactive=reactive,fragment=fragment)
         return decorator
     
-    def get_source(self, func):
-        """
-        Extracts the source code from a function for @nb.cell() decorator.
+    def _get_source(self, func: Callable) -> str:
+        """Extract source code from a function for @cell decorator (internal).
 
-        The @nb.cell() decorator is only intended for use in Python script files,
+        The @cell decorator is only intended for use in Python script files,
         not for interactive shell usage.
 
         Args:
-            func (function): The function from which to extract the source code.
+            func: The function from which to extract the source code.
 
         Returns:
-            str: The source code of the function.
+            The source code of the function.
 
         Raises:
             ValueError: If the function is not defined in a valid context.
+
+        Note:
+            This is an internal method used by the :meth:`cell` decorator.
         """
         import ast
 
@@ -864,27 +918,44 @@ class Notebook:
             f"Could not find function '{func.__name__}' in source code"
         )
     
-    def to_python(self):
-        """
-        Converts the whole notebook to a Python script.
-        the script recreates the notebook structure using the @cell decorator.
-        the file can be run as a standard Streamlit app.
+    def _format_cell_content(self, cell: Cell) -> str:
+        """Format a cell's content for the @cell decorator.
+
+        Args:
+            cell: The cell to format.
 
         Returns:
-            str: A Python script representation of the notebook.
+            Formatted cell function body as a string.
         """
-        lines=[]
-        lines.append("# Generated by Streamlit Notebook")
-        lines.append(f"# Original notebook: {self.title}")
-        lines.append("# This file can be run directly with: streamlit run <filename>")
-        lines.append("")
-        lines.append("from streamlit_notebook import st_notebook")
-        lines.append("import streamlit as st")
-        lines.append("")
-        lines.append("st.set_page_config(page_title=\"st.notebook\", layout=\"centered\", initial_sidebar_state=\"collapsed\")")
-        lines.append("")
+        if cell.code.strip() == "":
+            return "    pass"
 
-        # Only include non-default parameters
+        if cell.type in ("markdown", "html"):
+            # Handle triple quotes properly for docstrings
+            content = dedent(cell.code)
+            if "'''" in content and '"""' not in content:
+                # Use double quotes
+                return indent(f'r"""\n{content}\n"""', "    ")
+            elif '"""' in content and "'''" not in content:
+                # Use single quotes
+                return indent(f"r'''\n{content}\n'''", "    ")
+            elif "'''" in content and '"""' in content:
+                # Both present - escape double quotes
+                content = content.replace('"""', r'\"\"\"')
+                return indent(f'r"""\n{content}\n"""', "    ")
+            else:
+                # Neither present - use single quotes by default
+                return indent(f"r'''\n{content}\n'''", "    ")
+        else:
+            # Code cell - indent the code
+            return indent(dedent(cell.code), "    ")
+
+    def _get_notebook_params(self) -> str:
+        """Get non-default notebook parameters as a formatted string.
+
+        Returns:
+            Comma-separated string of non-default parameters for st_notebook().
+        """
         defaults = {
             'title': 'new_notebook',
             'app_mode': False,
@@ -894,61 +965,68 @@ class Notebook:
             'show_stdout': True,
             'show_stderr': False
         }
-        params = dict(
-            title=self.title,
-            app_mode=self.app_mode,
-            locked=self.locked,
-            run_on_submit=self.run_on_submit,
-            show_logo=self.show_logo,
-            show_stdout=self.show_stdout,
-            show_stderr=self.show_stderr
-        )
-        params_str = ", ".join([
+        params = {
+            'title': self.title,
+            'app_mode': self.app_mode,
+            'locked': self.locked,
+            'run_on_submit': self.run_on_submit,
+            'show_logo': self.show_logo,
+            'show_stdout': self.show_stdout,
+            'show_stderr': self.show_stderr
+        }
+        return ", ".join(
             f"{k}={repr(v)}"
             for k, v in params.items()
             if v != defaults.get(k)
-        ])
-        lines.append(f"nb = st_notebook({params_str})")
+        )
 
-        # Use @cell decorator to recreate cells from functions
-        # Cells are already in order in the list
+    def _format_cells(self) -> str:
+        """Format all cells as @cell decorator functions.
+
+        Returns:
+            Formatted string containing all cell definitions.
+        """
+        cell_defs = []
         for cell in self.cells:
-            if cell.type in ("markdown", "html"):
-                lines.append("")
-                lines.append(f"@nb.cell(type='{cell.type}', reactive={cell.reactive}, fragment={cell.fragment})")
-                lines.append("def cell_{}():".format(cell.rank))
-                if cell.code.strip() == "":
-                    lines.append("    pass")
-                else:
-                    # Handle triple quotes properly
-                    content = dedent(cell.code)
-                    if "'''" in content and '"""' not in content:
-                        # Use double quotes
-                        template = 'r"""\n{content}\n"""'
-                    elif '"""' in content and "'''" not in content:
-                        # Use single quotes
-                        template = "r'''\n{content}\n'''"
-                    elif "'''" in content and '"""' in content:
-                        # Both present - escape double quotes
-                        content = content.replace('"""', r'\"\"\"')
-                        template = 'r"""\n{content}\n"""'
-                    else:
-                        # Neither present - use single quotes by default
-                        template = "r'''\n{content}\n'''"
-                    lines.append(indent(template.format(content=content), "    "))
-            else:  # code cell
-                lines.append("")
-                lines.append(f"@nb.cell(type='code', reactive={cell.reactive}, fragment={cell.fragment})")
-                lines.append("def cell_{}():".format(cell.rank))
-                if cell.code.strip() == "":
-                    lines.append("    pass")
-                else:
-                    lines.append(indent(dedent(cell.code), "    "))
+            cell_def = dedent(f"""
+            @nb.cell(type='{cell.type}', reactive={cell.reactive}, fragment={cell.fragment})
+            def cell_{cell.rank}():
+            {self._format_cell_content(cell)}
+            """)
+            cell_defs.append(cell_def)
+        return "\n".join(cell_defs)
 
-        lines.append("")
-        lines.append("# Render the notebook")
-        lines.append("nb.render()")
-        return "\n".join(lines)
+    def to_python(self) -> str:
+        """Convert the notebook to a Python script.
+
+        The script recreates the notebook structure using the @cell decorator
+        and can be run as a standard Streamlit app.
+
+        Returns:
+            A Python script representation of the notebook.
+        """
+        template = dedent("""\
+            # Generated by Streamlit Notebook
+            # Original notebook: {title}
+            # This file can be run directly with: streamlit run <filename>
+
+            from streamlit_notebook import st_notebook
+            import streamlit as st
+
+            st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
+
+            nb = st_notebook({params})
+            {cells}
+
+            # Render the notebook
+            nb.render()"""
+        )
+
+        return template.format(
+            title=self.title,
+            params=self._get_notebook_params(),
+            cells=self._format_cells()
+        )
     
     def save(self,filepath=None):
         """
@@ -963,44 +1041,102 @@ class Notebook:
         with open(filepath,'w') as f:
             f.write(self.to_python())
 
-    def delete_cell(self,key):
-        """
-        Deletes a cell given its key.
+    def delete_cell(self, key: str) -> None:
+        """Delete a cell by its unique key.
+
+        Removes a cell from the notebook given its unique identifier.
+        This is a public API method accessible from code cells.
 
         Args:
-            key: The unique identifier of the cell to be deleted.
+            key: The unique 4-character identifier of the cell to delete.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Delete a cell by key
+                __notebook__.delete_cell("a1b2")
         """
         cell = next((c for c in self.cells if c.key == key), None)
         if cell:
             cell.delete()
 
 def st_notebook(
-    title="new_notebook",
-    app_mode=False,
-    locked=False,
-    run_on_submit=True,
-    show_logo=True,
-    show_stdout=True,
-    show_stderr=False
+    title: str = "new_notebook",
+    app_mode: bool = False,
+    locked: bool = False,
+    run_on_submit: bool = True,
+    show_logo: bool = True,
+    show_stdout: bool = True,
+    show_stderr: bool = False
 ) -> Notebook:
-    """
-    Retrieves the current notebook from state or creates a new one.
+    """Get or create a notebook instance with session state management.
 
-    If a notebook exists but its parameters don't match the requested ones,
-    it will be recreated. This ensures that when switching notebooks (e.g.,
-    in direct run mode), the new notebook's parameters are applied correctly.
+    This is the main factory function for creating notebooks. It manages notebook
+    instances in Streamlit's session state, ensuring singleton behavior and proper
+    parameter updates.
+
+    The function automatically detects deployment mode via:
+        - ``--app`` command-line flag
+        - ``ST_NOTEBOOK_APP_MODE`` environment variable
+
+    When either is detected, it overrides parameters to set ``app_mode=True`` and
+    ``locked=True`` for secure production deployment.
 
     Args:
-        title (str): The title of the notebook.
-        app_mode (bool): If True, starts in app mode (code cells hidden, minimal UI).
-        locked (bool): If True, locks the notebook in app mode (prevents toggling back to notebook mode).
-        run_on_submit (bool): If True, cells are executed immediately upon submission.
-        show_logo (bool): If True, the notebook logo is displayed.
-        show_stdout (bool): If True, stdout output is shown.
-        show_stderr (bool): If True, stderr output is shown.
+        title: The notebook title displayed in the UI and used for filenames.
+            Defaults to "new_notebook".
+        app_mode: If True, hides code editor for clean app view.
+            Overridden to True if ``--app`` flag or env var is set.
+            Defaults to False.
+        locked: If True, prevents toggling out of app mode. Overridden to True
+            in deployment mode. Defaults to False.
+        run_on_submit: If True, cells execute immediately when code changes.
+            Defaults to True.
+        show_logo: If True, displays the streamlit-notebook logo. Defaults to True.
+        show_stdout: If True, displays stdout output from cells. Defaults to True.
+        show_stderr: If True, displays stderr output from cells. Defaults to False.
 
     Returns:
-        Notebook: The current or newly created Notebook object.
+        The :class:`Notebook` instance from session state, created if it doesn't exist
+        or recreated if parameters don't match the existing notebook.
+
+    Note:
+        If a notebook already exists and is initialized (has cells), changing parameters
+        won't recreate it. Parameters only apply when creating a fresh notebook.
+
+    Examples:
+        Basic notebook creation::
+
+            from streamlit_notebook import st_notebook
+
+            nb = st_notebook(title="My Notebook")
+
+            @nb.cell(type='code')
+            def hello():
+                import streamlit as st
+                st.write("Hello!")
+
+            nb.render()
+
+        Production deployment (locked app mode)::
+
+            # Run with: st_notebook my_app.py --app
+            # or set: ST_NOTEBOOK_APP_MODE=true
+
+            nb = st_notebook(title="Dashboard")
+            # Automatically becomes app_mode=True, locked=True
+
+        Debug mode::
+
+            nb = st_notebook(
+                title="Debug Session",
+                show_stderr=True,
+                run_on_submit=False  # Manual execution for debugging
+            )
+
+    See Also:
+        :class:`Notebook`: The notebook class documentation
+        :meth:`Notebook.render`: Render the notebook UI
     """
     import sys
 
@@ -1045,13 +1181,44 @@ def st_notebook(
 
 _original_set_page_config = st.set_page_config
 
-def set_page_config(*args, **kwargs):
-    """
-    Patched version of st.set_page_config that only runs during exec context.
+def set_page_config(*args: Any, **kwargs: Any) -> None:
+    """Context-aware wrapper for st.set_page_config.
 
-    When a notebook is run directly via 'streamlit run notebook.py', this becomes
-    a no-op. When nb.render() re-execs the script with __file__ = '<notebook_script>',
-    the actual page config is set. This makes <notebook_script> the canonical execution context.
+    This patched version of Streamlit's ``set_page_config`` only executes during
+    the notebook's exec context, preventing duplicate page config calls.
+
+    When a notebook file is run directly via ``streamlit run notebook.py``, the
+    ``st.set_page_config`` call in the user's script is skipped. When ``nb.render()``
+    re-executes the script in the ``<notebook_script>`` context, the page config
+    is applied. This ensures configuration happens exactly once, in the correct context.
+
+    Args:
+        *args: Positional arguments passed to ``st.set_page_config``.
+        **kwargs: Keyword arguments passed to ``st.set_page_config``.
+
+    Note:
+        This function is automatically patched into Streamlit's API when the
+        notebook module is imported. Users don't need to call this directly;
+        just use ``st.set_page_config()`` normally in notebook files.
+
+    Examples:
+        Normal usage in notebook file::
+
+            import streamlit as st
+            from streamlit_notebook import st_notebook
+
+            # This will only execute in the correct context
+            st.set_page_config(
+                page_title="My Notebook",
+                layout="wide",
+                initial_sidebar_state="collapsed"
+            )
+
+            nb = st_notebook()
+            # ... rest of notebook
+
+    See Also:
+        :meth:`Notebook.render`: The render method that creates the exec context
     """
     # Check if running from exec context (via <notebook_script>)
     frame = inspect.currentframe()

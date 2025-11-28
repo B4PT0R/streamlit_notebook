@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.1.6"
+version = "0.1.7"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -56,3 +56,44 @@ streamlit_notebook = [
 
 [tool.setuptools.packages.find]
 include = ["streamlit_notebook*"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "streamlit.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "asttokens.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "code_editor.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "matplotlib.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "seaborn.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "plotly.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "bokeh.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydeck.*"
+ignore_missing_imports = true

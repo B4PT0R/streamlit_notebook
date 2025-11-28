@@ -4,7 +4,6 @@
 compile_package.py
 compiled/
 all.txt
-docs/
 
 
 # Byte-compiled / optimized / DLL files
@@ -77,6 +76,9 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/_static/
+docs/_templates/
+*.doctree
 
 # PyBuilder
 target/
