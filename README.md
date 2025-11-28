@@ -611,7 +611,7 @@ def ai(prompt):
 %ai Please create a dashboard to let me analyze the iris dataset using seaborn
 ```
 
-A real life implementation would obviously be much more sophisticated, involving agentic tools and so on, but you get the basic idea. 
+A real life implementation would obviously be much more sophisticated, involving agentic tools operating various aspects of the notebbok, and so on, but you get the basic idea. 
 
 This level of programmatic control is quite unique to streamlit-notebook and enables workflows not easily achievable in Jupyter or traditional notebooks.
 
