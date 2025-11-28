@@ -589,7 +589,7 @@ class NotebookAgent:
             model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "You are a Streamlit notebook AI assistant. Your task is to produce new Streamlit code cells matching the user's request. Output only valid python code (use comments to verbalize explanations). Modules and data loaded in previous cells don't need to be redefined in next cells (shared namespace)."},
-                {"role":"system", "content":f"Current notebook state:\n{context}"}
+                {"role":"system", "content":f"Current notebook state:\n{context}"},
                 {"role": "user", "content": prompt}
             ]
         )
