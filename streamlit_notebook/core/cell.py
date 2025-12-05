@@ -221,16 +221,19 @@ class Cell:
     @property
     def should_run(self) -> bool:
         """
-        Checks if the cell should run (has run once OR run was requested).
+        Checks if the cell should run (has run once OR run was requested) AND hasn't run this turn.
 
         This property extends has_run_once to also consider deferred run requests,
         allowing reactive cells to execute on next turn when they couldn't run
         during current turn due to widget duplication concerns.
 
+        The additional check for not self.has_run prevents double execution when
+        a reactive cell has already been run this turn (e.g., via callback or early execution).
+
         Returns:
-            bool: True if the cell has run once with current code OR a run was requested
+            bool: True if (cell has run once with current code OR a run was requested) AND hasn't run this turn
         """
-        return self.has_run_once or self.run_requested
+        return (self.has_run_once or self.run_requested) and not self.has_run
 
     @should_run.setter
     def should_run(self, value: Any) -> None:
