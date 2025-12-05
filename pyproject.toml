@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.2.11"
+version = "0.2.12"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -102,7 +102,7 @@ streamlit_notebook = [
 include = ["streamlit_notebook*"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "0.2.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
