@@ -756,13 +756,19 @@ print(python_code)  # Shows the @nb.cell decorated version
 
 #### Inspecting Notebook State
 
-Get complete JSON serializable state of the notebook, including all informations about cells and their execution state:
+Get complete JSON-serializable state of the notebook, including all information about cells and their execution state:
 
 ```python
-# Get full state of all cells (includes outputs and metadata)
-state = nb.get_cells_state()  # minimal=False by default
+# Get full notebook info (includes notebook settings and cell states)
+info = nb.get_info()  # minimal=False by default
 
-for cell_state in state:
+# Access notebook metadata
+print(f"Notebook: {info['notebook']['title']}")
+print(f"Cell count: {info['notebook']['cell_count']}")
+print(f"App mode: {info['notebook']['app_mode']}")
+
+# Iterate through cells
+for cell_state in info['cells']:
     print(f"Cell {cell_state['id']} ({cell_state['type']}):")
     print(f"  Has run: {cell_state['has_run_once']}")
     print(f"  Code length: {len(cell_state['code'])} chars")
@@ -773,15 +779,22 @@ for cell_state in state:
     if cell_state.get('exception'):
         print(f"  Error: {cell_state['exception']['message']}")
 
-# Get individual cell with full state
+# Get minimal info (only cell definitions, no execution state)
+minimal_info = nb.get_info(minimal=True)
+# Includes: notebook metadata + minimal cell data (key, type, code, reactive, fragment)
+
+# Get individual cell state
 cell = nb.cells[0]
 full_state = cell.to_dict(minimal=False)
 # Includes: id, index, language, has_run_once, visible, stdout,
 # stderr, results, exception
 
-# Get minimal cell definition (for saving)
 minimal_state = cell.to_dict()  # minimal=True by default
 # Only: key, type, code, reactive, fragment
+
+# Serialize to JSON for AI agents or external tools
+import json
+context = json.dumps(nb.get_info(), indent=2)
 ```
 
 #### API Reference
@@ -789,7 +802,7 @@ minimal_state = cell.to_dict()  # minimal=True by default
 **Notebook Methods:**
 - `new_cell(type, code, reactive, fragment)` - Create a new cell
 - `get_cell(index_or_key)` - Get cell by position or key
-- `get_cells_state(minimal)` - Get state of all cells as list of dicts (default: full state)
+- `get_info(minimal)` - Get complete notebook info including settings and cell states (default: full state)
 - `delete_cell(key)` - Remove a cell by key
 - `clear_cells()` - Remove all cells
 - `run_all_cells()` - Execute all cells in order
