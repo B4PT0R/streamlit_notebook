@@ -475,11 +475,13 @@ def show_chat():
             st.audio_input("Record your voice", key=state.setdefault('audio_input_key',f"audio_input_{short_id()}"), on_change=on_change, width=47, label_visibility="collapsed")
         # file upload
         with st.container(width='stretch'):
-            files=st.file_uploader("Upload files", key="file_uploader", label_visibility="collapsed", accept_multiple_files=True)
-            if files and files!=state.setdefault('uploaded_files',None):
-                state.uploaded_files=files
-                for file in files:
-                    state.agent.upload_file(file)
+            def on_change():
+                uploaded_files=state[state.file_uploader_key]
+                state.file_uploader_key=f"file_uploader_{short_id()}"
+                if isinstance(uploaded_files,list):
+                    for file in uploaded_files:   
+                        state.agent.upload_file(file)
+            st.file_uploader("Upload files", key=state.setdefault("file_uploader_key",f"file_uploader_{short_id()}"), on_change=on_change, label_visibility="collapsed", accept_multiple_files=True)
     
     with state.stream_area:
         try:
