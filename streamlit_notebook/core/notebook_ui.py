@@ -332,26 +332,53 @@ class NotebookUI:
         st.selectbox("Choose a demo notebook.", options=demos, index=None, on_change=on_change, key="demo_choice")
 
     def save_notebook(self) -> None:
-        """Render the save notebook button.
+        """Render the save notebook button with menu.
 
-        Creates a button that saves the notebook to a ``.py`` file in the current
-        working directory. The filename is based on the notebook title.
+        Creates a button that toggles a menu with two save options:
+            1. Save Locally - saves to current working directory
+            2. Download - downloads the ``.py`` file through browser
+
+        The filename is based on the notebook title.
 
         Provides user feedback via toast notifications for success and errors.
 
         See Also:
             :meth:`~streamlit_notebook.notebook.Notebook.save`: Core save logic
         """
-        def on_click():
-            filename = f"{self.notebook.title}.py"
-            filepath = os.path.join(os.getcwd(), filename)
-            try:
-                self.notebook.save(filepath)
-                self.notebook.notify(f"Saved to {filepath}", icon="💾")
-            except Exception as e:
-                self.notebook.notify(f"Failed to save: {str(e)}", icon="⚠️")
+        # Toggle button to show/hide save options
+        if st.button("Save notebook", width='stretch', key="button_save_notebook_trigger"):
+            state.show_save_dialog = not state.get('show_save_dialog', False)
 
-        st.button("Save notebook", width='stretch', key="button_save_notebook", on_click=on_click)
+        if state.get('show_save_dialog', False):
+            with st.container():
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # Save Locally button
+                    def on_save_locally():
+                        filename = f"{self.notebook.title}.py"
+                        filepath = os.path.join(os.getcwd(), filename)
+                        try:
+                            self.notebook.save(filepath)
+                            self.notebook.notify(f"Saved to {filepath}", icon="💾")
+                        except Exception as e:
+                            self.notebook.notify(f"Failed to save: {str(e)}", icon="⚠️")
+
+                    st.button("💾 Save Locally", width='stretch', key="button_save_locally", on_click=on_save_locally)
+
+                with col2:
+                    # Download button
+                    filename = f"{self.notebook.title}.py"
+                    python_code = self.notebook.to_python()
+
+                    st.download_button(
+                        label="⬇️ Download",
+                        data=python_code,
+                        file_name=filename,
+                        mime="text/x-python",
+                        key="button_download_notebook",
+                        use_container_width=True
+                    )
 
     def open_notebook(self) -> None:
         """Render the open notebook dialog.
