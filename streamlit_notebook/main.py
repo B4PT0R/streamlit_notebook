@@ -62,7 +62,7 @@ def get_default_notebook_template() -> str:
 
     Note:
         If app mode is detected, the template includes ``app_mode=True``
-        and ``locked=True`` parameters for production deployment.
+        parameter for production deployment (locked in app view).
     """
     # Check for app mode via environment variable or --app flag
     app_mode = os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true' or '--app' in sys.argv
@@ -71,7 +71,6 @@ def get_default_notebook_template() -> str:
     params.append("title='new_notebook'")
     if app_mode:
         params.append("app_mode=True")
-        params.append("locked=True")
 
     params_str = ", ".join(params)
 

@@ -4,12 +4,13 @@ This module contains all UI-related methods for the Notebook class,
 separated from the core notebook logic for better code organization.
 
 The :class:`NotebookUI` class handles:
-    - Sidebar rendering (app mode and notebook mode)
+    - Sidebar rendering (app mode, notebook mode, and chat mode)
     - Logo display
     - Control bars for adding cells
     - Settings popover
     - Demo notebook loading UI
     - Save/open dialogs
+    - AI Assistant chat interface
 
 See Also:
     :class:`~streamlit_notebook.notebook.Notebook`: Core notebook orchestration
@@ -22,6 +23,7 @@ from typing import TYPE_CHECKING
 import streamlit as st
 import os
 from .utils import root_join, state
+from .chat import show_chat, init_chat, avatar, show_message
 
 if TYPE_CHECKING:
     from .notebook import Notebook
@@ -60,17 +62,21 @@ class NotebookUI:
 
         This method displays all components in the correct order:
             1. Logo (if enabled)
-            2. Sidebar (app or notebook mode)
+            2. Sidebar (app, notebook, or chat mode)
             3. Cells (delegated to each cell)
             4. Control bar (in notebook mode)
         """
+
         self.logo()
-        self.sidebar()
 
         for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
             cell.show()
 
         self.control_bar()
+
+        # we draw the sidebar after the cells so that any long running operation from the sidebar (eg. chat) does not block the main UI
+        # the user may thus look at the cells while the agent explains the code
+        self.sidebar()
 
     def logo(self) -> None:
         """Render the notebook logo.
@@ -80,15 +86,18 @@ class NotebookUI:
         """
         if self.notebook.show_logo:
             _, c, _ = st.columns([40, 40, 40])
-            c.image(root_join("app_images", "st_notebook.png"), use_container_width=True)
+            c.image(root_join("app_images", "st_notebook.png"), width='stretch')
 
     def sidebar(self) -> None:
         """Render the appropriate sidebar based on mode.
 
-        Delegates to either :meth:`sidebar_app_mode` or :meth:`sidebar_notebook_mode`
-        depending on the current ``notebook.app_mode`` setting.
+        Delegates to either :meth:`sidebar_app_mode`, :meth:`sidebar_notebook_mode`,
+        or :meth:`sidebar_chat_mode` depending on the current mode settings.
         """
-        if self.notebook.app_mode:
+        # Check if chat mode is active
+        if state.get('chat_mode', False):
+            self.sidebar_chat_mode()
+        elif self.notebook.app_view:
             self.sidebar_app_mode()
         else:
             self.sidebar_notebook_mode()
@@ -101,19 +110,19 @@ class NotebookUI:
             - Open notebook dialog
             - Execution controls (Run Next, Run All, Reset)
             - Display settings
-            - Toggle to exit preview mode (if not locked)
+            - Toggle to exit app view (if not in locked app mode)
 
         Note:
-            In locked mode, users cannot toggle back to notebook mode.
+            In locked app mode, users cannot toggle back to edit mode.
         """
         with st.sidebar:
-            st.image(root_join("app_images", "st_notebook.png"), use_container_width=True)
+            st.image(root_join("app_images", "st_notebook.png"))
             st.divider()
 
             st.text_input("Notebook title:", value=self.notebook.title, key="notebook_title_show", disabled=True)
 
             # Open button with expandable section
-            if st.button("Open notebook", use_container_width=True, key="button_open_notebook_trigger"):
+            if st.button("Open notebook", width='stretch', key="button_open_notebook_trigger"):
                 state.show_open_dialog = not state.get('show_open_dialog', False)
 
             if state.get('show_open_dialog', False):
@@ -124,21 +133,21 @@ class NotebookUI:
 
             # Execution controls
             st.markdown("**Execution**")
-            if st.button("▶️ Run Next Cell", use_container_width=True, key="app_run_next"):
+            if st.button("▶️ Run Next Cell", width='stretch', key="app_run_next"):
                 self.notebook.run_next_cell()
-            if st.button("⏩​ Run All Cells", use_container_width=True, key="app_run_all"):
+            if st.button("⏩​ Run All Cells", width='stretch', key="app_run_all"):
                 self.notebook.run_all_cells()
-            if st.button("🔄 Reset", use_container_width=True, key="app_reset_run"):
+            if st.button("🔄 Reset", width='stretch', key="app_reset_run"):
                 self.notebook.restart_session()
 
             st.divider()
 
             # Display settings
-            if not self.notebook.locked:
-                # In preview mode, allow toggling back to notebook mode
-                def on_toggle_app_mode():
-                    self.notebook.app_mode = not self.notebook.app_mode
-                st.toggle("App mode preview", value=True, on_change=on_toggle_app_mode, key="toggle_app_preview")
+            if not self.notebook.app_mode:
+                # In edit mode, allow toggling back to notebook view
+                def on_toggle_app_view():
+                    self.notebook.app_view = not self.notebook.app_view
+                st.toggle("App view", value=True, on_change=on_toggle_app_view, key="toggle_app_preview")
 
             def on_change():
                 self.notebook.show_logo = not self.notebook.show_logo
@@ -146,7 +155,7 @@ class NotebookUI:
 
             st.divider()
 
-            if self.notebook.locked:
+            if self.notebook.app_mode:
                 st.caption("🔒 Running in locked app mode")
 
     def sidebar_notebook_mode(self) -> None:
@@ -162,7 +171,7 @@ class NotebookUI:
             - Technical settings popover
         """
         with st.sidebar:
-            st.image(root_join("app_images", "st_notebook.png"), use_container_width=True)
+            st.image(root_join("app_images", "st_notebook.png"))
             st.divider()
 
             def on_title_change_edit():
@@ -170,14 +179,20 @@ class NotebookUI:
             st.text_input("Notebook title:", value=self.notebook.title, key="notebook_title_edit", on_change=on_title_change_edit)
 
             # Demo notebooks
-            if st.button("Demo notebooks", use_container_width=True, key="button_load_demo"):
+            if st.button("Demo notebooks", width='stretch', key="button_load_demo"):
                 self.load_demo()
+
+            # New notebook button
+            if st.button("New notebook", width='stretch', key="button_new_notebook"):
+                self.notebook.clear_cells()
+                self.notebook.title = "notebook"
+                self.notebook.notify("Created new notebook", icon="📄")
 
             # Save button
             self.save_notebook()
 
             # Open button with expandable section
-            if st.button("Open notebook", use_container_width=True, key="button_open_notebook_trigger"):
+            if st.button("Open notebook", width='stretch', key="button_open_notebook_trigger"):
                 state.show_open_dialog = not state.get('show_open_dialog', False)
 
             if state.get('show_open_dialog', False):
@@ -186,18 +201,18 @@ class NotebookUI:
 
             st.divider()
 
-            st.button("▶️​ Run next cell", on_click=self.notebook.run_next_cell, use_container_width=True, key="button_run_next_cell")
-            st.button("⏩ Run all cells", on_click=self.notebook.run_all_cells, use_container_width=True, key="button_run_all_cells")
-            st.button("🔄​ Restart session", on_click=self.notebook.restart_session, use_container_width=True, key="button_restart_session")
-            st.button("🗑️​ Clear all cells", on_click=self.notebook.clear_cells, use_container_width=True, key="button_clear_cells")
+            # AI Assistant button
+            def on_chat_click():
+                state.chat_mode = True
+            st.button("🤖 AI Assistant", on_click=on_chat_click, width='stretch', key="button_open_chat", type="primary")
 
             st.divider()
 
-            # App mode preview toggle (only if not locked)
-            if not self.notebook.locked:
+            # App view toggle (only if not in locked app mode)
+            if not self.notebook.app_mode:
                 def on_change():
-                    self.notebook.app_mode = not self.notebook.app_mode
-                st.toggle("App mode preview", value=self.notebook.app_mode, on_change=on_change, key="toggle_app_mode")
+                    self.notebook.app_view = not self.notebook.app_view
+                st.toggle("App view", value=self.notebook.app_view, on_change=on_change, key="toggle_app_view")
 
             def on_change():
                 self.notebook.show_logo = not self.notebook.show_logo
@@ -205,11 +220,20 @@ class NotebookUI:
 
             st.divider()
 
-            # Technical settings in popover
-            self.settings_popover()
+            # Technical settings dialog
+            self.settings_dialog()
 
-    def settings_popover(self) -> None:
-        """Render the technical settings popover.
+    def sidebar_chat_mode(self) -> None:
+        """Render the AI Assistant chat sidebar.
+
+        The notebook cells remain visible in the main area.
+        """
+        with st.sidebar:
+            # Show chat interface (from chat.py)
+            show_chat()
+
+    def settings_dialog(self) -> None:
+        """Render the technical settings dialog.
 
         Provides advanced configuration options:
             - Run cell on submit toggle
@@ -217,7 +241,8 @@ class NotebookUI:
             - Stdout output toggle
             - Stderr output toggle
         """
-        with st.popover("⚙️ Settings", use_container_width=True):
+        @st.dialog("⚙️ Settings")
+        def show_settings():
             def on_change():
                 self.notebook.run_on_submit = not self.notebook.run_on_submit
             st.toggle("Run cell on submit", value=self.notebook.run_on_submit, on_change=on_change, key="toggle_run_on_submit")
@@ -235,30 +260,52 @@ class NotebookUI:
                 self.notebook.show_stderr = state.toggle_show_stderr
             st.toggle("Show stderr output", value=self.notebook.show_stderr, on_change=on_change, key="toggle_show_stderr")
 
-    def control_bar(self) -> None:
-        """Render the new cell control bar.
+            if st.button("Close", width='stretch', type="primary"):
+                st.rerun()
 
-        Displays three buttons for adding new cells:
-            - New code cell
-            - New Markdown cell
-            - New HTML cell
+        if st.button("⚙️ Settings", width='stretch', key="button_open_settings"):
+            show_settings()
+
+    def control_bar(self) -> None:
+        """Render the new cell and execution control bar.
+
+        Displays two rows of buttons:
+            - Add cells: Code, Markdown, HTML
+            - Execute: Run Next, Run All, Restart Session
 
         Note:
-            Only shown in notebook mode (hidden in app mode).
+            Only shown in edit mode (hidden in app view).
         """
-        if not self.notebook.app_mode:
-            c1, c2, c3 = st.columns(3)
+        if not self.notebook.app_view:
+            with st.container(gap="small", border=True):
+                a,b,c=st.columns(3,gap="small")
+                with a:
+                    def on_click():
+                        self.notebook.new_cell(type="code")
+                    st.button("New Code Cell", width='stretch', on_click=on_click, key="add_code_cell") 
+                with b: 
+                    def on_click():
+                        self.notebook.new_cell(type="markdown")
+                    st.button("New Markdown Cell", width='stretch', on_click=on_click, key="add_markdown_cell")
+                with c:
+                    def on_click():
+                        self.notebook.new_cell(type="html")
+                    st.button("New HTML Cell", width='stretch', on_click=on_click, key="add_html_cell")
 
-            code_button = c1.button("New code cell", use_container_width=True, key="new_code_cell_button")
-            mkdwn_button = c2.button("New Markdown cell", use_container_width=True, key="new_mkdwn_cell_button")
-            html_button = c3.button("New HTML cell", use_container_width=True, key="new_html_cell_button")
+                d,e,f=st.columns(3,gap="small")
+                with d:
+                    def on_click():
+                        self.notebook.run_next_cell()
+                    st.button("▶️ Run Next",width='stretch', on_click=on_click, key="exec_run_next")
+                with e:
+                    def on_click():
+                        self.notebook.run_all_cells()
+                    st.button("⏩ Run All",width='stretch', on_click=on_click, key="exec_run_all")
+                with f:
+                    def on_click():
+                        self.notebook.restart_session()
+                    st.button("🔄 Restart",width='stretch', on_click=on_click, key="exec_restart")
 
-            if code_button:
-                self.notebook.new_cell(type="code")
-            if mkdwn_button:
-                self.notebook.new_cell(type="markdown")
-            if html_button:
-                self.notebook.new_cell(type="html")
 
     def load_demo(self) -> None:
         """Render demo notebook selection dialog.
@@ -304,13 +351,13 @@ class NotebookUI:
             except Exception as e:
                 self.notebook.notify(f"Failed to save: {str(e)}", icon="⚠️")
 
-        st.button("Save notebook", use_container_width=True, key="button_save_notebook", on_click=on_click)
+        st.button("Save notebook", width='stretch', key="button_save_notebook", on_click=on_click)
 
     def open_notebook(self) -> None:
         """Render the open notebook dialog.
 
         Provides two ways to open notebooks:
-            1. File uploader for drag-and-drop (unless locked)
+            1. File uploader for drag-and-drop (unless in locked app mode)
             2. Selectbox for files in current working directory
 
         Only shows valid notebook ``.py`` files (validated via
@@ -321,8 +368,8 @@ class NotebookUI:
         See Also:
             :meth:`~streamlit_notebook.notebook.Notebook.open`: Core open logic
         """
-        # File uploader for drag and drop (only if not locked)
-        if not self.notebook.locked:
+        # File uploader for drag and drop (only if not in locked app mode)
+        if not self.notebook.app_mode:
             uploaded_file = st.file_uploader(
                 "📎 Drop a notebook file here or browse",
                 type=['py'],

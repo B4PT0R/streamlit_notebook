@@ -49,9 +49,11 @@ class CellType:
         self.type=None
 
     def is_reactive(self):
+        """Return whether the parent cell should auto-rerun on refresh."""
         return self.cell._reactive
 
     def is_fragment(self):
+        """Return whether the parent cell should run as a Streamlit fragment."""
         return self.cell._fragment
 
     def exec(self):
@@ -64,9 +66,11 @@ class CellType:
 
 
     def get_exec_code(self):
+        """Return the raw code string to execute for this cell type."""
         return self.cell.code
 
 class PyType(CellType):
+    """Python execution cell type."""
 
     def __init__(self,cell):
         super().__init__(cell)
@@ -112,6 +116,7 @@ class PyType(CellType):
         self.cell._set_output(response)
 
 class MDType(CellType):
+    """Markdown rendering cell type."""
 
     def __init__(self,cell):
         super().__init__(cell)
@@ -141,6 +146,7 @@ class MDType(CellType):
         return code
 
 class HTMLType(CellType):
+    """HTML rendering cell type."""
 
     def __init__(self,cell):
         super().__init__(cell)

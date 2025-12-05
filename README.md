@@ -4,6 +4,52 @@ The reactive notebook powered by Streamlit.
 
 Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
 
+It was designed with AI integration in mind, and comes equipped with its own full-featured AI agent (requires an OpenAI API key) having full dynamic control over the notebook. It can create, edit, run code cells, read documents, view images, support voice interaction, etc.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Demo](#demo)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+  - [Create a notebook](#create-a-notebook)
+  - [Run it](#run-it)
+  - [How it works?](#how-it-works)
+- [Notebook Interface - Core Concepts](#notebook-interface---core-concepts)
+  - [Cell Types](#cell-types)
+  - [Persistent Shell](#persistent-shell)
+  - [100% Standard Streamlit API](#100-standard-streamlit-api)
+- [Real-World Example](#real-world-example)
+- [Easy Deployment](#easy-deployment)
+- [Development Features](#development-features)
+  - [Two Modes](#two-modes)
+  - [File Management](#file-management)
+  - [Rich Content](#rich-content)
+  - [Advanced Display Control with display()](#advanced-display-control-with-display)
+- [Advanced Features](#advanced-features)
+  - [Streamlit Fragments](#streamlit-fragments)
+  - [Programmatic API](#programmatic-api)
+- [AI Agent Integration](#ai-agent-integration)
+  - [Installation](#installation-1)
+  - [Features](#features)
+  - [Quick Start](#quick-start-1)
+  - [Accessing the Agent Programmatically](#accessing-the-agent-programmatically)
+  - [Agent Capabilities](#agent-capabilities)
+  - [Configuration](#configuration)
+  - [Example Workflow](#example-workflow)
+  - [Best Practices](#best-practices)
+  - [Advanced: Custom Tools](#advanced-custom-tools)
+- [Deployment](#deployment)
+  - [Local Testing](#local-testing)
+  - [Streamlit Cloud](#streamlit-cloud)
+  - [Docker](#docker)
+  - [Production Best Practices](#production-best-practices)
+  - [Multi-Notebook Deployments](#multi-notebook-deployments)
+- [Use Cases](#use-cases)
+- [Contributing](#contributing)
+- [License](#license)
+- [Changelog](#changelog)
+
 ## Overview
 
 We all know Jupyter as the go-to for interactive programming, but it comes with its own limitations:
@@ -29,14 +75,45 @@ Try the hosted demo: [st-notebook.streamlit.app](https://st-notebook.streamlit.a
 
 ## Installation
 
+**With everything** (recommended for most users):
+Includes a complete datascience stack and a full featured AI agent.
+```bash
+pip install streamlit-notebook[full]
+```
+
+**Basic installation** (core notebook functionality only):
 ```bash
 pip install streamlit-notebook
 ```
 
-The package comes equiped with the latest version of `streamlit` and a comprehensive starter data-science pack including: 
-`matplotlib, numpy, seaborn, pandas, pillow, openpyxl, requests,
-pydub, graphviz, altair, plotly, bokeh, pydeck, scipy, sympy,
-scikit-learn, vega-datasets`
+**With data science stack**:
+```bash
+pip install streamlit-notebook[datascience]
+```
+
+**With ai agent dependencies**:
+```bash
+pip install streamlit-notebook[agent]
+```
+
+**documents & web scrapping dependencies**:
+```bash
+pip install streamlit-notebook[documents]
+```
+
+**With ai agent + advanced document reading capabilities**:
+So that the agent can read a wider range of sources (various file types, web pages, ...).
+```bash
+pip install streamlit-notebook[agent-full]
+```
+
+**What's included:**
+
+- **Core**: `streamlit`, `streamlit-code-editor`, `asttokens`, `python-dotenv`,`filetype`,`pydub`
+- **datascience** extra: `matplotlib`, `numpy`, `seaborn`, `pandas`, `pillow`, `openpyxl`, `requests`, `pydub`, `graphviz`, `altair`, `plotly`, `bokeh`, `pydeck`, `scipy`, `sympy`, `scikit-learn`, `vega-datasets`
+- **agent** extra: `openai`,`numpy`,`pydantic`,`tiktoken`,`regex`,`pyyaml`,`prompt-toolkit`
+- **documents** extra: `requests`,`beautifulsoup4`,`lxml`,`trafilatura`,`PyPDF2`,
+`python-docx`,`odfpy`,`pillow`,`selenium`,`get-gecko-driver`
 
 ## Quick Start
 
@@ -93,16 +170,26 @@ streamlit run analysis.py --app  # Locked app mode
 
 ### How it works?
 
-A bit of magic needs to happen under the hood to make it possible
-- `st_notebook` first attempts to get an existing notebook instance from `st.session_state`, if none is found, it creates one. 
-- The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only at the first pass of the script**, and the decorator is no-oped afterwards (to avoid adding the same cells over and over as the script reruns). 
-- `nb.render()` finally takes care of fetching and displaying the current notebook instance from state.
+A bit of magic needs to happen under the hood to make it possible. Fell free to skip this section if you're not into the technical details. 
 
-Subsequent runs of the script will ignore the cell definitions and merely loop on `nb = st_notebook(...)` and `nb.render()` to refresh whatever notebook instance is living in the session's state.
+Here's a quick overview:
 
-Note: the functions defining the cells will never get called. Doing so would result in errors, as they refer to variables defined out of their local scopes (in other cells!). It's really a nice thing here that python allows to define erroneous function objects, even decorate them, without throwing an exception as long as we don't attempt to call them (lazy evaluation). They still know the file and line range in which they are defined, which is enough for the decorator to retrieve their raw source code. Makes them usable as mere "code bags", ie. containers for source code that gets extracted and executed elsewhere.
+When you run `streamlit run analysis.py`, Streamlit will execute the notebook script in an async loop, reruning it after any UI event, so that each run may process the new state of the UI. Each step of the loop is called a `run`, which is a complete execution of the scipt top to bottom. Let's examine what happens during the first run:
 
-## Core Concepts
+- We import the modules and the required `st_notebook` factory.
+- `st_notebook` first attempts to get an existing notebook instance from `st.session_state`. Since it is the first run, none is found, so it creates one with the provided parameters. 
+- The `@cell` decorator is used to capture the source code of the functions' bodies and add the corresponding cells to the notebook instance. **This happens only if the notebook instance is not yet 'initialized' (boolean state)**. The decorator is designed to just do nothing if it is (to avoid re-adding the same cells over and over as the script reruns). 
+- `nb.render()` sets `nb.initialized=True` if it wasn't, and renders it on screen (full notebook interface).
+
+In subsequent runs of the script, `st_notebook` will find an existing notebook instance in state and just return it, ignoring the parameters. The `@cell` decorators will this time ignore the cell definitions (already initialized) and the script will merely execute `nb.render()` to refresh the notebook instance. The nice thing is that the notebook instance returned by `st_notebook` need not be the same as the one created in the first run. If some UI interaction switches it in state, the new instance will be rendered instead.
+
+As a result, you may open another notebook file from the interface. The notebook will load the code in memory, initialize a new notebook instance from it, store it in state, and rerun the app. In the next run `st_notebook` will fetch the NEW instance, and `nb.render()` will show it, all while still looping on the initial file!
+
+This is why calling `streamlit run analysis.py` still allows you to change notebook live from the interface.
+
+Note: the functions defining the cells will never get called. Doing so would result in errors, as they refer to variables defined out of their local scopes (in other cells!). It's really a nice thing here that python allows to define erroneous function objects, even decorate them, without throwing an exception as long as we don't attempt to call them (lazy evaluation). They still know the file and line range in which they are defined, which is enough for the decorator to retrieve their raw source code. Makes them usable as mere "code bags", ie. containers for source code that gets extracted and used elsewhere.
+
+## Notebook Interface - Core Concepts
 
 ### Cell Types
 
@@ -114,26 +201,36 @@ This selective reactivity lets you separate expensive setup from interactive exp
 
 ### Persistent Shell
 
-All cells execute in a shared long-lived Python session. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results persist across UI interactions.
+All cells execute in an embedded custom interactive shell object, stored in `st.session_state`, that maintains a single long-lived Python session. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results will persist in the shell's namespace across UI interactions.
 
 **Example:**
 ```python
-@nb.cell(type='code')
-def load_data():
-    import pandas as pd
-    df = pd.read_csv("large_file.csv") # One shot cell, runs only once
+from streamlit_notebook import st_notebook
+import streamlit as st
+
+nb = st_notebook(title="simple_counter")
+
+@nb.cell(type='code',reactive=False)
+def cell_0():
+    # One-shot cell - Run it once to initialize the counter
+    counter=0 
+
 
 @nb.cell(type='code', reactive=True)
-def explore():
-    threshold = st.slider("Threshold", 0, 100)
-    st.write(df[df['value'] > threshold]) # no need to redefine df, even after reruns
+def cell_1():
+    # Reactive cell - Reruns on every UI interaction
+    if st.button("Increment"):
+        counter+=1
+    st.write(f"Current counter value: {counter}")
+
+nb.render()
 ```
 
-Cell 1 loads data once. Cell 2 reruns on slider changes. Both execute in the same namespace.
+Since cell_0 doesn't rerun spontaneously, the counter is not reset to 0 on every interaction. cell_1 will thus work with the last known counter value (persisted in the shell's namespace), and update it when the button is clicked.
 
-### Standard Streamlit APIs
+### 100% Standard Streamlit API
 
-Every Streamlit widget, chart, and component works out of the box. Just copy-paste your existing Streamlit code into cells.
+Every Streamlit widget, chart, and component works out of the box in reactive cells. Just copy-paste your existing Streamlit code there.
 
 ```python
 @nb.cell(type='code', reactive=True)
@@ -144,9 +241,13 @@ def widgets():
     st.bar_chart([value, value*2, value*3])
 ```
 
+Streamlit Notebook doesn't do anything too hacky with Streamlit's internals and only uses the stable Streamlit API for its own functionning. You can think of it as an extension, rather than a replacement. It will adapt to any future versions of Streamlit you may want to install seamlessly, thus letting you benefit from new widgets or features in your notebooks.
+
+*Note*: It uses the new `width='stretch'` instead of the now deprecated `use_container_width=True` parameter to control its own widgets layout, thus requiring Streamlit 1.5.0 or higher.
+
 ## Real-World Example
 
-Building a stock price analysis dashboard. This example uses real data from the vega_datasets package (included) and can be copy-pasted and run directly:
+Building a stock price analysis dashboard. This example uses real data from the vega_datasets package (included in the datascience stack) and can be copy-pasted and run directly:
 
 ```python
 from streamlit_notebook import st_notebook
@@ -193,7 +294,7 @@ def dashboard():
         y='price:Q',
         color='symbol:N'
     ).properties(height=400)
-    st.altair_chart(chart, use_container_width=True);
+    st.altair_chart(chart, width='stretch');
 
 nb.render()
 ```
@@ -224,7 +325,7 @@ Useful when you can't modify the command directly (e.g., in Streamlit cloud plat
 
 **Notebook Mode** (development):
 - Code editor for each cell
-- Cell management (create, delete, insert, change type, reorder)
+- Cell management (create, run, delete, insert, change type, reorder)
 - Execution controls (Run Next, Run All, Restart Session, Clear All Cells)
 - Save/Open notebooks
 - Demo notebooks library
@@ -235,16 +336,17 @@ Useful when you can't modify the command directly (e.g., in Streamlit cloud plat
 - Interactive widgets remain functional
 - Clean Streamlit app appearance
 
-In development, you may toggle between modes with the sidebar switch, or run with enforced app mode to prevent users toggling back to notebook mode.
+In development, you may toggle between modes with the `app view` switch in the sidebar. In production, just set the `ST_NOTEBOOK_APP_MODE` or use the `--app` flag to prevent users toggling back to notebook mode.
 
 ### File Management
 
-**Save/Load from UI:**
+**From the sidebar:**
+- **New** button: creates a new notebook from scratch.
 - **Save** button: saves notebook to `./notebook_title.py`
 - **Open** button: dropdown of all `.py` notebooks in current directory, or drag/drop/browse files
 - **Demo notebooks**: load pre-built example notebooks from the library
 
-**Save/Load from code:**
+**From code:**
 See the Programmatic API section for file operations via code cells.
 
 ### Rich Content
@@ -262,9 +364,81 @@ Configurable in the sidebar settings.
 
 You may also :
 - add a trailing `;` at the end of a line to bypass automatic display
-- use the `display` function to selectively display a given result
+- use the `display()` function to selectively display a given result. More on this below.
 
-*Tip*: Use `display` instead of `st.write` to pretty print results in one-shot cells. They basically do the same, but the difference is that `display` is designed to store the reference to the object, allowing the notebook to redraw it on screen after every rerun without having to rerun the cell.  
+### Advanced Display Control with `display()`
+
+The `display()` function provides full control over how results are rendered, with access to any Streamlit display backend and all its parameters.
+
+**Basic usage:**
+```python
+@nb.cell(type='code')
+def load_data():
+    import pandas as pd
+    df = pd.read_csv('data.csv')
+
+    # Simple display (uses st.write by default)
+    display(df)
+```
+
+**Choose any Streamlit backend:**
+```python
+@nb.cell(type='code', reactive=False)
+def visualize():
+    data = {'name': 'Alice', 'age': 30, 'city': 'Paris'}
+
+    # Use st.json with expansion control
+    display(data, backend='json', expanded=True)
+
+    # Use st.code with syntax highlighting
+    code = "def hello():\n    return 'world'"
+    display(code, backend='code', language='python')
+
+    # Use st.dataframe with all its options
+    import pandas as pd
+    df = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
+    display(df, backend='dataframe',
+            height=400,
+            width='stretch',
+            hide_index=True)
+```
+
+**Available backends:**
+Any Streamlit display function works (without the `st.` prefix):
+- `'write'` - Smart auto-rendering (default)
+- `'json'` - JSON viewer with expansion control
+- `'dataframe'` - Interactive DataFrame with custom height, column config, etc.
+- `'table'` - Static table display
+- `'code'` - Syntax-highlighted code
+- `'markdown'` - Rendered markdown with optional HTML
+- `'text'` - Plain text
+- `'plotly_chart'`, `'altair_chart'`, `'pyplot'` - Chart displays with container options
+- Any other `st.*` display function
+
+**All backend parameters are supported:**
+```python
+@nb.cell(reactive=False)
+def dashboard():
+    import plotly.graph_objects as go
+
+    # Create a Plotly figure
+    fig = go.Figure(data=go.Scatter(x=[1, 2, 3], y=[4, 5, 6]))
+
+    # Display with full Plotly options
+    display(fig,
+            backend='plotly_chart',
+            width='stretch',
+            theme='streamlit',
+            config={'displayModeBar': False})
+```
+
+**Why use `display()` over `st.*()`?**
+
+`display` is designed to store the result and parameters in the cell, so that the notebook can automatically redisplay it after reruns without re-executing the cell. Direct `st.*()` commands need to rerun to stay on screen and thus work only in reactive cells.
+
+This is particularly powerful in **non-reactive cells** where you get the performance of one-time execution combined with rich, customizable output that persists across reruns.
+
+It also works seamlessly in reactive cells, where it behaves exactly like `st.*()` but with the added benefit of storing the result in the cell, useful for inspection and debugging.
 
 **Markdown/HTML cells** 
 
@@ -281,64 +455,74 @@ The mean value is << df['value'].mean() >>.
 **System commands and magics**
 
 Ipython style commands and magics are supported.
-Let's demonstrate this by defining a new magic to integrate a basic AI assistant in the session.
+Let's demonstrate this by showing a simple example:
 
 ```python
 #Cell 1
 
-#system command to install the openai package
-!pip install openai
-
-from openai import OpenAI
-
-#simple agent class
-class Agent:
-    
-    def __init__(self):
-        self.messages=[]
-        self.client=OpenAI() #will use the OPENAI_API_KEY provided as env variable if any
-
-    def add_message(self,**kwargs):
-        self.messages.append(kwargs)
-
-    def __call__(self,prompt):
-        
-        self.add_message(role="user",content=prompt)
-
-        response=self.client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=self.messages
-        ).choices[0].message.content
-
-        self.add_message(role="assistant",content=response)
-
-        return response
-
-#create an agent instance 
-agent=Agent()
-
-#define a new magic to call our agent
+#define a new magic
 @magic
-def ai(text_content):
+def upper(text_content):
     if text_content:
-        response=agent(text_content)
-        display(response) # we use display instead of print for prettier markdown rendering
+        return text_content.upper()
 
-#call it in a single line starting with % (takes the rest of the line after the %<command> as input string)
-%ai Hello, this is a test!
+#call it in a single line starting with % and the name of the magic function
+%upper This is a test!
+```
+Result:
+```
+THIS IS A TEST!
+```
+
+The magic input is always processed as a string (the rest of the line following the %<command>)
+
+```python
+%upper os.listdir()
+```
+Result:
+```
+OS.LISTDIR()
 ```
 
 With `%%`, the whole cell starting at second line is considered the magic input.
 
 ```python
 #Cell 2
-%%ai
+%%upper
 All the content of
 the cell goes in the
 magic input
 ```
+Result:
+```
+ALL THE CONTENT OF
+THE CELL GOES IN THE
+MAGIC INPUT
+```
 
 Note: Only the mechanism is supported, no predefined magics are provided (yet) so you have to declare your own magics.
+
+To run a system command, use `!` or `!!` instead of `%` or `%%` respectively.
+
+```python
+!echo "Hello World"
+```
+Result:
+```
+Hello World
+```
+
+`!!` lets you run multi-line system scripts:
+```python 
+!!
+echo "Hello World"
+python -c "import sys; print(sys.version)"
+```
+Result:
+```
+Hello World
+3.11.6 (main, Oct  2 2023, 10:17:14) [Clang 14.0.3 (clang-1403.0.22.14.1)]
+```
 
 Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just execute the input as a system command/script.
 
@@ -366,7 +550,11 @@ Note: A variable that's changed by a fragment is immediately updated in the name
 
 ### Programmatic API
 
-The notebook instance is exposed in the shell's namespace as `__notebook__`, enabling full programmatic control from code cells. This is especially powerful for automation, AI agents, and dynamic notebook generation.
+The notebook instance is exposed in the shell's namespace as `__notebook__`, enabling full programmatic control from the shell or code cells.
+
+This level of programmatic control is quite unique to streamlit-notebook and enables workflows not easily achievable in Jupyter or traditional notebooks.
+
+This is especially powerful for automation, AI agents, and dynamic notebook generation.
 
 #### Accessing the Notebook
 
@@ -423,7 +611,7 @@ first_cell.fragment = True
 
 # Get cell properties
 print(f"Cell ID: {first_cell.id}")
-print(f"Cell rank: {first_cell.rank}")
+print(f"Cell index: {first_cell.index}")
 print(f"Cell type: {first_cell.type}")
 print(f"Has run: {first_cell.has_run_once}")
 ```
@@ -449,11 +637,15 @@ first_cell.move_down()
 last_cell.move_up()
 
 # Change cell position directly
-cell.rank = 2  # Move to position 2
+cell.index = 2  # Move to position 2
 
 # Insert new cells relative to existing ones
-cell.insert_above()  # Inserts a new cell above this one
-cell.insert_below()  # Inserts a new cell below this one
+cell.insert_above()  # Inserts a new code cell above (default: empty code cell)
+cell.insert_below()  # Inserts a new code cell below (default: empty code cell)
+
+# Insert with custom parameters
+new_cell = cell.insert_above(type="markdown", code="# My Title")  # Returns the new cell
+new_cell = cell.insert_below(type="code", code="print('hello')", reactive=True)
 ```
 
 #### Deleting Cells
@@ -474,16 +666,61 @@ cell.reset()
 
 #### Session Management
 
+**Restart the Python session:**
+
+Clear the namespace and restart the Python interpreter to start fresh.
+
 ```python
-# Restart the Python session (clears namespace)
 nb.restart_session()
+```
 
-# Control reruns with delays
-nb.rerun(delay=1.5)  # Requires a rerun once the current execution is complete, with a minimal 1.5s delay from the calling point
-nb.rerun(no_wait=True)  # Immediate rerun (when possible)
+**Smart rerun control:**
 
-# Request delay without triggering rerun
-nb.wait(2.0)  # Ensures any future rerun waits 2 seconds
+The notebook provides an improved rerun API with flexible timing control and better compatibility.
+
+```python
+# Soft rerun as soon as possible (default)
+nb.rerun()  # or nb.rerun(wait=True)
+```
+
+This requests a rerun at the end of the current Streamlit cycle, letting it finish executing without interrupting subsequent operations.
+
+```python
+# Delayed rerun
+nb.rerun(wait=1.5)
+```
+
+Wait for the specified duration (in seconds) before rerunning. This is useful to let animations or toasts display before the page refreshes.
+
+```python
+# Hard rerun (immediate)
+nb.rerun(wait=False)
+```
+
+Triggers an immediate rerun, equivalent to standard `st.rerun()` where it doesn't fail (e.g., in widget callbacks). In circumstances where `st.rerun()` would fail, it falls back to a soft rerun.
+
+**Note:** In the notebook environment, `st.rerun` is patched to use this upgraded `nb.rerun()`, making it less likely to interfere with the notebook's interface rerun strategy.
+
+**Control pending reruns with `wait()`:**
+
+The `wait()` function lets you control pending reruns without triggering one yourself.
+
+```python
+# Request a delay for any pending rerun
+st.balloons()
+nb.wait(2.0)  # Ensures any pending rerun waits 2 seconds from this point
+```
+
+The parameter works similarly to `rerun()`:
+- `wait(2.0)` - Add a 2-second delay before any pending rerun
+- `wait()` or `wait(True)` or `wait(0)` - Do nothing (no additional delay)
+- `wait(False)` - Execute any pending rerun immediately, ignoring previous delays
+
+```python
+# Example: Execute pending rerun immediately
+nb.rerun(wait=5.0)  # Request rerun with 5 second delay
+# ... some code ...
+nb.wait(False)  # Changed your mind - execute the rerun now!
 ```
 
 #### File Operations
@@ -519,7 +756,7 @@ print(python_code)  # Shows the @nb.cell decorated version
 
 #### Inspecting Notebook State
 
-Get complete information about cells and their execution state:
+Get complete JSON serializable state of the notebook, including all informations about cells and their execution state:
 
 ```python
 # Get full state of all cells (includes outputs and metadata)
@@ -539,7 +776,7 @@ for cell_state in state:
 # Get individual cell with full state
 cell = nb.cells[0]
 full_state = cell.to_dict(minimal=False)
-# Includes: id, rank, language, has_run_once, visible, stdout,
+# Includes: id, index, language, has_run_once, visible, stdout,
 # stderr, results, exception
 
 # Get minimal cell definition (for saving)
@@ -547,87 +784,19 @@ minimal_state = cell.to_dict()  # minimal=True by default
 # Only: key, type, code, reactive, fragment
 ```
 
-#### Complete Example: AI Agent Integration
-
-```python
-# Cell 1: Setup AI agent with context awareness
-from openai import OpenAI
-import json
-
-class NotebookAgent:
-    def __init__(self, notebook):
-        self.nb = notebook
-        self.client = OpenAI()
-
-    def get_context(self):
-        """Build context from notebook state for the AI"""
-        state = self.nb.get_cells_state()  # Get full state (minimal=False)
-
-        context = f"Notebook: {self.nb.title}\n"
-        context += f"Total cells: {len(state)}\n\n"
-
-        for cell in state:
-            context += f"Cell {cell['rank']} ({cell['type']}):\n"
-            context += f"Code:\n{cell['code']}\n"
-
-            if cell['has_run_once']:
-                if cell.get('stdout'):
-                    context += f"Output: {cell['stdout']}\n"
-                if cell.get('exception'):
-                    context += f"Error: {cell['exception']['message']}\n"
-
-            context += "\n"
-
-        return context
-
-    def create_new_cell(self, prompt):
-        # Get current notebook state as context
-        context = self.get_context()
-
-        # Ask AI to generate code with full context
-        response = self.client.chat.completions.create(
-            model="gpt-4.1",
-            messages=[
-                {"role": "system", "content": "You are a Streamlit notebook AI assistant. Your task is to produce new Streamlit code cells matching the user's request. Output only valid python code (use comments to verbalize explanations). Modules and data loaded in previous cells don't need to be redefined in next cells (shared namespace)."},
-                {"role":"system", "content":f"Current notebook state:\n{context}"},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        code = response.choices[0].message.content
-
-        # Create and run the cell
-        cell = self.nb.new_cell(type="code", code=code, reactive=True)
-        cell.run()
-
-        return cell
-
-agent = NotebookAgent(__notebook__)
-
-@magic
-def ai(prompt):
-    agent.create_new_cell(prompt)
-
-# Cell 2: Use the agent with context awareness
-%ai Please create a dashboard to let me analyze the iris dataset using seaborn
-```
-
-A real life implementation would obviously be much more sophisticated, involving agentic tools operating various aspects of the notebbok, and so on, but you get the basic idea. 
-
-This level of programmatic control is quite unique to streamlit-notebook and enables workflows not easily achievable in Jupyter or traditional notebooks.
-
 #### API Reference
 
 **Notebook Methods:**
 - `new_cell(type, code, reactive, fragment)` - Create a new cell
-- `get_cell(rank_or_key)` - Get cell by position or key
+- `get_cell(index_or_key)` - Get cell by position or key
 - `get_cells_state(minimal)` - Get state of all cells as list of dicts (default: full state)
 - `delete_cell(key)` - Remove a cell by key
 - `clear_cells()` - Remove all cells
 - `run_all_cells()` - Execute all cells in order
 - `run_next_cell()` - Execute the next unexecuted cell
 - `restart_session()` - Clear namespace and restart Python session
-- `rerun(delay, no_wait)` - Trigger a Streamlit rerun
-- `wait(delay)` - Request delay before next rerun
+- `rerun(wait)` - Trigger a Streamlit rerun
+- `wait(delay)` - Control pending reruns (delay, execute now, or do nothing)
 - `notify(message, icon, delay)` - Show toast notification
 - `save(filepath)` - Save notebook to file
 - `open(source)` - Load notebook from file or source code
@@ -639,8 +808,8 @@ This level of programmatic control is quite unique to streamlit-notebook and ena
 - `reset()` - Clear outputs and execution state
 - `move_up()` - Move cell up one position
 - `move_down()` - Move cell down one position
-- `insert_above()` - Insert new cell above
-- `insert_below()` - Insert new cell below
+- `insert_above(type, code, reactive, fragment)` - Insert new cell above (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False
+- `insert_below(type, code, reactive, fragment)` - Insert new cell below (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False
 - `delete()` - Remove this cell
 - `to_dict(minimal)` - Get dictionary representation (default: minimal, set minimal=False for full state)
 
@@ -649,8 +818,9 @@ This level of programmatic control is quite unique to streamlit-notebook and ena
 - `type` (read/write) - Cell type: "code", "markdown", or "html"
 - `reactive` (read/write) - Auto-rerun on UI changes
 - `fragment` (read/write) - Run as Streamlit fragment
-- `id` (read-only) - Unique cell identifier
-- `rank` (read/write) - Cell position in notebook
+- `index` (read/write) - Cell position in notebook
+- `key` (read-only) - Unique cell identifier
+- `id` (read-only) - Readable cell identifier combining index and key like `Cell[index](key)`
 - `language` (read-only) - Cell language ("python" or "markdown")
 - `has_run_once` (read-only) - Whether cell has executed with current code
 
@@ -660,6 +830,183 @@ This level of programmatic control is quite unique to streamlit-notebook and ena
 - `app_mode` (bool) - Whether in locked app mode
 - `shell` - Python shell instance
 - `current_cell` - Currently executing cell
+
+## AI Agent Integration
+
+Streamlit Notebook includes a full-featured AI agent powered by OpenAI that provides intelligent assistance with full control over the notebook environment.
+
+### Installation
+
+Install with agent support:
+
+```bash
+pip install streamlit-notebook[agent]
+```
+
+For advanced document reading capabilities (PDF, DOCX, web pages, etc.):
+
+```bash
+pip install streamlit-notebook[agent-full]
+```
+
+### Features
+
+The AI agent comes with powerful capabilities:
+
+- **Full Notebook Control**: Create, edit, delete, and run code cells programmatically
+- **Code Execution**: Run Python code and see results in real-time
+- **Vision Support**: Analyze images, charts, and visual content
+- **Voice Interaction**: Optional voice input/output for hands-free operation
+- **Document Reading**: Read and analyze various file formats (PDF, DOCX, Excel, etc.)
+- **Web Scraping**: Fetch and analyze content from web pages
+- **Tool System**: Extensible architecture for adding custom capabilities
+
+### Quick Start
+
+1. **Set your OpenAI API key** in a `.env` file:
+   ```bash
+   OPENAI_API_KEY=sk-...
+   ```
+
+2. **Enable the agent** in your notebook by clicking the chat icon in the sidebar
+
+3. **Start chatting** - the agent can help you write code, analyze data, create visualizations, and more
+
+### Accessing the Agent Programmatically
+
+The agent is available in the shell namespace as `__agent__`:
+
+```python
+@nb.cell(type='code')
+def interact_with_agent():
+    # Check if agent is available
+    if __agent__:
+        # Access agent configuration
+        print(f"Current model: {__agent__.config.model}")
+
+        # Add custom tools dynamically
+        from streamlit_notebook.agent import Tool
+
+        def my_custom_tool(param: str) -> str:
+            """My custom tool description."""
+            return f"Processed: {param}"
+
+        __agent__.add_tool(
+            Tool(
+                name="custom_tool",
+                func=my_custom_tool,
+                description="A custom tool for processing"
+            )
+        )
+
+        # Now the agent can use your custom tool!
+```
+
+### Agent Capabilities
+
+**Code Generation & Execution:**
+- Ask the agent to create cells with specific functionality
+- Agent can run cells and see the output
+- Automatically handles errors and suggests fixes
+
+**Data Analysis:**
+- Upload datasets and ask for analysis
+- Agent creates visualizations and statistical summaries
+- Iteratively refine analysis based on conversation
+
+**Documentation:**
+- Agent reads markdown/HTML cells
+- Can reference previous cell outputs
+- Maintains context throughout the conversation
+
+**Voice Mode** (optional):
+- Enable in agent settings
+- Speak your requests naturally
+- Agent responds with voice output
+- Great for hands-free coding sessions
+
+### Configuration
+
+Access agent settings through the sidebar:
+
+- **Model Selection**: Choose from GPT-4, GPT-4o, o1-preview, etc.
+- **Temperature**: Control response creativity
+- **Token Limits**: Configure context and completion limits
+- **Vision**: Toggle image/chart analysis
+- **Voice**: Enable/disable voice interaction
+- **Custom System Prompt**: Customize agent behavior
+
+### Example Workflow
+
+```python
+# Natural language data analysis workflow:
+# 1. User uploads CSV through sidebar
+# 2. Asks agent: "Analyze this dataset and create a dashboard"
+# 3. Agent:
+#    - Creates a cell to load and inspect the data
+#    - Creates cells for data cleaning
+#    - Generates multiple visualization cells
+#    - Adds markdown cells explaining findings
+#    - All without user writing any code!
+```
+
+### Best Practices
+
+**Security:**
+- Never share notebooks containing API keys
+- Use environment variables for sensitive data
+- Agent respects app mode - won't expose code in production
+
+**Performance:**
+- Agent responses count toward OpenAI API usage
+- Use specific requests for faster responses
+- Complex tasks may require multiple iterations
+
+**Collaboration:**
+- Agent-generated cells are regular cells - edit freely
+- Mix agent-created and manual cells seamlessly
+- Agent learns from conversation context
+
+### Advanced: Custom Tools
+
+Extend the agent with domain-specific capabilities:
+
+```python
+@nb.cell(type='code')
+def add_custom_tools():
+    if not __agent__:
+        return
+
+    from streamlit_notebook.agent import Tool
+    import requests
+
+    def fetch_stock_price(ticker: str) -> dict:
+        """Fetch current stock price for given ticker."""
+        # Your implementation here
+        return {"ticker": ticker, "price": 150.00}
+
+    def analyze_sentiment(text: str) -> str:
+        """Analyze sentiment of given text."""
+        # Your implementation here
+        return "positive"
+
+    # Register tools
+    __agent__.add_tool(Tool(
+        name="get_stock_price",
+        func=fetch_stock_price,
+        description="Get real-time stock price"
+    ))
+
+    __agent__.add_tool(Tool(
+        name="sentiment_analysis",
+        func=analyze_sentiment,
+        description="Analyze text sentiment"
+    ))
+
+    st.success("Custom tools registered!")
+```
+
+Now the agent can use these tools in its responses!
 
 ## Deployment
 
@@ -778,15 +1125,15 @@ This is perfect for demos, dashboards, or sharing multiple analyses with stakeho
 
 ## Use Cases
 
-**Data Exploration → Dashboard:** Build analysis interactively, deploy as dashboard.
+**Data Exploration → Dashboard:** Build analysis interactively with selective reactivity, then deploy as a polished dashboard with the `--app` flag.
 
-**Prototyping → Production:** Develop proof-of-concept in notebook mode, deploy as locked app without rewriting.
+**Prototyping → Production:** Develop proof-of-concept in notebook mode with instant feedback, deploy as locked app without rewriting code.
 
-**Interactive Reports:** Blend narrative (Markdown) with live data and widgets.
+**Interactive Reports:** Blend narrative (Markdown/HTML) with live data, widgets, and dynamic visualizations in a single document.
 
-**Teaching & Demos:** Create interactive tutorials for step-by-step learning.
+**Teaching & Demos:** Create interactive tutorials with executable code cells that students can run and modify step-by-step.
 
-**AI Agent Integration:** Let LLMs generate and execute cells programmatically for coding assistance and autonomous analysis.
+**AI-Assisted Development:** Use the integrated AI agent to generate code, analyze data, create visualizations, and build entire workflows through natural language. The agent has full programmatic control and can be extended with custom tools via `__agent__`.
 
 ## Contributing
 
@@ -804,7 +1151,46 @@ MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 2025-12 (Latest)
+
+**v0.2.0 Release:**
+
+**New Features:**
+- **Enhanced AI Agent**: Added comprehensive document reading capabilities
+  - Support for PDF, DOCX, XLSX, PPTX, ODT, HTML, and more
+  - Web page content extraction with `read()` tool
+  - Automatic text extraction from URLs and local files
+  - Lightweight fallback mode when optional dependencies unavailable
+- **Voice Integration**: Added audio autoplay component for seamless voice interaction
+  - Cross-browser compatible audio playback
+  - Auto-detection of audio formats (MP3, WAV, OGG, etc.)
+  - Silent UI integration for voice responses
+
+**Code Quality & Structure:**
+- **Module Reorganization**: Moved core modules into `streamlit_notebook/core/` package
+  - Better separation between core notebook functionality and agent features
+  - Cleaner import structure and namespace organization
+- **Agent Modules**: Consolidated AI agent code in `streamlit_notebook/agent/` package
+  - Modular tool system with `Tool` class
+  - Separate modules for voice, image, and message handling
+  - Enhanced `adict` utility for flexible configuration
+- **Bug Fixes**:
+  - Fixed typo in `has_fragment_toggle` property setter
+  - Improved error handling in AI streaming
+  - Better handling of cell display metadata
+
+**Developer Experience:**
+- Added comprehensive module-level documentation
+- Improved type hints throughout codebase
+- Enhanced error messages and debugging output
+- Better fallback strategies for optional dependencies
+
 ### 2025-11
+
+**Installation Changes:**
+- **Optional Dependencies**: Data science packages (matplotlib, pandas, numpy, etc.) are now optional
+  - Install with `[datascience]` extra for full stack, or install core only and add libraries manually
+  - Reduces base install size significantly for lightweight deployments
 
 **Code Quality & API Improvements:**
 - **Cell Types**: Improved type management using internal `CellType` mixins (instead of direct `Cell` subclasses), making it straightforward to support new cell types with custom behaviour while still being able to change a cell's type dynamically without having to recreate the cell instance.
@@ -817,9 +1203,14 @@ MIT License—see [LICENSE](LICENSE).
   - `st.rerun` - UserWarning guiding users to `__notebook__.rerun()` or package-level import
   - `st.stop` - RuntimeError to properly stop cell execution
 - **Rerun API Enhancements**:
-  - Added `no_wait` parameter to `rerun()` for immediate reruns (when possible)
+  - Unified API: `rerun(wait)` and `wait(delay)` now accept bool/float for flexible control
+  - `wait=True` (soft rerun), `wait=False` (hard rerun), `wait=<number>` (delayed rerun)
   - Exposed `rerun()` and `wait()` as both public notebook methods and package-level exports
   - Improved delay merging logic with clear documentation
+- **AI Agent Integration**:
+  - Agent now accessible in shell namespace as `__agent__`
+  - Enables dynamic tool registration and programmatic agent control
+  - Full documentation added to README with examples
 
 **Bug Fixes & UX Improvements:**
 

@@ -17,7 +17,7 @@ Examples:
 
         # Smart rerun with delay
         st.toast("Saved!")
-        rerun(delay=1.5)  # Ensures toast is visible
+        rerun(wait=1.5)  # Ensures toast is visible
 
         # Format strings with expressions
         formatted = format("Result: <<x + y>>", x=10, y=20)
@@ -32,8 +32,11 @@ import random
 import string
 import os
 from typing import Any
+import inspect
 
-os.environ['ROOT_PACKAGE_FOLDER'] = os.path.dirname(os.path.abspath(__file__))
+def set_root_path(file):
+    """Set the root package folder path from the given file's location."""
+    os.environ['ROOT_PACKAGE_FOLDER'] = os.path.dirname(os.path.abspath(file))
 
 def root_join(*args: str) -> str:
     """Join path components with the root package folder.
@@ -149,10 +152,15 @@ def update_state(**kwargs: Any) -> None:
     for key, value in kwargs.items():
         state[key] = value
 
-_original_rerun=st.rerun # save before we patch it in notebook.py
+def original_rerun(*args,**kwargs) -> None:
+    """Get the original st.rerun function before patching."""
+    if hasattr(st.rerun, '_patched'):
+        return st.rerun._original(*args,**kwargs)
+    else:
+        return st.rerun(*args,**kwargs)
 
-def rerun(delay: float = 0, no_wait: bool = False) -> None:
-    """Command a rerun of the app with an optional delay.
+def rerun(wait: bool | float = True) -> None:
+    """Command a rerun of the app with optional wait control.
 
     This function sets a flag in the session state to trigger a rerun
     of the Streamlit app after the current execution is complete.
@@ -161,60 +169,67 @@ def rerun(delay: float = 0, no_wait: bool = False) -> None:
     the requests to ensure the longest total delay is respected.
 
     Args:
-        delay: Minimum delay in seconds before executing the rerun.
-            Useful to ensure UI feedback (toasts, animations, etc.)
-            is visible before the rerun. Defaults to 0 (as soon as possible).
-            Note: This parameter is ignored when ``no_wait=True``.
-        no_wait: If True, execute the rerun immediately without waiting for
-            the current execution to complete, bypassing any pending delays.
-            Defaults to False.
+        wait: Controls the rerun behavior:
+            - ``True`` (default): Soft rerun as soon as possible (equivalent to wait=0)
+            - ``False``: Hard rerun immediately if possible, bypassing delays
+            - ``float``: Wait for specified seconds before rerun (e.g., 1.5)
 
     Note:
         - Multiple calls to :func:`rerun` during the same execution will merge
           intelligently - the longest total delay will be respected.
-        - When ``no_wait=True``, the ``delay`` parameter is ignored and all
-          pending delayed reruns are cleared, triggering an immediate rerun.
+        - When ``wait=False``, all pending delayed reruns are cleared and an
+          immediate rerun is attempted.
 
     Examples:
+        Soft rerun as soon as possible::
+
+            rerun()  # or rerun(wait=True)
+
         Ensure toast is visible before rerun::
 
             st.toast("File saved!", icon="💾")
-            rerun(delay=1.5)
+            rerun(wait=1.5)
 
         Wait for animation to complete::
 
             with st.spinner("Processing..."):
                 process_data()
-            rerun(delay=0.5)  # Let spinner disappear gracefully
+            rerun(wait=0.5)  # Let spinner disappear gracefully
 
         Multiple calls - longest delay wins::
 
             st.toast("Action 1")
-            rerun(delay=1.0)
+            rerun(wait=1.0)
             st.toast("Action 2")
-            rerun(delay=2.0)  # This will execute at 2.0s from now
+            rerun(wait=2.0)  # This will execute at 2.0s from now
 
-        Immediate rerun (useful in callbacks)::
+        Immediate hard rerun (useful in callbacks)::
 
-            st.button("Click me", on_click=lambda: rerun(no_wait=True))
+            st.button("Click me", on_click=lambda: rerun(wait=False))
 
     See Also:
         :func:`wait`: Request delay without triggering rerun
         :func:`check_rerun`: Execute pending reruns
     """
 
-    if no_wait:
+    # Handle wait=False (immediate hard rerun)
+    if wait is False:
         # Execute immediately without waiting for current execution
         # This clears any pending delayed reruns and triggers an immediate rerun
         try:
             state.rerun = None  # Clear any pending rerun
-            _original_rerun()  # Trigger immediate rerun
+            original_rerun()  # Trigger immediate rerun
         except Exception:
             # st.rerun() raises an exception when called from within a callback context
-            # In this case, fall back to delayed rerun with zero delay
-            rerun(delay=0)
+            # In this case, fall back to soft rerun with zero delay
+            rerun(wait=True)
         return
-        
+
+    # Convert wait to delay value
+    if wait is True:
+        delay = 0.0
+    else:
+        delay = float(wait)
 
     import time
     current_time = time.time()
@@ -256,7 +271,7 @@ def rerun(delay: float = 0, no_wait: bool = False) -> None:
             'requested': True
         }
 
-def wait(delay: float) -> None:
+def wait(delay: bool | float = True) -> None:
     """Request a minimum delay before any future rerun, without triggering one.
 
     This function sets a delay requirement that will be honored by any subsequent
@@ -266,7 +281,10 @@ def wait(delay: float) -> None:
     without causing a rerun yourself.
 
     Args:
-        delay: Minimum delay in seconds to ensure before any rerun executes.
+        delay: Controls the delay behavior:
+            - ``True`` or ``0`` (default): Does nothing (no additional delay)
+            - ``False``: Executes any pending rerun immediately, ignoring previous delays
+            - ``float``: Request additional delay (in seconds) before next rerun
 
     Note:
         Multiple calls to :func:`wait` will use the longest delay.
@@ -284,12 +302,32 @@ def wait(delay: float) -> None:
             st.balloons()
             wait(2.0)  # Balloons get full duration before any rerun
 
+        Execute pending rerun immediately::
+
+            wait(False)  # If a rerun was pending, execute it now
+
     See Also:
         :func:`rerun`: Trigger a rerun with delay
         :func:`check_rerun`: Execute pending reruns
     """
+    # Handle wait(False) - execute pending rerun immediately
+    if delay is False:
+        if 'rerun' in state and state.rerun:
+            existing_requested = state.rerun.get('requested', False)
+            if existing_requested:
+                # There's a pending rerun - execute it immediately
+                state.rerun = None
+                original_rerun()
+        return
+
+    # Handle wait(True) or wait(0) - do nothing
+    if delay is True or delay == 0:
+        return
+
+    # Handle numeric delay
     import time
     current_time = time.time()
+    delay = float(delay)
 
     # Check if there's already a delay or rerun request
     if 'rerun' in state and state.rerun:
@@ -375,7 +413,7 @@ def check_rerun() -> None:
 
             # Clear the rerun flag and execute rerun
             state.rerun = None
-            _original_rerun()
+            original_rerun()
 
 def format(string: str, **kwargs: Any) -> str:
     """Format string by evaluating <<expression>> tags.
@@ -423,31 +461,140 @@ def format(string: str, **kwargs: Any) -> str:
             return '<<' + expr + '>>'
     return re.sub(r'<<(.*?)>>', replace_expr, string)
 
-def display(obj: Any) -> None:
+def display(obj: Any, backend: str | None = None, **kwargs) -> None:
     """Display an object using Streamlit's rendering system.
 
-    Attempts to display the object using ``st.write``, falling back to
-    ``st.text(repr(obj))`` if that fails. Used internally for displaying
-    cell execution results.
+    Attempts to display the object using the specified backend, falling back to
+    ``st.write`` and finally ``st.text(repr(obj))`` if those fail. Used internally
+    for displaying cell execution results.
 
     Args:
         obj: The object to display. If None, nothing is displayed.
+        backend: The Streamlit display backend to use. Defaults to 'write'.
+            Can be any Streamlit display function name (without the 'st.' prefix):
+
+            - 'write': ``st.write()`` - smart auto-rendering (default)
+            - 'json': ``st.json()`` - JSON viewer for dicts/lists
+            - 'code': ``st.code()`` - syntax-highlighted code display
+            - 'text': ``st.text()`` - plain text display
+            - 'markdown': ``st.markdown()`` - markdown rendering
+            - 'dataframe': ``st.dataframe()`` - interactive dataframe
+            - 'table': ``st.table()`` - static table display
+            - Or any other ``st.*`` display function
+        **kwargs: Additional keyword arguments to pass to the backend function.
+            For example: ``height=400``, ``width='stretch'``, etc.
 
     Note:
         This is the default display hook for cells. Custom display behavior
         can be implemented via the notebook's display_hook.
 
     Examples:
-        Typical usage in shell execution::
+        Basic usage with default backend::
 
             result = 42
-            display(result)  # Shows "42" in the UI
+            display(result)  # Uses st.write by default
+
+        With specific backend::
+
+            data = {'a': 1, 'b': 2}
+            display(data, backend='json')  # Uses st.json
+
+        With backend options::
+
+            df = pd.DataFrame({'a': [1, 2, 3]})
+            display(df, backend='dataframe', height=400, width='stretch')
+
+        Use any Streamlit function::
+
+            display(data, backend='plotly_chart', width='stretch')
 
     See Also:
         :meth:`~streamlit_notebook.notebook.Notebook.display_hook`: Custom display
     """
-    if obj is not None:
+    if obj is None:
+        return
+
+    # Default to 'write' if no backend specified
+    if backend is None:
+        backend = 'write'
+
+    # Try the requested backend first using getattr
+    display_func = getattr(st, backend, None)
+    if display_func and callable(display_func):
+        try:
+            display_func(obj, **kwargs)
+            return
+        except Exception as e:
+            st.warning(f"Failed to display with {backend} backend: {str(e)}")
+            pass  # Fall through to fallback
+
+    # Fallback to st.write if requested backend failed or doesn't exist
+    if backend != 'write':
         try:
             st.write(obj)
-        except:
-            st.text(repr(obj))
+            return
+        except Exception as e:
+            st.warning(f"Failed to display with write backend: {str(e)}")
+            pass  # Fall through to final fallback
+
+    # Final fallback: plain text representation
+    try:
+        st.text(repr(obj))
+    except Exception:
+        # If even repr fails, show error message
+        st.error(f"Failed to display object of type {type(obj).__name__}")
+
+def original_set_page_config(*args,**kwargs) -> None:
+    """Get the original st.rerun function before patching."""
+    if hasattr(st.set_page_config, '_patched'):
+        return st.set_page_config._original(*args,**kwargs)
+    else:
+        return st.set_page_config(*args,**kwargs)
+
+def set_page_config(*args: Any, **kwargs: Any) -> None:
+    """Context-aware wrapper for st.set_page_config.
+
+    This patched version of Streamlit's ``set_page_config`` only executes during
+    the notebook's exec context, preventing duplicate page config calls.
+
+    When a notebook file is run directly via ``streamlit run notebook.py``, the
+    ``st.set_page_config`` call in the user's script is skipped. When ``nb.render()``
+    re-executes the script in the ``<notebook_script>`` context, the page config
+    is applied. This ensures configuration happens exactly once, in the correct context.
+
+    Args:
+        *args: Positional arguments passed to ``st.set_page_config``.
+        **kwargs: Keyword arguments passed to ``st.set_page_config``.
+
+    Note:
+        This function is automatically patched into Streamlit's API when the
+        notebook module is imported. Users don't need to call this directly;
+        just use ``st.set_page_config()`` normally in notebook files.
+
+    Examples:
+        Normal usage in notebook file::
+
+            import streamlit as st
+            from streamlit_notebook import st_notebook
+
+            # This will only execute in the correct context
+            st.set_page_config(
+                page_title="My Notebook",
+                layout="wide",
+                initial_sidebar_state="collapsed"
+            )
+
+            nb = st_notebook()
+            # ... rest of notebook
+
+    See Also:
+        :meth:`Notebook.render`: The render method that creates the exec context
+    """
+    # Check if running from exec context (via <notebook_script>)
+    frame = inspect.currentframe()
+    caller_globals = frame.f_back.f_globals if frame else {}
+    caller_file = caller_globals.get('__file__', '<notebook_script>')
+
+    # Only call set_page_config if in exec context
+    if caller_file == '<notebook_script>':
+        original_set_page_config(*args, **kwargs)

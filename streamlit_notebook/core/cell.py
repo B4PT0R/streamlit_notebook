@@ -113,6 +113,7 @@ class Cell:
         self.stdout: Optional[str] = None
         self.stderr: Optional[str] = None
         self.results: list[Any] = []
+        self.displays: list[dict[str, Any]] = []  # Display metadata for each result
         self.exception: Optional[Exception] = None
         self.ready = False
         self.has_run = False
@@ -147,22 +148,22 @@ class Cell:
         raise AttributeError(f"Cannot set language directly. Use type instead.")
 
     @property
-    def rank(self):
+    def index(self):
         """
-        Gets the current rank of the cell in the cells list.
+        Gets the current index of the cell in the cells list.
 
         Returns:
             int: The index of the cell in the notebook's cell list.
         """
         return self.notebook.cells.index(self)
     
-    @rank.setter
-    def rank(self,value:int):
-        self._rerank(rank=value)
+    @index.setter
+    def index(self,value:int):
+        self._reindex(index=value)
 
     @property
     def id(self) -> str:
-        return f"Cell[{self.rank}]({self.key})"
+        return f"Cell[{self.index}]({self.key})"
     
     @id.setter
     def id(self, value: str) -> None:
@@ -244,7 +245,7 @@ class Cell:
         return self._type_object.has_fragment_toggle
     
     @has_fragment_toggle.setter
-    def has_frament_toggle(self, value: Any) -> None:
+    def has_fragment_toggle(self, value: Any) -> None:
         raise AttributeError("has_fragment_toggle is a read-only property")
 
     @property
@@ -339,8 +340,10 @@ class Cell:
         """
         self.output=self.output_area.container()
         with self.output:
+            self.exception_area=st.empty()
             self.stdout_area=st.empty()
             self.stderr_area=st.empty()
+            self.display_area=st.container()
         
     def prepare_skeleton(self):
         """
@@ -370,30 +373,41 @@ class Cell:
         if self.reactive and self.has_run_once:
             self.run()
 
-        self.show_output()
+        self.show_outputs()
 
-    def show_output(self):
+    def show_displays(self):
+        if self.displays:
+            with self.display_area:
+                # Display each result using info from displays
+                for display_info in self.displays:
+                    result = display_info.get("result")
+                    backend = display_info.get("backend")
+                    # Extract all kwargs except 'result' and 'backend'
+                    display_kwargs = {k: v for k, v in display_info.items()
+                                     if k not in ("result", "backend")}
+                    display(result, backend=backend, **display_kwargs)
+
+    def show_outputs(self):
         """
-        Displays the previous execution results.
-
-        This method is called when a cell hasn't run in the current Streamlit run,
-        displaying previous results without re-executing the code.
+        Displays the cell's current execution outputs.
         """
         self.initialize_output_area()
+        if self.exception:
+            with self.exception_area:
+                formatted_traceback=f"**{type(self.exception).__name__}**: {str(self.exception)}\n```\n{self.exception.enriched_traceback_string}\n```"
+                st.error(formatted_traceback)
         if self.stdout and self.notebook.show_stdout:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
         if self.stderr and self.notebook.show_stderr:
             with self.stderr_area:
                 st.code(self.stderr,language="text")
-        if self.results:
-            with self.output:
-                for result in self.results:
-                    display(result)
-        if self.exception:
-            with self.output:
-                formatted_traceback=f"**{type(self.exception).__name__}**: {str(self.exception)}\n```\n{self.exception.enriched_traceback_string}\n```"
-                st.error(formatted_traceback)
+
+
+        if not self.has_run:
+            # We don't show displays if the cell has already run this turn
+            # because display shows them already when the cell runs 
+            self.show_displays()
 
     # Excution workflow 
 
@@ -407,11 +421,12 @@ class Cell:
         if not self.has_run and self.code:
             self.last_code=self.code
             self.results=[]
+            self.displays=[]
             self.has_run=True
             if self.ready:
                 # The cell skeleton is on screen and can receive outputs
                 self.initialize_output_area()
-                with self.output:
+                with self.display_area:
                     self._exec()
             else:
                 # The cell skeleton isn't on screen yet
@@ -498,23 +513,20 @@ class Cell:
             self._type = new_type
         else:
             raise ValueError(f"Invalid cell type: {new_type}. Must be 'code', 'markdown', or 'html'")
-
-        self.notebook.notify(f"Changed cell {self.key} to {new_type}", icon="🔄")
         rerun()
 
-    def _rerank(self,rank:int):
+    def _reindex(self,index:int):
         """
-        Moves the cell to a new rank.
+        Moves the cell to a new index.
 
         Args:
-            rank (int): The new rank (position) for the cell in the notebook.
+            index (int): The new index (position) for the cell in the notebook.
         """
-        if 0<=rank<len(self.notebook.cells) and not rank==self.rank:
+        if 0<=index<len(self.notebook.cells) and not index==self.index:
             # Remove from current position
             self.notebook.cells.remove(self)
             # Insert at new position
-            self.notebook.cells.insert(rank, self)
-            self.notebook.notify(f"Moved {self.id} to position {rank}", icon="↕️")
+            self.notebook.cells.insert(index, self)
             rerun()
 
     # Public methods
@@ -525,7 +537,7 @@ class Cell:
 
         This method changes the cell's position, moving it one place earlier in the execution order.
         """
-        self._rerank(self.rank-1)
+        self._reindex(self.index-1)
         
     def move_down(self):
         """
@@ -533,29 +545,41 @@ class Cell:
 
         This method changes the cell's position, moving it one place later in the execution order.
         """
-        self._rerank(self.rank+1)
+        self._reindex(self.index+1)
 
-    def insert_above(self):
+    def insert_above(self, type: str = "code", code: str = "", reactive: bool = False, fragment: bool = False):
         """
         Inserts a new cell above this cell in the notebook.
+
+        Args:
+            type (str): The type of cell to create ("code", "markdown", or "html"). Defaults to "code".
+            code (str): Initial code or content for the cell. Defaults to "".
+            reactive (bool): Whether the cell should automatically re-run when UI refreshes. Defaults to False.
+            fragment (bool): Whether the cell should run as a Streamlit fragment. Defaults to False.
         """
         new_key = self.notebook._gen_cell_key()
-        cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
+        cell = new_cell(self.notebook, new_key, type=type, code=code, reactive=reactive, fragment=fragment)
         # Insert at current position (pushing this cell down)
-        self.notebook.cells.insert(self.rank, cell)
-        self.notebook.notify(f"Created cell {new_key} above", icon="➕")
+        self.notebook.cells.insert(self.index, cell)
         rerun()
+        return cell
 
-    def insert_below(self):
+    def insert_below(self, type: str = "code", code: str = "", reactive: bool = False, fragment: bool = False):
         """
         Inserts a new cell below this cell in the notebook.
+
+        Args:
+            type (str): The type of cell to create ("code", "markdown", or "html"). Defaults to "code".
+            code (str): Initial code or content for the cell. Defaults to "".
+            reactive (bool): Whether the cell should automatically re-run when UI refreshes. Defaults to False.
+            fragment (bool): Whether the cell should run as a Streamlit fragment. Defaults to False.
         """
         new_key = self.notebook._gen_cell_key()
-        cell = new_cell(self.notebook, new_key, type=self.type, code="", reactive=False, fragment=False)
+        cell = new_cell(self.notebook, new_key, type=type, code=code, reactive=reactive, fragment=fragment)
         # Insert after current position
-        self.notebook.cells.insert(self.rank + 1, cell)
-        self.notebook.notify(f"Created cell {new_key} below", icon="➕")
+        self.notebook.cells.insert(self.index + 1, cell)
         rerun()
+        return cell
 
     def delete(self):
         """
@@ -563,7 +587,6 @@ class Cell:
         """
         if self in self.notebook.cells:
             self.notebook.cells.remove(self)
-            self.notebook.notify(f"Deleted cell {self.key}", icon="🗑️")
             rerun()
 
     def reset(self):
@@ -575,6 +598,7 @@ class Cell:
         self.has_run=False
         self.last_code=None
         self.results=[]
+        self.displays=[]
         self.stdout=None
         self.stderr=None
         self.exception=None
@@ -606,7 +630,7 @@ class Cell:
             Full serialization (for AI agent context)::
 
                 cell_state = cell.to_dict(minimal=False)
-                # Includes: id, rank, language, has_run_once, visible, stdout,
+                # Includes: id, index, language, has_run_once, visible, stdout,
                 # stderr, results (as repr strings), exception info
 
         Note:
@@ -627,7 +651,7 @@ class Cell:
         if not minimal:
             d.update(
                 id=self.id,
-                rank=self.rank,
+                index=self.index,
                 language=self.language,
                 has_run_once=self.has_run_once,
                 visible=self.visible,

@@ -1,3 +1,11 @@
+"""UI helpers for notebook cells.
+
+The classes in this module wrap the `code_editor` component to provide a rich
+cell editing experience (buttons, toggles, info bars) that can be reused by
+:class:`~streamlit_notebook.cell.Cell` and other UI helpers. Docstrings here
+are Sphinx-friendly to keep the API reference readable.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Optional, Literal
@@ -24,6 +32,15 @@ class editor_output_parser:
         self.editor = editor
 
     def __call__(self, output: Optional[dict[str, Any]]) -> Optional[str]:
+        """Parse the raw editor output payload.
+
+        Args:
+            output: The dictionary produced by the frontend component.
+
+        Returns:
+            The event type string if a new event should be processed, otherwise
+            ``None`` when nothing changed or the payload is empty.
+        """
         if output is None or not output.get('id'):
             event = None
         else:
@@ -423,12 +440,14 @@ class Editor:
         self.parser=editor_output_parser(self)    
 
     def __getattr__(self,attr):
+        """Fallback attribute access for code-editor keyword arguments."""
         if attr in self.kwargs:
             return self.kwargs[attr]
         else:
             return super().__getattribute__(attr)
         
     def __setattr__(self,attr,value):
+        """Store unknown attributes in ``kwargs`` to forward them to the component."""
         if attr in self.__class__._excluded:
             super().__setattr__(attr,value)
         else:
@@ -436,6 +455,7 @@ class Editor:
 
     @property
     def bindings(self):
+        """Mapping of event names to control callbacks."""
         return {button.event:button._callback for button in self.buttons.values()}
 
     def add_button(self,name="button",caption="Click me!",icon="Play",event=None,style=None,callback=None,has_caption=True,has_icon=True,hover=True,always_on=True,icon_size="12px",visible=True):

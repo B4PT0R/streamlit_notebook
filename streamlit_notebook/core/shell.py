@@ -67,7 +67,6 @@ import builtins
 import ast
 from collections import deque, OrderedDict
 from asttokens import ASTTokens
-import asyncio
 import tokenize
 import subprocess
 import hashlib
@@ -75,20 +74,39 @@ import random
 import string
 from contextlib import contextmanager
 from typing import Any, Callable, Optional, Union, Literal
+from threading import Thread as ThreadBase
 
 def content_hash(content: str) -> str:
+    """Return a SHA256 hex digest for the provided content string."""
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
 def short_id(length: int = 8) -> str:
+    """Generate a short pseudo-random identifier."""
     return "".join(random.choices(string.ascii_letters, k=length))
 
 def debug_print(*args: Any, sep: str = " ", end: str = "\n", flush: bool = False) -> None:
+    """Write directly to the real stdout, bypassing patched streams."""
     sys.__stdout__.write(sep.join(map(str, args)) + end)
     if flush:
         sys.__stdout__.flush()
 
+def is_running_in_streamlit_runtime():
+    try:
+        import streamlit.runtime.scriptrunner
+        return True
+    except Exception:
+        return False
+
+def Thread(*args,**kwargs):
+    thread=ThreadBase(*args,**kwargs)
+    if is_running_in_streamlit_runtime():
+        from streamlit.runtime.scriptrunner import get_script_run_ctx,add_script_run_ctx
+        ctx=get_script_run_ctx()
+        add_script_run_ctx(thread,ctx)
+    return thread
 
 def stdout_write(data: str, buffer: str) -> None:
+    """Default stdout hook that mirrors captured output to the real stdout."""
     if isinstance(sys.stdout, Stream):
         sys.__stdout__.write(data)
         sys.__stdout__.flush()
@@ -97,6 +115,7 @@ def stdout_write(data: str, buffer: str) -> None:
         sys.stdout.flush()
 
 def stderr_write(data: str, buffer: str) -> None:
+    """Default stderr hook that mirrors captured output to the real stderr."""
     if isinstance(sys.stderr, Stream):
         sys.__stderr__.write(data)
         sys.__stderr__.flush()
@@ -105,6 +124,7 @@ def stderr_write(data: str, buffer: str) -> None:
         sys.stderr.flush()
 
 def stdin_readline() -> str:
+    """Fallback stdin hook that reads from the console."""
     if isinstance(sys.stdin, StdinProxy):
         return prompt("", multiline=False)
     else:
@@ -113,21 +133,23 @@ def stdin_readline() -> str:
 PTK_SESSION: Any = None
 
 def ensure_ptk_session() -> Any:
+    """Create or return a cached prompt_toolkit session."""
     global PTK_SESSION
     if PTK_SESSION is None:
         try:
             from prompt_toolkit import PromptSession
         except ImportError as exc:
-            raise RuntimeError("prompt_toolkit is required for interactive shell mode. Install it via 'pip install prompt-toolkit'.") from exc
+            raise RuntimeError("prompt_toolkit is required for terminal interactive shell mode. Install it via 'pip install prompt-toolkit'.") from exc
         PTK_SESSION = PromptSession()
     return PTK_SESSION
 
 def prompt(prompt: str, multiline: bool = True, prompt_continuation: str = "", wrap_lines: bool = False) -> str:
+    """Read user input using prompt_toolkit with safe stdout patching."""
     session = ensure_ptk_session()
     try:
         from prompt_toolkit.patch_stdout import patch_stdout
     except ImportError as exc:
-        raise RuntimeError("prompt_toolkit is required for interactive shell mode. Install it via 'pip install prompt-toolkit'.") from exc
+        raise RuntimeError("prompt_toolkit is required for terminal interactive shell mode. Install it via 'pip install prompt-toolkit'.") from exc
     with patch_stdout():
         answer = session.prompt(message=prompt, multiline=multiline, prompt_continuation=prompt_continuation, wrap_lines=wrap_lines, refresh_interval=1)
     return answer
@@ -480,6 +502,14 @@ class ShellResponse:
     def __str__(self) -> str:
         return self.__repr__()
 
+class _MISSING:
+    """
+    A sentinel class to represent missing values in the Shell
+    """
+    pass
+
+MISSING=_MISSING()
+
 class Shell:
     """
     Executes Python code within a managed environment and captures output and exceptions.
@@ -511,10 +541,10 @@ class Shell:
         namespace (dict): The global namespace for code execution.
         display_mode (str): Controls when results are displayed ('all', 'last', or 'none').
         magics (dict): Registered magic commands.
-        last_result (Any): The result of the last executed expression.
         history (OrderedDict): Cache of past executions.
         history_size (int): Maximum number of past executions to cache.
         current_code (str): The current code being executed.
+        last_result (Any): The result of the last execution.
         + all hooks as attributes
 
     Public Methods:
@@ -760,16 +790,14 @@ class Shell:
                 out_stream.flush()
             stream.close()
 
-        import threading
-
         process = subprocess.Popen(
             command, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1
         )
 
-        t_out = threading.Thread(target=_stream_output, args=(process.stdout, sys.stdout))
-        t_err = threading.Thread(target=_stream_output, args=(process.stderr, sys.stderr))
+        t_out = Thread(target=_stream_output, args=(process.stdout, sys.stdout))
+        t_err = Thread(target=_stream_output, args=(process.stderr, sys.stderr))
         if self.add_script_run_ctx_hook:
             self.add_script_run_ctx_hook(t_out,self.get_script_run_ctx_hook())
             self.add_script_run_ctx_hook(t_err,self.get_script_run_ctx_hook())
@@ -853,12 +881,13 @@ class Shell:
         
         if isinstance(node, ast.Expr):
             compiled_code = compile(ast.Expression(node.value), filename=self._current_filename, mode='eval')
-            self.last_result = eval(compiled_code, globals,locals)
+            result = eval(compiled_code, globals,locals)
+            self.last_result=result
             if not suppress_result:
                 if self.display_mode == 'all' or (self.display_mode == 'last' and is_last_node):
-                    self.display(self.last_result)
+                    self.display(result)
         else:
-            self.last_result = None
+            self.last_result=None
             compiled_code = compile(ast.Module([node], type_ignores=[]), filename=self._current_filename, mode='exec')
             exec(compiled_code, globals,locals)
 
@@ -995,28 +1024,33 @@ class Shell:
             return response
     
     def add_to_history(self, filename, response):
-        """Adds a response to the history, maintaining the history size limit.
+        """Add a ``ShellResponse`` to the cache, enforcing the size limit.
+
         Args:
-            rank (int): The rank or identifier for the response.
-            response (ShellResponse): The response object to add to history.
+            filename: Synthetic filename (e.g. ``<shell-input-1>``) used as the
+                history key.
+            response: The response object to add to history.
         """
         self.history[filename]=response
         while len(self.history)>self.history_size:
             self.history.popitem(last=False)
     
-    def display(self,obj):
+    def display(self,obj,**kwargs):
         """
         Default method to display an object.
 
         Args:
             obj: The object to be displayed.
+            **kwargs: Optional arguments to pass to the display hook
+                (e.g., backend='json' for custom display backends).
 
         This method attempts to use self.display_hook if provided,
-        or falls back to printing the repr of the object.
+        passing any additional kwargs to it. Falls back to printing
+        the repr of the object if no hook is configured.
         """
         if obj is not None:
             if self.display_hook:
-                self.display_hook(obj)
+                self.display_hook(obj,**kwargs)
             else:
                 print(repr(obj))
 

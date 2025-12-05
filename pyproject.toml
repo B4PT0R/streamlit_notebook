@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.1.9"
+version = "0.2.0"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,9 +19,47 @@ classifiers = [
 ]
 dependencies = [
     "streamlit-code-editor",
-    "streamlit>=1.41.0",
+    "streamlit>=1.5.0",
     "asttokens",
     "python-dotenv",
+    "filetype",
+    "pydub"
+]
+
+[project.optional-dependencies]
+# Document processing and web scraping utilities (for get_text.py)
+documents = [
+    "requests",
+    "beautifulsoup4",
+    "lxml",
+    "trafilatura",
+    "PyPDF2",
+    "python-docx",
+    "odfpy",
+    "pillow",
+    "selenium",
+    "get-gecko-driver"
+]
+
+# AI agent core (LLM integration, embeddings, tools)
+agent = [
+    "openai",
+    "numpy",
+    "pydantic",
+    "tiktoken",
+    "regex",
+    "pyyaml",
+    "prompt-toolkit"
+]
+
+# Full agent with document processing capabilities
+agent-full = [
+    "streamlit_notebook[agent]",
+    "streamlit_notebook[documents]"
+]
+
+# Full data science stack (plotting, ML, stats)
+datascience = [
     "matplotlib",
     "numpy",
     "seaborn",
@@ -29,7 +67,6 @@ dependencies = [
     "pillow",
     "openpyxl",
     "requests",
-    "pydub",
     "graphviz",
     "altair",
     "plotly",
@@ -39,6 +76,12 @@ dependencies = [
     "sympy",
     "scikit-learn",
     "vega-datasets"
+]
+
+# Everything (agent + documents + datascience)
+full = [
+    "streamlit_notebook[agent-full]",
+    "streamlit_notebook[datascience]"
 ]
 
 [project.urls]
