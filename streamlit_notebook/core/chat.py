@@ -64,39 +64,37 @@ def save_settings(agent, settings):
     with open(settings_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
-@st.dialog("Settings", width="large")
+@st.dialog("Chat & Agent Settings", width="large")
 def settings_dialog():
     """Dialog for chat and agent settings"""
-    st.write("### Chat and Agent Settings")
 
     # Create two main columns
     left_col, right_col = st.columns(2)
 
     with left_col:
-        st.write("#### User & API")
+        
         # User details - horizontal
-        with st.container():
-            c1, c2 = st.columns(2)
+        with st.container(border=True, gap="small"):
+            st.write("#### User & API")
+            c1, c2 = st.columns(2, gap="small")
             with c1:
                 username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
             with c2:
                 userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
 
-        # OpenAI API Key
-        current_api_key = state.agent.config.get("openai_api_key", "") or ""
-        api_key = st.text_input(
-            "OpenAI API Key",
-            value=current_api_key,
-            type="password",
-            help="Leave empty to use OPENAI_API_KEY environment variable"
-        )
-
-        st.divider()
-        st.write("#### Model Settings")
+            # OpenAI API Key
+            current_api_key = state.agent.config.get("openai_api_key", "") or ""
+            api_key = st.text_input(
+                "OpenAI API Key",
+                value=current_api_key,
+                type="password",
+                help="Leave empty to use OPENAI_API_KEY environment variable"
+            )
 
         # Model and Reasoning - horizontal
-        with st.container():
-            c1, c2 = st.columns(2)
+        with st.container(border=True, gap="small"):
+            st.write("#### Model Settings")
+            c1, c2 = st.columns(2, gap="small")
             with c1:
                 model = st.selectbox(
                     "Model",
@@ -110,21 +108,19 @@ def settings_dialog():
                     index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
                 )
 
-        # Temperature
-        temperature = st.slider(
-            "Temperature",
-            min_value=0.0,
-            max_value=2.0,
-            value=state.agent.config.get("temperature", 0.7),
-            step=0.1
-        )
-
-        st.divider()
-        st.write("#### Token Limits")
+            # Temperature
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=state.agent.config.get("temperature", 0.7),
+                step=0.1
+            )
 
         # Token limits - 3 columns
-        with st.container():
-            c1, c2, c3 = st.columns(3)
+        with st.container(border=True,gap="small"):
+            st.write("#### Token Limits")
+            c1, c2, c3 = st.columns(3, gap="small")
             with c1:
                 max_tokens = st.number_input(
                     "Max Completion",
@@ -151,34 +147,32 @@ def settings_dialog():
                 )
 
     with right_col:
-        st.write("#### Features")
-
+        
         # Checkboxes - horizontal
-        with st.container():
-            c1, c2 = st.columns(2)
+        with st.container(border=True, gap="small"):
+            st.write("#### Features")
+            c1, c2, c3 = st.columns(3, gap="small")
             with c1:
+                voice_enabled = st.checkbox(
+                    "Voice Enabled",
+                    value=state.agent.config.get("voice_enabled", False)
+                )
+            with c2:
                 vision_enabled = st.checkbox(
                     "Vision Enabled",
                     value=state.agent.config.get("vision_enabled", True)
                 )
-            with c2:
+            with c3:
                 show_tool_calls = st.checkbox(
                     "Show Tool Calls",
                     value=state.get("show_tool_calls", True)
                 )
 
-        st.divider()
-        st.write("#### Voice Settings")
-
-        # Voice enabled
-        voice_enabled = st.checkbox(
-            "Voice Enabled",
-            value=state.agent.config.get("voice_enabled", False)
-        )
-
         # Voice model and voice - horizontal
-        with st.container():
-            c1, c2 = st.columns(2)
+        with st.container(border=True, gap="small"):
+            st.write("#### Voice Settings")
+            c1, c2= st.columns(2, gap="small")
+
             with c1:
                 voice_model = st.selectbox(
                     "Voice Model",
@@ -192,80 +186,87 @@ def settings_dialog():
                     index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
                 )
 
-        # Voice instructions
-        voice_instructions = st.text_area(
-            "Voice Instructions",
-            value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
-            height=80
-        )
+            # Voice instructions
+            voice_instructions = st.text_area(
+                "Voice Instructions",
+                value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
+                height=80
+            )
 
-    # System prompt - full width at the bottom, outside columns
-    st.divider()
-    st.write("#### System Prompt")
+        with st.container(border=True, gap="small", height='stretch'):
+            # System prompt - full width at the bottom, outside columns
+            st.write("#### System Prompt")
 
-    current_system = state.agent.config.get("system", "")
-    if os.path.isfile(current_system):
-        with open(current_system, 'r', encoding='utf-8') as f:
-            current_system_content = f.read()
-    else:
-        current_system_content = current_system if isinstance(current_system, str) else get_default_system_prompt()
+            current_system = state.agent.config.get("system", "")
+            if os.path.isfile(current_system):
+                with open(current_system, 'r', encoding='utf-8') as f:
+                    current_system_content = f.read()
+            else:
+                current_system_content = current_system if isinstance(current_system, str) else get_default_system_prompt()
 
-    system_prompt = st.text_area(
-        "System Prompt",
-        value=current_system_content,
-        height=120,
-        label_visibility="collapsed"
-    )
+            system_prompt = st.text_area(
+                "System Prompt",
+                value=current_system_content,
+                height='stretch',
+                label_visibility="collapsed"
+            )
 
 
-    # Buttons at the bottom
-    col1, col2 = st.columns(2)
+    # Save & Cancel buttons at the bottom
+    with st.container(horizontal=True):   
+        
+        st.space(size='stretch')
 
-    with col1:
-        if st.button("Save", type="primary", width='stretch'):
-            # Apply settings to agent config
-            state.agent.config.username=username
-            state.agent.config.userage=userage
-            state.agent.config.model = model
-            state.agent.config.temperature = temperature
-            state.agent.config.max_completion_tokens = max_tokens
-            state.agent.config.max_input_tokens = max_input_tokens
-            state.agent.config.token_limit = token_limit
-            state.agent.config.reasoning_effort = reasoning_effort
-            state.agent.config.vision_enabled = vision_enabled
-            state.agent.config.voice_enabled = voice_enabled
-            state.agent.config.voice_model = voice_model
-            state.agent.config.voice = voice
-            state.agent.config.voice_instructions = voice_instructions
-            state.agent.config.system = system_prompt
-            state.show_tool_calls = show_tool_calls
+        # Buttons at the bottom
+        col1, col2 = st.columns(2)
 
-            # Apply API key (None if empty string)
-            state.agent.config.openai_api_key = api_key if api_key.strip() else None
+        with col1:
+            if st.button("Save", type="primary", width='stretch'):
+                # Apply settings to agent config
+                state.agent.config.username=username
+                state.agent.config.userage=userage
+                state.agent.config.model = model
+                state.agent.config.temperature = temperature
+                state.agent.config.max_completion_tokens = max_tokens
+                state.agent.config.max_input_tokens = max_input_tokens
+                state.agent.config.token_limit = token_limit
+                state.agent.config.reasoning_effort = reasoning_effort
+                state.agent.config.vision_enabled = vision_enabled
+                state.agent.config.voice_enabled = voice_enabled
+                state.agent.config.voice_model = voice_model
+                state.agent.config.voice = voice
+                state.agent.config.voice_instructions = voice_instructions
+                state.agent.config.system = system_prompt
+                state.show_tool_calls = show_tool_calls
 
-            # Save to settings file (don't save the API key for security)
-            new_settings = {
-                "model": model,
-                "temperature": temperature,
-                "max_completion_tokens": max_tokens,
-                "token_limit": token_limit,
-                "reasoning_effort": reasoning_effort,
-                "vision_enabled": vision_enabled,
-                "voice_enabled": voice_enabled,
-                "voice_model": voice_model,
-                "voice": voice,
-                "voice_instructions": voice_instructions,
-                "show_tool_calls": show_tool_calls,
-                "system_prompt": system_prompt,
-            }
-            save_settings(state.agent, new_settings)
+                # Apply API key (None if empty string)
+                state.agent.config.openai_api_key = api_key if api_key.strip() else None
 
-            st.success("Settings saved!")
-            rerun(wait=False)
+                # Save to settings file (don't save the API key for security)
+                new_settings = {
+                    "model": model,
+                    "temperature": temperature,
+                    "max_completion_tokens": max_tokens,
+                    "token_limit": token_limit,
+                    "reasoning_effort": reasoning_effort,
+                    "vision_enabled": vision_enabled,
+                    "voice_enabled": voice_enabled,
+                    "voice_model": voice_model,
+                    "voice": voice,
+                    "voice_instructions": voice_instructions,
+                    "show_tool_calls": show_tool_calls,
+                    "system_prompt": system_prompt,
+                }
+                save_settings(state.agent, new_settings)
 
-    with col2:
-        if st.button("Cancel", width='stretch'):
-            rerun(wait=False)
+                st.success("Settings saved!")
+                rerun(wait=False)
+
+        with col2:
+            if st.button("Cancel", width='stretch'):
+                rerun(wait=False)
+    
+        st.space(size='stretch')
 
 def init_chat():
     """Initialize the chat agent.
@@ -459,7 +460,12 @@ def show_chat():
 
     # session management and settings
 
-    with st.container(border=True): 
+    with st.container(border=True):
+        with st.container(horizontal=True, horizontal_alignment="center"):
+            st.space(size="stretch")
+            st.markdown("### Session Management",width="content")
+            st.space(size="stretch")
+
         col1, col2 = st.columns(2)
 
         with col1:
