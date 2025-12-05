@@ -440,15 +440,28 @@ class Cell:
         This method executes the cell's content, captures the output,
         and updates the cell's state accordingly.
 
-        Reactive cells: If already run this turn, defers execution to next turn to avoid widget duplication.
+        Reactive cells: If already run this turn, tries execution. If duplicate widget error occurs,
+                       defers to next turn. This allows immediate execution when code changed enough.
         One-shot cells: Can re-run multiple times in same turn (no Streamlit widgets except display()).
         """
-        # Only reactive cells are blocked from re-running in the same turn
-        # One-shot cells can run multiple times (no widgets, only display() which is protected)
+        # Reactive cells that already ran: try execution, defer if duplicate widgets detected
         if self.has_run and self.reactive:
-            self.run_requested = True
-            return
+            # Try to execute - might work if widgets changed
+            try:
+                self._execute_cell()
+                self.run_requested = False  # Clear any pending request, we just ran
+                return
+            except (DuplicateWidgetID, StreamlitDuplicateElementKey):
+                # Duplicate widgets - defer to next turn
+                self.run_requested = True
+                return
 
+        # First run this turn (reactive or one-shot) or one-shot re-run
+        if self.code:
+            self._execute_cell()
+
+    def _execute_cell(self):
+        """Execute the cell code and update state."""
         if self.code:
             self.last_code=self.code
             self.results=[]
