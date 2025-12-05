@@ -312,6 +312,11 @@ def init_chat():
         # Always start with a new session
         state.agent.start_new_session()
 
+        # Inject agent into shell namespace so it's accessible as __agent__
+        notebook = get_notebook()
+        if notebook and notebook.shell:
+            notebook.shell.update_namespace(__agent__=state.agent)
+
         state.chat_initialized=True
 
     return True
