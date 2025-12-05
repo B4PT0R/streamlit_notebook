@@ -402,7 +402,6 @@ class Agent:
                     - Absolute path to a local folder or file (e.g., "/home/user/document.pdf")
                     - URL (e.g., "https://example.com/report.pdf")
                     - any other data structure, or python variable living in the shell's namespace
-                type: Any
             start_at_line:
                 description: |
                     Line number to start reading from (1-indexed). Default is 1 (start from beginning).
