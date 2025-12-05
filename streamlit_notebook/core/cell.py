@@ -363,11 +363,11 @@ class Cell:
         """
         self.prepare_skeleton()
 
-        if not self.notebook.app_mode and self.visible:
+        if not self.notebook.app_view and self.visible:
             with self.container.container():
                 self.update_ui()
                 self.ui.show()
-                
+
         # Rerun only if the cell has been run at least once with the current code
         # This prevents premature execution when toggling "reactive" on a cell that hasn't run yet
         if self.reactive and self.has_run_once:
