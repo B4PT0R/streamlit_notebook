@@ -423,11 +423,6 @@ def show_chat():
         st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
         return
 
-    with st.container(horizontal=True, horizontal_alignment='center'):
-        st.space(size='stretch')
-        st.image(root_join("app_images", "pandora_logo.png"),caption="# **Hey! I'm Pandora!**",width=300)
-        st.space(size='stretch')
-
     # session management and settings
 
     with st.container(border=True): 
@@ -461,7 +456,15 @@ def show_chat():
         if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings"):
             settings_dialog()
 
+    
+
     # Chat area
+
+    with st.container(horizontal=True, horizontal_alignment='center'):
+        st.space(size='stretch')
+        st.image(root_join("app_images", "pandora_logo.png"),caption="# **Hey! I'm Pandora!**",width=300)
+        st.space(size='stretch')
+
     state.chat_area=st.container()
     state.stream_area=st.empty()
 
