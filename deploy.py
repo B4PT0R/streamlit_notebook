@@ -12,11 +12,21 @@ Usage:
     python deploy.py
 """
 
-import re
 import subprocess
 import sys
 import shutil
 from pathlib import Path
+
+# Try to import tomllib (Python 3.11+) or fallback to tomli
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        print("Error: tomli package is required for Python < 3.11")
+        print("Install with: pip install tomli")
+        sys.exit(1)
 
 
 def run_command(cmd, check=True, capture_output=False):
@@ -35,16 +45,18 @@ def run_command(cmd, check=True, capture_output=False):
 
 
 def get_current_version():
-    """Extract current version from pyproject.toml."""
+    """Extract current version from pyproject.toml using TOML parser."""
     pyproject_path = Path("pyproject.toml")
-    content = pyproject_path.read_text()
 
-    match = re.search(r'version\s*=\s*"([^"]+)"', content)
-    if not match:
+    with open(pyproject_path, 'rb') as f:
+        data = tomllib.load(f)
+
+    version = data.get('project', {}).get('version')
+    if not version:
         print("Error: Could not find version in pyproject.toml")
         sys.exit(1)
 
-    return match.group(1)
+    return version
 
 
 def bump_patch_version(version):
@@ -60,18 +72,38 @@ def bump_patch_version(version):
 
 
 def update_version_in_file(new_version):
-    """Update the version in pyproject.toml."""
+    """Update the version in pyproject.toml using line-by-line replacement."""
     pyproject_path = Path("pyproject.toml")
-    content = pyproject_path.read_text()
+    lines = pyproject_path.read_text().splitlines(keepends=True)
 
-    # Replace version line
-    new_content = re.sub(
-        r'version\s*=\s*"[^"]+"',
-        f'version = "{new_version}"',
-        content
-    )
+    # Track if we're in the [project] section
+    in_project_section = False
+    version_updated = False
 
-    pyproject_path.write_text(new_content)
+    new_lines = []
+    for line in lines:
+        # Check if we're entering the [project] section
+        if line.strip() == '[project]':
+            in_project_section = True
+            new_lines.append(line)
+            continue
+
+        # Check if we're leaving the [project] section (entering a new section)
+        if line.strip().startswith('[') and line.strip() != '[project]':
+            in_project_section = False
+
+        # Only replace version if we're in the [project] section
+        if in_project_section and line.strip().startswith('version'):
+            new_lines.append(f'version = "{new_version}"\n')
+            version_updated = True
+        else:
+            new_lines.append(line)
+
+    if not version_updated:
+        print("Error: Could not find version field in [project] section")
+        sys.exit(1)
+
+    pyproject_path.write_text(''.join(new_lines))
     print(f"Updated pyproject.toml to version {new_version}")
 
 
