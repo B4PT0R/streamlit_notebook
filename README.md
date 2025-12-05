@@ -2,7 +2,7 @@
 
 The reactive notebook powered by Streamlit.
 
-Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
+Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the reactivity and deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
 
 It was designed with AI integration in mind, and comes equipped with its own full-featured AI agent (requires an OpenAI API key) having full dynamic control over the notebook. It can create, edit, run code cells, read documents, view images, support voice interaction, etc.
 
@@ -62,7 +62,7 @@ We all know Jupyter as the go-to for interactive programming, but it comes with 
 - kernel / frontend dichotomy
 - Huge dependency tree
 
-Streamlit on the other hand is great for fast reactive apps development, with a huge components ecosystem, and easy deployment on the cloud. But its "rerun the whole script" execution model (without namespace persistence!) can sometimes turn cumbersome, and it lacked a proper notebook ergonomics.
+Streamlit on the other hand is great for fast reactive apps development, with a huge components ecosystem (possibility to wrap any web component), and easy deployment on the cloud. But its "rerun the whole script" execution model (without namespace persistence!) can sometimes turn cumbersome, and it lacked a proper notebook ergonomics.
 
 Streamlit Notebook attempts to give you the best of both worlds.
 

@@ -387,10 +387,11 @@ class Agent:
     def read(self, source, start_at_line=1):
         """
         description: |
-            Read and extract text content from various sources including folders, files or urls.
+            Read and extract text content from various sources including folders, files, urls or python variables / objects.
             For folders: returns a tree view of the folder structure.
             For files: returns the text content. PDF, DOCX, XLSX, PPTX, ODT, HTML, TXT, and more are supported.
             For urls: returns the text content of the web page (or of the remote file if the url points to a file).
+            For python variables / objects: instrospects the object or gives a str repr (available ONLY in progammatic usage via run_code("__agent__.tools.read(source=data)")
             
             For large outputs: The output will be automatically truncated to fit token limits. When truncated, you'll see a message at the end of content indicating the truncated line range to know from where to resume reading.
 
@@ -398,9 +399,10 @@ class Agent:
             source:
                 description: |
                     Document source - can be either:
-                    - Absolute path to a local file (e.g., "/home/user/document.pdf")
+                    - Absolute path to a local folder or file (e.g., "/home/user/document.pdf")
                     - URL (e.g., "https://example.com/report.pdf")
-                type: string
+                    - any other data structure, or python variable living in the shell's namespace
+                type: Any
             start_at_line:
                 description: |
                     Line number to start reading from (1-indexed). Default is 1 (start from beginning).
