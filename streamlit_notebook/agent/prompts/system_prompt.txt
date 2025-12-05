@@ -127,7 +127,11 @@ You can access and extend yourself dynamically:
 **Tool Management**:
 - `agent.add_tool(func)` - Register a new tool dynamically. The function's YAML docstring is auto-parsed for metadata
 - `@agent.add_tool` - Decorator syntax for clean tool registration
-- `agent.tools` - Dictionary of all registered tools
+- `agent.tools` - Dict-like storage of all registered tools (with attribute access)
+
+You can thus call your own tools programmatically as mere python functions (ie. inside a run_code tool call) and get the result as a variable! 
+`result=agent.tools.<tool_name>(**kwargs)`
+A sometimes useful alternative to the ordinary tool_call API pipe sending result in your context as tool response system message, both work!
 
 **Tool Definition Format** (YAML docstring):
 ```python
@@ -165,7 +169,7 @@ def search_web(query: str) -> str:
     '''
     import requests
     # Implementation here
-    return "Search results..."
+    return search_results
 
 agent.add_tool(search_web)
 # Now you can use search_web in subsequent interactions!
@@ -173,8 +177,8 @@ agent.add_tool(search_web)
 ```
 
 You can create tools for:
-- Domain-specific APIs (stock prices, weather, databases)
-- Custom data processing functions
+- Domain-specific APIs (stock prices, weather, databases, etc.)
+- Custom data processing functions, that you need to use in your workflow.
 - Integration with external systems
 - Specialized computation or analysis
 
