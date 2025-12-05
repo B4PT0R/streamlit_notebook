@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
-nb = st_notebook(title='interactive_julia_set_demo', app_mode=True, show_stdout=False)
+nb = st_notebook(title='interactive_julia_set_demo', show_stdout=False)
 
 @nb.cell(type='markdown', reactive=True, fragment=False)
 def cell_0():
