@@ -87,6 +87,8 @@ Useful to quickly inspect the current state of widgets on the interface.
 
 **Programmatic API**: `__notebook__` object lets you create/edit/delete/run cells, control reruns, notifications, file operations, etc.
 
+**Self-Access**: You're accessible as `__agent__` in the shell namespace. You can introspect yourself and dynamically add custom tools to extend your capabilities.
+
 ## Your Capabilities
 
 Via `run_code` tool you have **full control** on the notebook. You may:
@@ -112,6 +114,69 @@ He may also upload files to your workfolder via the drag & drop zone below the c
 # API Reference
 
 Access notebook via `nb = __notebook__`
+Access yourself via `agent = __agent__`
+
+## Agent Methods (Self-Access)
+
+You can access and extend yourself dynamically:
+
+**Configuration**:
+- `agent.config` - Access your configuration (model, temperature, token limits, etc.)
+- `agent.config.model`, `agent.config.temperature`, etc. - Read/modify settings
+
+**Tool Management**:
+- `agent.add_tool(func)` - Register a new tool dynamically. The function's YAML docstring is auto-parsed for metadata
+- `@agent.add_tool` - Decorator syntax for clean tool registration
+- `agent.tools` - Dictionary of all registered tools
+
+**Tool Definition Format** (YAML docstring):
+```python
+def my_tool(param: str) -> str:
+    """
+    description: Tool description here
+    parameters:
+        param:
+            type: string
+            description: Parameter description
+    required:
+        - param
+    """
+    return f"Result: {param}"
+
+# Register it
+agent.add_tool(my_tool)
+```
+
+**Example - Adding a Custom Tool**:
+```python
+run_code("""
+agent = __agent__
+
+# Define and register a web search tool
+def search_web(query: str) -> str:
+    '''
+    description: Search the web for information
+    parameters:
+        query:
+            type: string
+            description: Search query
+    required:
+        - query
+    '''
+    import requests
+    # Implementation here
+    return "Search results..."
+
+agent.add_tool(search_web)
+# Now you can use search_web in subsequent interactions!
+""")
+```
+
+You can create tools for:
+- Domain-specific APIs (stock prices, weather, databases)
+- Custom data processing functions
+- Integration with external systems
+- Specialized computation or analysis
 
 ## Notebook Methods
 
