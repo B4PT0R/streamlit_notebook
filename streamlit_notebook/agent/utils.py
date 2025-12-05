@@ -90,6 +90,9 @@ def truncate(string, max_tokens=2000, start_line=1):
             return ""
         lines = lines[start_line - 1:]
 
+    # Calculate the actual last line number after skipping
+    remaining_lines = len(lines)
+
     # Assemble lines up to max_tokens
     result_lines = []
     current_tokens = 0
@@ -106,14 +109,14 @@ def truncate(string, max_tokens=2000, start_line=1):
         result = ''.join(result_lines)
         num_kept = len(result_lines)
         first_truncated = start_line + num_kept
-        last_line = start_line + total_lines - 1
+        last_line = start_line + remaining_lines - 1
 
         if not result.endswith('\n'):
             result += '\n'
         result += f"\n...\n\n[Lines {first_truncated}-{last_line} truncated]\n"
         return result
     else:
-        return f"[Lines {start_line}-{start_line + total_lines - 1} truncated - content exceeds token limit]\n"
+        return f"[Lines {start_line}-{start_line + remaining_lines - 1} truncated - content exceeds token limit]\n"
 
 def pack_msgs(messages):
     text = ''
