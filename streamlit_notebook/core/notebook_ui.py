@@ -66,8 +66,8 @@ class NotebookUI:
             3. Cells (delegated to each cell)
             4. Control bar (in notebook mode)
         """
-
-        self.logo()
+        if self.notebook.show_logo:
+            self.logo()
 
         for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
             cell.show()
@@ -79,14 +79,13 @@ class NotebookUI:
         self.sidebar()
 
     def logo(self) -> None:
-        """Render the notebook logo.
-
-        Displays the streamlit-notebook logo centered at the top of the page
-        if ``notebook.show_logo`` is True.
         """
-        if self.notebook.show_logo:
-            _, c, _ = st.columns([40, 40, 40])
-            c.image(root_join("app_images", "st_notebook.png"), width='stretch')
+        Render the notebook logo.
+        """
+        with st.container(horizontal=True, horizontal_alignment='center'):
+            st.space(size='stretch')
+            st.image(root_join("app_images", "st_notebook.png"),width=300)
+            st.space(size='stretch')
 
     def sidebar(self) -> None:
         """Render the appropriate sidebar based on mode.
@@ -116,7 +115,7 @@ class NotebookUI:
             In locked app mode, users cannot toggle back to edit mode.
         """
         with st.sidebar:
-            st.image(root_join("app_images", "st_notebook.png"))
+            self.logo()
             st.divider()
 
             st.text_input("Notebook title:", value=self.notebook.title, key="notebook_title_show", disabled=True)
@@ -171,7 +170,7 @@ class NotebookUI:
             - Technical settings popover
         """
         with st.sidebar:
-            st.image(root_join("app_images", "st_notebook.png"))
+            self.logo()
             st.divider()
 
             def on_title_change_edit():
@@ -204,7 +203,7 @@ class NotebookUI:
             # AI Assistant button
             def on_chat_click():
                 state.chat_mode = True
-            st.button("🤖 AI Assistant", on_click=on_chat_click, width='stretch', key="button_open_chat", type="primary")
+            st.button("AI Chat", on_click=on_chat_click, width='stretch', key="button_open_chat", type="primary")
 
             st.divider()
 

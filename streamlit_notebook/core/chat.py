@@ -73,6 +73,15 @@ def settings_dialog():
     username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
     userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
 
+    # OpenAI API Key
+    current_api_key = state.agent.config.get("openai_api_key", "") or ""
+    api_key = st.text_input(
+        "OpenAI API Key",
+        value=current_api_key,
+        type="password",
+        help="Leave empty to use OPENAI_API_KEY environment variable"
+    )
+
     # Model selection
     model = st.selectbox(
         "Model",
@@ -160,15 +169,6 @@ def settings_dialog():
     show_tool_calls = st.checkbox(
         "Show Tool Calls",
         value=state.get("show_tool_calls", True)
-    )
-
-    # OpenAI API Key
-    current_api_key = state.agent.config.get("openai_api_key", "") or ""
-    api_key = st.text_input(
-        "OpenAI API Key",
-        value=current_api_key,
-        type="password",
-        help="Leave empty to use OPENAI_API_KEY environment variable"
     )
 
     # System prompt - get from agent config system
@@ -411,7 +411,7 @@ def show_chat():
     Shows a friendly error message if the agent module is not installed.
     """
     if not init_chat():
-        st.error("🤖 **AI Agent not available**")
+        st.error("**AI Agent not available**")
         st.info(
             "The AI agent module is not installed. To enable the chat feature, install with:\n\n"
             "```bash\n"
@@ -423,37 +423,43 @@ def show_chat():
         st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
         return
 
-    _,c,_=st.columns([1,2,1])
-    c.image(root_join("app_images", "pandora_logo.png"),caption="# **Hey! I'm Pandora!**")
+    with st.container(horizontal=True, horizontal_alignment='center'):
+        st.space(size='stretch')
+        st.image(root_join("app_images", "pandora_logo.png"),caption="# **Hey! I'm Pandora!**",width=300)
+        st.space(size='stretch')
 
-    # Header with session management and settings
-    col1, col2 = st.columns(2)
+    # session management and settings
 
-    with col1:
-        # Session selector
-        sessions = state.agent.get_sessions()
-        if sessions:
-            selected_session = st.selectbox(
-                "Sessions",
-                options=sessions,
-                format_func=lambda x: x.replace('.json', '') if x.endswith('.json') else x,
-                index=sessions.index(state.agent.current_session_id) if state.agent.current_session_id in sessions else 0,
-                key="session_selector",
-                label_visibility="collapsed"
-            )
+    with st.container(border=True): 
+        col1, col2 = st.columns(2)
 
-            # Load selected session if different from current
-            if selected_session != state.agent.current_session_id:
-                state.agent.load_session(selected_session)
+        with col1:
+            # Session selector
+            sessions = state.agent.get_sessions()
+            if sessions:
+                selected_session = st.selectbox(
+                    "Sessions",
+                    options=sessions,
+                    format_func=lambda x: x.replace('.json', '') if x.endswith('.json') else x,
+                    index=sessions.index(state.agent.current_session_id) if state.agent.current_session_id in sessions else 0,
+                    key="session_selector",
+                    label_visibility="collapsed"
+                )
+
+                # Load selected session if different from current
+                if selected_session != state.agent.current_session_id:
+                    state.agent.load_session(selected_session)
+                    rerun()
+
+        with col2:
+            # New session button
+            if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session"):
+                state.agent.start_new_session()
                 rerun()
 
-    with col2:
-        # New session button
-        if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session"):
-            state.agent.start_new_session()
-            rerun()
-
-    st.divider()
+        # Settings button
+        if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings"):
+            settings_dialog()
 
     # Chat area
     state.chat_area=st.container()
@@ -462,26 +468,28 @@ def show_chat():
     with state.chat_area:
         show_session()
 
-    # Chat input
-    prompt=st.chat_input("Ask me anything")
-    
-    with st.container(horizontal=True):
-        # audio input
-        with st.container(width=47):
-            def on_change():
-                state.new_stt_audio_bytes=True
-                state.stt_audio_bytes=state[state.audio_input_key]
-                state.audio_input_key=f"audio_input_{short_id()}"
-            st.audio_input("Record your voice", key=state.setdefault('audio_input_key',f"audio_input_{short_id()}"), on_change=on_change, width=47, label_visibility="collapsed")
-        # file upload
-        with st.container(width='stretch'):
-            def on_change():
-                uploaded_files=state[state.file_uploader_key]
-                state.file_uploader_key=f"file_uploader_{short_id()}"
-                if isinstance(uploaded_files,list):
-                    for file in uploaded_files:   
-                        state.agent.upload_file(file)
-            st.file_uploader("Upload files", key=state.setdefault("file_uploader_key",f"file_uploader_{short_id()}"), on_change=on_change, label_visibility="collapsed", accept_multiple_files=True)
+    # input area
+    with st.container(border=True):
+        # Chat input
+        prompt=st.chat_input("Ask me anything")
+        
+        with st.container(horizontal=True):
+            # audio input
+            with st.container(width=47):
+                def on_change():
+                    state.new_stt_audio_bytes=True
+                    state.stt_audio_bytes=state[state.audio_input_key]
+                    state.audio_input_key=f"audio_input_{short_id()}"
+                st.audio_input("Record your voice", key=state.setdefault('audio_input_key',f"audio_input_{short_id()}"), on_change=on_change, width=47, label_visibility="collapsed")
+            # file upload
+            with st.container(width='stretch'):
+                def on_change():
+                    uploaded_files=state[state.file_uploader_key]
+                    state.file_uploader_key=f"file_uploader_{short_id()}"
+                    if isinstance(uploaded_files,list):
+                        for file in uploaded_files:   
+                            state.agent.upload_file(file)
+                st.file_uploader("Upload files", key=state.setdefault("file_uploader_key",f"file_uploader_{short_id()}"), on_change=on_change, label_visibility="collapsed", accept_multiple_files=True)
     
     with state.stream_area:
         try:
@@ -498,12 +506,7 @@ def show_chat():
                 st.info(f"An error of type: {str(type(e))} occured.")
                 st.error(f"Error: {e}")
 
-    st.divider()
-    # Settings button
-    if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings"):
-        settings_dialog()
-
-                # Back to notebook button
+    # Back to notebook button
     def on_back_click():
         state.chat_mode = False
     st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
