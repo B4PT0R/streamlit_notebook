@@ -461,19 +461,15 @@ def show_chat():
     # session management and settings
 
     with st.container(border=True):
-        with st.container(horizontal=True, horizontal_alignment="center"):
-            st.space(size="stretch")
-            st.markdown("### Session Management",width="content")
-            st.space(size="stretch")
-
         col1, col2 = st.columns(2)
 
         with col1:
             # Session selector
             sessions = state.agent.get_sessions()
             if sessions:
+                st.caption("Load a session")
                 selected_session = st.selectbox(
-                    "Sessions",
+                    "Load a session",
                     options=sessions,
                     format_func=lambda x: x.replace('.json', '') if x.endswith('.json') else x,
                     index=sessions.index(state.agent.current_session_id) if state.agent.current_session_id in sessions else 0,
@@ -488,22 +484,22 @@ def show_chat():
 
         with col2:
             # New session button
+            st.caption("Or create a new one")
             if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session"):
                 state.agent.start_new_session()
                 rerun()
 
-        # Settings button
         if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings"):
             settings_dialog()
 
-    
-
-    # Chat area
+    # Logo
 
     with st.container(horizontal=True, horizontal_alignment='center'):
         st.space(size='stretch')
         st.image(root_join("app_images", "pandora_logo.png"),caption="# **Hey! I'm Pandora!**",width=300)
-        st.space(size='stretch')
+        st.space(size='stretch')   
+
+    # Chat area
 
     state.chat_area=st.container()
     state.stream_area=st.empty()
@@ -511,36 +507,22 @@ def show_chat():
     with state.chat_area:
         show_session()
 
-    # input area
-    with st.container(border=True):
-        # Chat input
-        prompt=st.chat_input("Ask me anything")
-        
-        with st.container(horizontal=True):
-            # audio input
-            with st.container(width=47):
-                def on_change():
-                    state.new_stt_audio_bytes=True
-                    state.stt_audio_bytes=state[state.audio_input_key]
-                    state.audio_input_key=f"audio_input_{short_id()}"
-                st.audio_input("Record your voice", key=state.setdefault('audio_input_key',f"audio_input_{short_id()}"), on_change=on_change, width=47, label_visibility="collapsed")
-            # file upload
-            with st.container(width='stretch'):
-                def on_change():
-                    uploaded_files=state[state.file_uploader_key]
-                    state.file_uploader_key=f"file_uploader_{short_id()}"
-                    if isinstance(uploaded_files,list):
-                        for file in uploaded_files:   
-                            state.agent.upload_file(file)
-                st.file_uploader("Upload files", key=state.setdefault("file_uploader_key",f"file_uploader_{short_id()}"), on_change=on_change, label_visibility="collapsed", accept_multiple_files=True)
-    
+    # Chat input
+    prompt=st.chat_input("Ask me anything", accept_audio=True, accept_file="multiple", key="chat_input")
+
     with state.stream_area:
         try:
-            if state.setdefault('new_stt_audio_bytes',False):
-                prompt = state.agent.transcribe(state.stt_audio_bytes)
-                state.new_stt_audio_bytes=False
-            if prompt:
-                state.agent(prompt)
+            if prompt is not None:
+                if prompt.files:
+                    for file in prompt.files:
+                        state.agent.upload_file(file)
+                text=None
+                if prompt.audio:
+                    text=state.agent.transcribe(prompt.audio)
+                elif prompt.text:
+                    text=prompt.text
+                if text:
+                    state.agent(text)
         except AIClientError as e:
             with state.chat_area:
                 st.warning("AI features (including STT and TTS) can only be used with a valid OpenAI API key. Please set it in '⚙️ Settings' or provide it as an `OPENAI_API_KEY` environment variable. You can get one at https://platform.openai.com/account/api-keys")

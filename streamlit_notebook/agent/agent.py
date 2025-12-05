@@ -339,6 +339,14 @@ class Agent:
         if self.new_turn:
             self.process()
 
+    def speak(self,text,**kwargs):
+        from .voice import silent_play
+        audio=self.ai.text_to_audio(text,**kwargs)
+        if self.hooks.get('audio_playback_hook'):
+            self.hooks.audio_playback_hook(audio)
+        else:
+            silent_play(audio)
+
     def listen(self, source, language=None, **kwargs):
         """
         description: |
@@ -539,14 +547,6 @@ class Agent:
         )
 
         return os.path.abspath(dest_path)
-
-    def speak(self,text,**kwargs):
-        from .voice import silent_play
-        audio=self.ai.text_to_audio(text,**kwargs)
-        if self.hooks.get('audio_playback_hook'):
-            self.hooks.audio_playback_hook(audio)
-        else:
-            silent_play(audio)
 
     def __call__(self,prompt):
         """
