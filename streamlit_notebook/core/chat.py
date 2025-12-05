@@ -64,114 +64,134 @@ def save_settings(agent, settings):
     with open(settings_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
-@st.dialog("Settings")
+@st.dialog("Settings", width="wide")
 def settings_dialog():
     """Dialog for chat and agent settings"""
     st.write("### Chat and Agent Settings")
 
-    # User details
-    username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
-    userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
+    # Create two main columns
+    left_col, right_col = st.columns(2)
 
-    # OpenAI API Key
-    current_api_key = state.agent.config.get("openai_api_key", "") or ""
-    api_key = st.text_input(
-        "OpenAI API Key",
-        value=current_api_key,
-        type="password",
-        help="Leave empty to use OPENAI_API_KEY environment variable"
-    )
+    with left_col:
+        st.write("#### User & API")
+        # User details
+        username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
+        userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
 
-    # Model selection
-    model = st.selectbox(
-        "Model",
-        ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
-        index=["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"].index(state.agent.config.get("model", "gpt-4.1-mini"))
-    )
+        # OpenAI API Key
+        current_api_key = state.agent.config.get("openai_api_key", "") or ""
+        api_key = st.text_input(
+            "OpenAI API Key",
+            value=current_api_key,
+            type="password",
+            help="Leave empty to use OPENAI_API_KEY environment variable"
+        )
 
-    # Temperature
-    temperature = st.slider(
-        "Temperature",
-        min_value=0.0,
-        max_value=2.0,
-        value=state.agent.config.get("temperature", 0.7),
-        step=0.1
-    )
+        st.divider()
+        st.write("#### Model Settings")
 
-    # Max completion tokens
-    max_tokens = st.number_input(
-        "Max Completion Tokens",
-        min_value=100,
-        max_value=16000,
-        value=state.agent.config.get("max_completion_tokens", 4000),
-        step=100
-    )
+        # Model selection
+        model = st.selectbox(
+            "Model",
+            ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
+            index=["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"].index(state.agent.config.get("model", "gpt-4.1-mini"))
+        )
 
-    # Max input tokens
-    max_input_tokens = st.number_input(
-        "Max Input Tokens",
-        min_value=4000,
-        max_value=32000,
-        value=state.agent.config.get("max_input_tokens", 8000),
-        step=1000
-    )
+        # Temperature
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=2.0,
+            value=state.agent.config.get("temperature", 0.7),
+            step=0.1
+        )
 
-    # Token limit
-    token_limit = st.number_input(
-        "Token Limit",
-        min_value=1000,
-        max_value=200000,
-        value=state.agent.config.get("token_limit", 128000),
-        step=1000
-    )
+        # Reasoning effort
+        reasoning_effort = st.selectbox(
+            "Reasoning Effort",
+            ["low", "medium", "high"],
+            index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
+        )
 
-    # Reasoning effort
-    reasoning_effort = st.selectbox(
-        "Reasoning Effort",
-        ["low", "medium", "high"],
-        index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
-    )
+        st.divider()
+        st.write("#### Token Limits")
 
-    # Vision enabled
-    vision_enabled = st.checkbox(
-        "Vision Enabled",
-        value=state.agent.config.get("vision_enabled", True)
-    )
+        # Max completion tokens
+        max_tokens = st.number_input(
+            "Max Completion Tokens",
+            min_value=100,
+            max_value=16000,
+            value=state.agent.config.get("max_completion_tokens", 4000),
+            step=100
+        )
 
-    # Voice enabled
-    voice_enabled = st.checkbox(
-        "Voice Enabled",
-        value=state.agent.config.get("voice_enabled", False)
-    )
+        # Max input tokens
+        max_input_tokens = st.number_input(
+            "Max Input Tokens",
+            min_value=4000,
+            max_value=32000,
+            value=state.agent.config.get("max_input_tokens", 8000),
+            step=1000
+        )
 
-    # Voice model
-    voice_model = st.selectbox(
-        "Voice Model",
-        ["gpt-4o-mini-tts", "gpt-4o-tts"],
-        index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(state.agent.config.get("voice_model", "gpt-4o-mini-tts"))
-    )
+        # Token limit
+        token_limit = st.number_input(
+            "Token Limit",
+            min_value=1000,
+            max_value=200000,
+            value=state.agent.config.get("token_limit", 128000),
+            step=1000
+        )
 
-    # Voice selection
-    voice = st.selectbox(
-        "Voice",
-        ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-        index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
-    )
+    with right_col:
+        st.write("#### Features")
 
-    # Voice instructions
-    voice_instructions = st.text_area(
-        "Voice Instructions",
-        value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
-        height=100
-    )
+        # Vision enabled
+        vision_enabled = st.checkbox(
+            "Vision Enabled",
+            value=state.agent.config.get("vision_enabled", True)
+        )
 
-    # Show tool calls
-    show_tool_calls = st.checkbox(
-        "Show Tool Calls",
-        value=state.get("show_tool_calls", True)
-    )
+        # Show tool calls
+        show_tool_calls = st.checkbox(
+            "Show Tool Calls",
+            value=state.get("show_tool_calls", True)
+        )
 
-    # System prompt - get from agent config system
+        st.divider()
+        st.write("#### Voice Settings")
+
+        # Voice enabled
+        voice_enabled = st.checkbox(
+            "Voice Enabled",
+            value=state.agent.config.get("voice_enabled", False)
+        )
+
+        # Voice model
+        voice_model = st.selectbox(
+            "Voice Model",
+            ["gpt-4o-mini-tts", "gpt-4o-tts"],
+            index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(state.agent.config.get("voice_model", "gpt-4o-mini-tts"))
+        )
+
+        # Voice selection
+        voice = st.selectbox(
+            "Voice",
+            ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+            index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
+        )
+
+        # Voice instructions
+        voice_instructions = st.text_area(
+            "Voice Instructions",
+            value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
+            height=100
+        )
+
+    # System prompt - full width at the bottom
+    st.divider()
+    st.write("#### System Prompt")
+
     current_system = state.agent.config.get("system", "")
     if os.path.isfile(current_system):
         with open(current_system, 'r', encoding='utf-8') as f:
@@ -182,9 +202,11 @@ def settings_dialog():
     system_prompt = st.text_area(
         "System Prompt",
         value=current_system_content,
-        height=150
+        height=150,
+        label_visibility="collapsed"
     )
 
+    # Buttons at the bottom
     col1, col2 = st.columns(2)
 
     with col1:
