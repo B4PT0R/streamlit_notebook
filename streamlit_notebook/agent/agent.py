@@ -198,6 +198,7 @@ class Agent:
         """
         description: |
             Registers a new tool for the agent, wrapping a function and its metadata.
+            Can be used as a decorator or called directly.
         parameters:
             func:
                 description: The function implementing the tool.
@@ -212,6 +213,7 @@ class Agent:
         """
         tool=Tool(func, name, description, parameters, required)
         self.tools[tool.name]=tool
+        return func  # Return func to support decorator syntax
 
     def get_messages(self,filter=None):
         if filter:

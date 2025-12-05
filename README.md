@@ -978,6 +978,8 @@ def add_custom_tools():
     if not __agent__:
         return
 
+    # Option 1: Using decorator syntax
+    @__agent__.add_tool
     def fetch_stock_price(ticker: str) -> dict:
         """
         description: Fetch current stock price for a given ticker symbol
@@ -991,6 +993,7 @@ def add_custom_tools():
         # Your implementation here
         return {"ticker": ticker, "price": 150.00}
 
+    # Option 2: Direct function call
     def analyze_sentiment(text: str) -> str:
         """
         description: Analyze the sentiment of given text
@@ -1004,12 +1007,15 @@ def add_custom_tools():
         # Your implementation here
         return "positive"
 
-    # Register tools - metadata auto-extracted from YAML docstrings
-    __agent__.add_tool(fetch_stock_price)
     __agent__.add_tool(analyze_sentiment)
 
     st.success("Custom tools registered!")
 ```
+
+**Key Points:**
+- **YAML Docstrings**: Tool metadata is automatically extracted from the function's docstring
+- **Decorator Syntax**: Use `@__agent__.add_tool` for clean, declarative tool registration
+- **Direct Call**: Use `__agent__.add_tool(func)` for conditional or dynamic registration
 
 Now the agent can use these tools in its responses!
 
