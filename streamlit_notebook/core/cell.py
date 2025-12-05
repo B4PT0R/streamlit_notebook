@@ -440,11 +440,12 @@ class Cell:
         This method executes the cell's content, captures the output,
         and updates the cell's state accordingly.
 
-        If the cell has already run this turn, it defers execution to next turn
-        to avoid widget duplication errors.
+        Reactive cells: If already run this turn, defers execution to next turn to avoid widget duplication.
+        One-shot cells: Can re-run multiple times in same turn (no Streamlit widgets except display()).
         """
-        # Check if already ran this turn - defer to next turn
-        if self.has_run:
+        # Only reactive cells are blocked from re-running in the same turn
+        # One-shot cells can run multiple times (no widgets, only display() which is protected)
+        if self.has_run and self.reactive:
             self.run_requested = True
             return
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 import streamlit as st
+from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
 import random
 import string
 import os
@@ -524,6 +525,9 @@ def display(obj: Any, backend: str | None = None, **kwargs) -> None:
         try:
             display_func(obj, **kwargs)
             return
+        except (DuplicateWidgetID, StreamlitDuplicateElementKey):
+            # Silently skip duplicate display calls (can happen when cell runs multiple times in same turn)
+            return
         except Exception as e:
             st.warning(f"Failed to display with {backend} backend: {str(e)}")
             pass  # Fall through to fallback
@@ -533,6 +537,9 @@ def display(obj: Any, backend: str | None = None, **kwargs) -> None:
         try:
             st.write(obj)
             return
+        except (DuplicateWidgetID, StreamlitDuplicateElementKey):
+            # Silently skip duplicate display calls
+            return
         except Exception as e:
             st.warning(f"Failed to display with write backend: {str(e)}")
             pass  # Fall through to final fallback
@@ -540,6 +547,9 @@ def display(obj: Any, backend: str | None = None, **kwargs) -> None:
     # Final fallback: plain text representation
     try:
         st.text(repr(obj))
+    except (DuplicateWidgetID, StreamlitDuplicateElementKey):
+        # Silently skip duplicate display calls
+        pass
     except Exception:
         # If even repr fails, show error message
         st.error(f"Failed to display object of type {type(obj).__name__}")
