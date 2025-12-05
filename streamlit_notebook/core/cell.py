@@ -117,6 +117,7 @@ class Cell:
         self.exception: Optional[Exception] = None
         self.ready = False
         self.has_run = False
+        self.run_requested = False
         self._code = Code(value=code)
         self.last_code: Optional[str] = None
         self.key = key
@@ -216,6 +217,24 @@ class Cell:
     @has_run_once.setter
     def has_run_once(self, value: Any) -> None:
         raise AttributeError("has_run_once is a read-only property")
+
+    @property
+    def should_run(self) -> bool:
+        """
+        Checks if the cell should run (has run once OR run was requested).
+
+        This property extends has_run_once to also consider deferred run requests,
+        allowing reactive cells to execute on next turn when they couldn't run
+        during current turn due to widget duplication concerns.
+
+        Returns:
+            bool: True if the cell has run once with current code OR a run was requested
+        """
+        return self.has_run_once or self.run_requested
+
+    @should_run.setter
+    def should_run(self, value: Any) -> None:
+        raise AttributeError("should_run is a read-only property")
 
     @property
     def has_reactive_toggle(self):
@@ -368,9 +387,9 @@ class Cell:
                 self.update_ui()
                 self.ui.show()
 
-        # Rerun only if the cell has been run at least once with the current code
+        # Rerun only if the cell has been run at least once with the current code OR a run was requested
         # This prevents premature execution when toggling "reactive" on a cell that hasn't run yet
-        if self.reactive and self.has_run_once:
+        if self.reactive and self.should_run:
             self.run()
 
         self.show_outputs()
@@ -417,12 +436,21 @@ class Cell:
 
         This method executes the cell's content, captures the output,
         and updates the cell's state accordingly.
+
+        If the cell has already run this turn, it defers execution to next turn
+        to avoid widget duplication errors.
         """
-        if not self.has_run and self.code:
+        # Check if already ran this turn - defer to next turn
+        if self.has_run:
+            self.run_requested = True
+            return
+
+        if self.code:
             self.last_code=self.code
             self.results=[]
             self.displays=[]
             self.has_run=True
+            self.run_requested = False  # Clear request flag once we actually run
             if self.ready:
                 # The cell skeleton is on screen and can receive outputs
                 self.initialize_output_area()
