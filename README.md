@@ -879,28 +879,26 @@ The agent is available in the shell namespace as `__agent__`:
 ```python
 @nb.cell(type='code')
 def interact_with_agent():
-    # Check if agent is available
-    if __agent__:
-        # Access agent configuration
-        print(f"Current model: {__agent__.config.model}")
+    # Access agent configuration
+    print(f"Current model: {__agent__.config.model}")
 
-        # Add custom tools dynamically
-        def my_custom_tool(param: str) -> str:
-            """
-            description: A custom tool for processing input parameters
-            parameters:
-                param:
-                    type: string
-                    description: The parameter to process
-            required:
-                - param
-            """
-            return f"Processed: {param}"
+    # Define and register a custom tool
+    def my_custom_tool(param: str) -> str:
+        """
+        description: A custom tool for processing input parameters
+        parameters:
+            param:
+                type: string
+                description: The parameter to process
+        required:
+            - param
+        """
+        return f"Processed: {param}"
 
-        # Register the tool (auto-extracts metadata from YAML docstring)
-        __agent__.add_tool(my_custom_tool)
+    # Register the tool (auto-extracts metadata from YAML docstring)
+    __agent__.add_tool(my_custom_tool)
 
-        # Now the agent can use your custom tool!
+    print("Custom tool registered!")
 ```
 
 ### Agent Capabilities
@@ -975,9 +973,6 @@ Extend the agent with domain-specific capabilities:
 ```python
 @nb.cell(type='code')
 def add_custom_tools():
-    if not __agent__:
-        return
-
     # Option 1: Using decorator syntax
     @__agent__.add_tool
     def fetch_stock_price(ticker: str) -> dict:
