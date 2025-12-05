@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.2.8"
+version = "0.2.9"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -94,7 +94,8 @@ st_notebook = "streamlit_notebook.launch_app:main"
 streamlit_notebook = [
     "app_images/*",
     "demo_notebooks/*",
-    "launch_app.py"
+    "launch_app.py",
+    "agent/prompts/*"
 ]
 
 [tool.setuptools.packages.find]
