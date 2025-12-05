@@ -7,8 +7,8 @@ surface for Sphinx autodoc. It also installs the context-aware
 configure their page normally inside notebook files.
 """
 
-from .core.notebook import Notebook, st_notebook, get_notebook, set_page_config
-from .core.utils import rerun, wait, set_root_path
+from .core.notebook import Notebook, st_notebook, get_notebook
+from .core.utils import rerun, wait, set_root_path, set_page_config
 
 set_root_path(__file__)
 
