@@ -885,19 +885,20 @@ def interact_with_agent():
         print(f"Current model: {__agent__.config.model}")
 
         # Add custom tools dynamically
-        from streamlit_notebook.agent import Tool
-
         def my_custom_tool(param: str) -> str:
-            """My custom tool description."""
+            """
+            description: A custom tool for processing input parameters
+            parameters:
+                param:
+                    type: string
+                    description: The parameter to process
+            required:
+                - param
+            """
             return f"Processed: {param}"
 
-        __agent__.add_tool(
-            Tool(
-                name="custom_tool",
-                func=my_custom_tool,
-                description="A custom tool for processing"
-            )
-        )
+        # Register the tool (auto-extracts metadata from YAML docstring)
+        __agent__.add_tool(my_custom_tool)
 
         # Now the agent can use your custom tool!
 ```
@@ -977,31 +978,35 @@ def add_custom_tools():
     if not __agent__:
         return
 
-    from streamlit_notebook.agent import Tool
-    import requests
-
     def fetch_stock_price(ticker: str) -> dict:
-        """Fetch current stock price for given ticker."""
+        """
+        description: Fetch current stock price for a given ticker symbol
+        parameters:
+            ticker:
+                type: string
+                description: Stock ticker symbol (e.g., AAPL, GOOGL)
+        required:
+            - ticker
+        """
         # Your implementation here
         return {"ticker": ticker, "price": 150.00}
 
     def analyze_sentiment(text: str) -> str:
-        """Analyze sentiment of given text."""
+        """
+        description: Analyze the sentiment of given text
+        parameters:
+            text:
+                type: string
+                description: The text to analyze for sentiment
+        required:
+            - text
+        """
         # Your implementation here
         return "positive"
 
-    # Register tools
-    __agent__.add_tool(Tool(
-        name="get_stock_price",
-        func=fetch_stock_price,
-        description="Get real-time stock price"
-    ))
-
-    __agent__.add_tool(Tool(
-        name="sentiment_analysis",
-        func=analyze_sentiment,
-        description="Analyze text sentiment"
-    ))
+    # Register tools - metadata auto-extracted from YAML docstrings
+    __agent__.add_tool(fetch_stock_price)
+    __agent__.add_tool(analyze_sentiment)
 
     st.success("Custom tools registered!")
 ```
