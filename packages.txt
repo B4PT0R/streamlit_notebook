@@ -1,0 +1,3 @@
+texlive-latex-base
+firefox-esr
+ffmpeg
