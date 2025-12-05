@@ -64,7 +64,7 @@ def save_settings(agent, settings):
     with open(settings_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
-@st.dialog("Settings", width="wide")
+@st.dialog("Settings", width="large")
 def settings_dialog():
     """Dialog for chat and agent settings"""
     st.write("### Chat and Agent Settings")
@@ -74,9 +74,13 @@ def settings_dialog():
 
     with left_col:
         st.write("#### User & API")
-        # User details
-        username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
-        userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
+        # User details - horizontal
+        with st.container():
+            c1, c2 = st.columns(2)
+            with c1:
+                username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
+            with c2:
+                userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
 
         # OpenAI API Key
         current_api_key = state.agent.config.get("openai_api_key", "") or ""
@@ -90,12 +94,21 @@ def settings_dialog():
         st.divider()
         st.write("#### Model Settings")
 
-        # Model selection
-        model = st.selectbox(
-            "Model",
-            ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
-            index=["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"].index(state.agent.config.get("model", "gpt-4.1-mini"))
-        )
+        # Model and Reasoning - horizontal
+        with st.container():
+            c1, c2 = st.columns(2)
+            with c1:
+                model = st.selectbox(
+                    "Model",
+                    ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
+                    index=["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"].index(state.agent.config.get("model", "gpt-4.1-mini"))
+                )
+            with c2:
+                reasoning_effort = st.selectbox(
+                    "Reasoning Effort",
+                    ["low", "medium", "high"],
+                    index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
+                )
 
         # Temperature
         temperature = st.slider(
@@ -106,57 +119,53 @@ def settings_dialog():
             step=0.1
         )
 
-        # Reasoning effort
-        reasoning_effort = st.selectbox(
-            "Reasoning Effort",
-            ["low", "medium", "high"],
-            index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
-        )
-
         st.divider()
         st.write("#### Token Limits")
 
-        # Max completion tokens
-        max_tokens = st.number_input(
-            "Max Completion Tokens",
-            min_value=100,
-            max_value=16000,
-            value=state.agent.config.get("max_completion_tokens", 4000),
-            step=100
-        )
-
-        # Max input tokens
-        max_input_tokens = st.number_input(
-            "Max Input Tokens",
-            min_value=4000,
-            max_value=32000,
-            value=state.agent.config.get("max_input_tokens", 8000),
-            step=1000
-        )
-
-        # Token limit
-        token_limit = st.number_input(
-            "Token Limit",
-            min_value=1000,
-            max_value=200000,
-            value=state.agent.config.get("token_limit", 128000),
-            step=1000
-        )
+        # Token limits - 3 columns
+        with st.container():
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                max_tokens = st.number_input(
+                    "Max Completion",
+                    min_value=100,
+                    max_value=16000,
+                    value=state.agent.config.get("max_completion_tokens", 4000),
+                    step=100
+                )
+            with c2:
+                max_input_tokens = st.number_input(
+                    "Max Input",
+                    min_value=4000,
+                    max_value=32000,
+                    value=state.agent.config.get("max_input_tokens", 8000),
+                    step=1000
+                )
+            with c3:
+                token_limit = st.number_input(
+                    "Token Limit",
+                    min_value=1000,
+                    max_value=200000,
+                    value=state.agent.config.get("token_limit", 128000),
+                    step=1000
+                )
 
     with right_col:
         st.write("#### Features")
 
-        # Vision enabled
-        vision_enabled = st.checkbox(
-            "Vision Enabled",
-            value=state.agent.config.get("vision_enabled", True)
-        )
-
-        # Show tool calls
-        show_tool_calls = st.checkbox(
-            "Show Tool Calls",
-            value=state.get("show_tool_calls", True)
-        )
+        # Checkboxes - horizontal
+        with st.container():
+            c1, c2 = st.columns(2)
+            with c1:
+                vision_enabled = st.checkbox(
+                    "Vision Enabled",
+                    value=state.agent.config.get("vision_enabled", True)
+                )
+            with c2:
+                show_tool_calls = st.checkbox(
+                    "Show Tool Calls",
+                    value=state.get("show_tool_calls", True)
+                )
 
         st.divider()
         st.write("#### Voice Settings")
@@ -167,28 +176,30 @@ def settings_dialog():
             value=state.agent.config.get("voice_enabled", False)
         )
 
-        # Voice model
-        voice_model = st.selectbox(
-            "Voice Model",
-            ["gpt-4o-mini-tts", "gpt-4o-tts"],
-            index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(state.agent.config.get("voice_model", "gpt-4o-mini-tts"))
-        )
-
-        # Voice selection
-        voice = st.selectbox(
-            "Voice",
-            ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-            index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
-        )
+        # Voice model and voice - horizontal
+        with st.container():
+            c1, c2 = st.columns(2)
+            with c1:
+                voice_model = st.selectbox(
+                    "Voice Model",
+                    ["gpt-4o-mini-tts", "gpt-4o-tts"],
+                    index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(state.agent.config.get("voice_model", "gpt-4o-mini-tts"))
+                )
+            with c2:
+                voice = st.selectbox(
+                    "Voice",
+                    ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+                    index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
+                )
 
         # Voice instructions
         voice_instructions = st.text_area(
             "Voice Instructions",
             value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
-            height=100
+            height=80
         )
 
-    # System prompt - full width at the bottom
+    # System prompt - full width at the bottom, outside columns
     st.divider()
     st.write("#### System Prompt")
 
@@ -202,9 +213,10 @@ def settings_dialog():
     system_prompt = st.text_area(
         "System Prompt",
         value=current_system_content,
-        height=150,
+        height=120,
         label_visibility="collapsed"
     )
+
 
     # Buttons at the bottom
     col1, col2 = st.columns(2)
