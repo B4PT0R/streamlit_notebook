@@ -360,12 +360,13 @@ class Cell:
         """
         Prepares or clears the various containers used to display cell outputs.
         """
-        self.output=self.output_area.container()
-        with self.output:
-            self.exception_area=st.empty()
-            self.stdout_area=st.empty()
-            self.stderr_area=st.empty()
-            self.display_area=st.container()
+        if self.ready:
+            self.output=self.output_area.container()
+            with self.output:
+                self.exception_area=st.empty()
+                self.stdout_area=st.empty()
+                self.stderr_area=st.empty()
+                self.display_area=st.container()
         
     def prepare_skeleton(self):
         """
@@ -373,9 +374,10 @@ class Cell:
         """
         self.container=st.container()
         self.output_area=st.empty()
+        self.ready=True
+        # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
         self.initialize_output_area()
-        self.ready=True # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
-
+        
     def show(self):
         """
         Renders the cell's layout.
@@ -442,8 +444,16 @@ class Cell:
 
         Reactive cells: If already run this turn, tries execution. If duplicate widget error occurs,
                        defers to next turn. This allows immediate execution when code changed enough.
+                       If not ready (no UI skeleton), defers to next turn to avoid widgets displaying
+                       in wrong context.
         One-shot cells: Can re-run multiple times in same turn (no Streamlit widgets except display()).
         """
+        # Reactive cells without UI skeleton: defer to next turn
+        # Avoids widgets displaying in wrong context (wherever the active container is)
+        if self.reactive and not self.ready:
+            self.run_requested = True
+            return
+
         # Reactive cells that already ran: try execution, defer if duplicate widgets detected
         if self.has_run and self.reactive:
             # Try to execute - might work if widgets changed
