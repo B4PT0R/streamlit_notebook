@@ -27,7 +27,6 @@ def default_show_stream(token,content):
 
 
 def to_message(d):
-    d=adict.convert(d)
     if d.get('type')=="image":
         return Image(d)
     else:

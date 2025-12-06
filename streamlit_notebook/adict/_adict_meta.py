@@ -6,15 +6,27 @@ from dataclasses import dataclass, field, fields, MISSING as DC_MISSING
 from typing import FrozenSet
 
 
-@dataclass(frozen=True)
+@dataclass
 class AdictConfig:
+    """Configuration for Adict instances.
+
+    Attributes:
+       auto_convert: If True, automatically convert dicts found in nested mutable containers
+                     (MutableMapping or MutableSequence) to adicts (on first access).
+       allow_extra: If True, allow keys not defined in __fields__.
+       strict: If True, enforce runtime type checking (raise on mismatch).
+       enforce_json: If True, enforce JSON-serializable values.
+       coerce: If True, coerce values to the expected type when possible.
+    """
+
+    auto_convert: bool = True
     allow_extra: bool = True
     strict: bool = False
     enforce_json: bool = False
     coerce: bool = False
 
     # champs passés explicitement à __init__
-    _explicit: FrozenSet[str] = field(default_factory=frozenset,init=False,repr=False)
+    _explicit: FrozenSet[str] = field(default_factory=frozenset, init=False, repr=False)
 
     def __init__(self, **kwargs):
         # 1) garder la liste des clés explicitement fournies
@@ -31,11 +43,34 @@ class AdictConfig:
                 if f.default is not DC_MISSING:
                     value = f.default
                 elif f.default_factory is not DC_MISSING:  # type: ignore[attr-defined]
-                    value = f.default_factory()         # type: ignore[misc]
+                    value = f.default_factory()            # type: ignore[misc]
                 else:
                     raise TypeError(f"Missing required field {f.name!r}")
 
+            # IMPORTANT : on bypass __setattr__ ici pour ne pas polluer _explicit
             object.__setattr__(self, f.name, value)
+
+    def __setattr__(self, name, value):
+        """
+        Mutabilité assumée :
+        - si on modifie un champ "normal" (init=True), on l'ajoute à _explicit
+        - _explicit lui-même est géré à part
+        """
+        if name == "_explicit":
+            object.__setattr__(self, name, value)
+            return
+
+        # On ne calcule la liste des champs init qu'une fois si tu veux optimiser,
+        # mais même comme ça c'est ok.
+        field_names = {f.name for f in fields(self) if f.init}
+
+        if name in field_names:
+            # on marque ce champ comme explicitement défini
+            explicit = set(getattr(self, "_explicit", frozenset()))
+            explicit.add(name)
+            object.__setattr__(self, "_explicit", frozenset(explicit))
+
+        object.__setattr__(self, name, value)
 
     @classmethod
     def _from_values(cls, values: dict[str, object], explicit: FrozenSet[str]) -> "AdictConfig":
@@ -50,6 +85,15 @@ class AdictConfig:
             object.__setattr__(self, f.name, values[f.name])
         object.__setattr__(self, "_explicit", explicit)
         return self
+
+    def copy(self) -> "AdictConfig":
+        """Copie complète, en conservant _explicit."""
+        values: dict[str, object] = {}
+        for f in fields(self):
+            if not f.init or f.name == "_explicit":
+                continue
+            values[f.name] = getattr(self, f.name)
+        return AdictConfig._from_values(values, self._explicit)
 
     def merge(self, other: "AdictConfig") -> "AdictConfig":
         """

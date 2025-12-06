@@ -177,6 +177,9 @@ class adict(dict, metaclass=adictMeta):
             return Computed(func, cache=cache, deps=deps)
 
     def __init__(self, *args, **kwargs):
+
+        self._config = type(self)._config.copy()
+
         super().__init__(*args,**kwargs)
 
         # Inject defaults and computed
@@ -342,6 +345,23 @@ class adict(dict, metaclass=adictMeta):
             if isinstance(value, Computed):
                 value.invalidate_cache()
 
+    def _auto_convert_value(self, value):
+        if not self._config.auto_convert:
+            return value
+        # Ici on reste data-structure agnostique
+        if is_mutable_container(value):
+            # Important : on retourne un adict "pur", pas une sous-classe
+            return adict.convert(value)
+        return value
+
+    def _auto_convert_and_store(self, key, value):
+        new = self._auto_convert_value(value)
+        if new is not value:
+            # On écrit brut pour ne pas relancer toute la validation
+            dict.__setitem__(self, key, new)
+            return new
+        return value
+
     # changed dict methods
 
     def keys(self):
@@ -357,14 +377,17 @@ class adict(dict, metaclass=adictMeta):
         return AdictItemsView(self)
 
     def __getitem__(self, key):
-        value = dict.__getitem__(self,key)
-        
+        value = dict.__getitem__(self, key)
+
         if isinstance(value, Computed):
             computed_value = value(self)
-            # Validation consolidée pour computed
-            return self._check_value(key, computed_value)
-        
-        return value
+            checked = self._check_value(key, computed_value)
+            # Pour les computed, on NE stocke pas le résultat dans le dict,
+            # on fait juste l'auto-convert sur la valeur de retour.
+            return self._auto_convert_value(checked)
+
+        # Pour les valeurs stockées : on convertit ET on remplace dans le dict
+        return self._auto_convert_and_store(key, value)
 
     def __setitem__(self, key, value):
         if not self._config.allow_extra and key not in self.__fields__:

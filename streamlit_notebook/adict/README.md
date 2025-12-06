@@ -9,7 +9,7 @@
 
 adict bridges the gap between different Python data paradigms:
 
-- **📚 Dict-like**: Native dictionary inheritance with full compatibility
+- **📚 Dict-like**: Native dictionary inheritance with full compatibility - adicts ARE dicts!
 - **🏗️ Dataclass-like**: Type annotations and structured field definitions  
 - **🛡️ Pydantic-like**: Runtime validation, type coercion, and computed properties
 - **🔧 Developer-friendly**: Intuitive API that "just works" for common patterns
@@ -40,10 +40,12 @@ isinstance(user,dict)                       # True (still a dict!)
 ## 🚀 Key Features
 
 ### Core Capabilities
-- **Full dict inheritance** - All native dict methods work seamlessly. adicts ARE dicts!
+- **Full dict inheritance** - All native dict methods work seamlessly.
 - **Attribute-style access** - `obj.key` and `obj['key']` both work
 - **Type annotations** - Optional type hints with runtime validation
-- **Recursive conversion** - Nested dicts automatically become adicts
+- **Recursive conversion**  
+  - Explicit: `adict.convert()` / `.to_adict()` for full deep conversion  
+  - Automatic: `auto_convert=True` (default) converts nested dicts to `adict` on first access
 - **JSON-first design** - Built-in JSON serialization/deserialization
 - **Path-based access** - Access nested structures with dot notation
 
@@ -103,17 +105,21 @@ print(user.tags)        # []
 ```python
 # Automatic recursive conversion
 data = adict({
-    "user": {"name": "Alice", "profile": {"city": "Paris"}},
+    "users": [
+        {"name": "Alice", "profile": {"city": "Paris"}},
+        {"name": "Bob", "profile": {"city": "Lyon"}}
+    ],
     "settings": {"theme": "dark"}
 })
 
 # Path-based access
-print(data.get_nested("user.name"))              # "Alice"
-data.set_nested("user.profile.country", "France")
+print(data.get_nested("users.0.name"))           # "Alice"
+data.set_nested("users.0.profile.country", "France")
 print(data.has_nested("settings.theme"))         # True
 
-# Attribute access works too
-print(data.user.profile.city)                    # "Paris"
+# Chained attribute access works too 
+# (Only if auto_convert=True (default) - see below about config)
+print(data.users[0].profile.city)                # "Paris"
 ```
 
 ## 💫 Advanced Features
@@ -199,12 +205,17 @@ It returns an `AdictConfig` object (dataclass) that you may pass as the `_config
 ```python
 class MyAdict(adict):
     _config = adict.config(
+        auto_convert=True,          # Auto-convert dicts to adicts in nested sub-containers (upon access)
         strict=False,               # Strict runtime type checking
         coerce=False,               # Enable automatic type coercion
         allow_extra=True,           # Disallow extra attributes
         enforce_json=False,         # Enforce JSON serializability of values
     )
 ```
+
+`auto_convert` controls whether dicts found in nested mutable containers (MutableMappings, MutableSequence) 
+are automatically converted to `adict` (if they aren't already) on first access.
+Note that MutableMappings that are NOT dicts won't be converted, but their content may if they are dicts.
 
 Subclass configs are properly merged with parent class configs, also supporting multiple inheritance patterns (following MRO order).
 
@@ -311,13 +322,28 @@ backup = user.deepcopy()
 ## 🔄 Conversion & Compatibility
 
 ```python
+
+# let's turn auto-conversion off globally (affects all adicts instances)
+adict._config.auto_convert = False
+
 # Convert existing dicts to adicts (recursive)
 data = {"user": {"name": "Alice"}, "count": 42}
-adict_data = adict(data).to_adict()  # Deep conversion
-dict_data = adict_data.to_dict()     # Back to plain dicts
+
+safe_adict = adict(data)            # No auto-conversion
+safe_adict.user.name                # ❌ AttributeError (user is still a dict)
+safe_adict.user["name"]             # "Alice" (works with dict access)
+isinstance(safe_adict.user, adict)  # False (it's a plain dict)
+data["user"] is safe_adict.user     # True (same object)
+
+adict_data = safe_adict.to_adict()  # Deep conversion (in-place on the structure)
+isinstance(adict_data.user, adict)  # True (now it's an adict)
+data["user"] is adict_data.user     # False: user has been converted to a new adict
+adict_data.user.name                # ✅ "Alice" (user is now an adict)
+dict_data = adict_data.to_dict()    # Back to plain dicts
 
 # Factory method for clean conversion
 converted = adict.convert(complex_nested_dict)
+unconverted = adict.unconvert(converted)  # Back to plain dicts
 ```
 
 ## ⚠️ Important Behaviors & Limitations

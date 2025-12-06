@@ -239,9 +239,9 @@ class AIClient:
                     continue
                 delta=chunk.choices[0].delta
                 if isinstance(delta,BaseModel):
-                    delta=adict.convert(delta.model_dump())
+                    delta=adict(delta.model_dump())
                 elif isinstance(delta,Mapping):
-                    delta=adict.convert(delta)
+                    delta=adict(delta)
                 text_chunk,reasoning_chunk,tool_calls_chunk,message=self.aggregate_delta(delta,message)
                 if text_chunk: text_queue.put(text_chunk)
                 if reasoning_chunk: reasoning_queue.put(reasoning_chunk)
