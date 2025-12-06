@@ -2,7 +2,7 @@ from .utils import utf8_safe_tokenize
 import time
 import re
 from .stream_utils import Task, Streamer, TokenStreamer, fenced
-from ..adict import adict
+from ..model import Model
 from pydub import AudioSegment
 from pydub.playback import _play_with_simpleaudio, _play_with_pyaudio
 
@@ -127,7 +127,7 @@ class LineToAudio(Streamer):
         
         if text.strip():
 
-            params=adict(
+            params=Model(
                 model=self.agent.config.get('voice_model','gpt-4o-mini-tts'),
                 voice=self.agent.config.get('voice','nova'),
                 instructions=self.agent.config.get('voice_instructions','You speak with a friendly and casual tone.'),

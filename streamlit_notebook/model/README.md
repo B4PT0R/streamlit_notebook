@@ -1,20 +1,20 @@
-# adict - The Swiss Army Knife of Python Data Structures
+# Model - The Swiss Army Knife of Python Data Structures
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**adict** is a sophisticated, hybrid data structure that combines the simplicity of Python dictionaries with the power of dataclasses and the robustness of Pydantic models. It's designed to be the versatile tool you'll want to use in every project for handling structured data.
+**Model** is a sophisticated, hybrid data structure that combines the simplicity of Python dictionaries with the power of dataclasses and the robustness and solid runtime typechecking of Pydantic models. It's designed to be the versatile tool you'll want to use in every project for handling structured data.
 
 ## 🎯 Philosophy & Goals
 
-adict bridges the gap between different Python data paradigms:
+**Model** bridges the gap between different Python data paradigms:
 
-- **📚 Dict-like**: Native dictionary inheritance with full compatibility - adicts ARE dicts!
+- **📚 Dict-like**: Native dictionary inheritance with full compatibility - Models ARE dicts!
 - **🏗️ Dataclass-like**: Type annotations and structured field definitions  
 - **🛡️ Pydantic-like**: Runtime validation, type coercion, and computed properties
 - **🔧 Developer-friendly**: Intuitive API that "just works" for common patterns
 
-### Why adict?
+### Why Model?
 
 ```python
 # Traditional approaches require choosing between flexibility and structure
@@ -25,8 +25,8 @@ class User: name: str; age: int               # Dataclass: structured but rigid
 
 class User(BaseModel): name: str; age: int    # Pydantic: powerful but heavy
 
-# adict: Best of all worlds
-class User(adict):
+# Model: Best of all worlds
+class User(Model):
     name: str
     age: int = 25
 
@@ -44,8 +44,8 @@ isinstance(user,dict)                       # True (still a dict!)
 - **Attribute-style access** - `obj.key` and `obj['key']` both work
 - **Type annotations** - Optional type hints with runtime validation
 - **Recursive conversion**  
-  - Explicit: `adict.convert()` / `.to_adict()` for full deep conversion  
-  - Automatic: `auto_convert=True` (default) converts nested dicts to `adict` on first access
+  - Explicit: `Model.convert()` / `.to_model()` for full deep conversion  
+  - Automatic: `auto_convert=True` (default) converts nested dicts to `Model` on first access
 - **JSON-first design** - Built-in JSON serialization/deserialization
 - **Path-based access** - Access nested structures with dot notation
 
@@ -59,7 +59,7 @@ isinstance(user,dict)                       # True (still a dict!)
 ## 📦 Installation
 
 ```bash
-pip install adict
+pip install model
 ```
 
 ## 🏃‍♂️ Quick Start
@@ -67,11 +67,11 @@ pip install adict
 ### Basic Usage
 
 ```python
-from adict import adict
+from model import Model
 
 # Create from dict or keyword arguments
-user = adict({"name": "Alice", "age": 30})
-user = adict(name="Alice", age=30)
+user = Model({"name": "Alice", "age": 30})
+user = Model(name="Alice", age=30)
 
 # Attribute and dict-style access
 print(user.name)        # "Alice"
@@ -85,14 +85,14 @@ user['phone'] = "123-456-7890"
 ### Structured Classes
 
 ```python
-from adict import adict
+from Model import Model
 from typing import List, Optional
 
-class User(adict):
+class User(Model):
     name: str
     age: int = 25
     email: Optional[str] = None
-    tags: List[str] = adict.factory(list)  # Factory for mutable defaults
+    tags: List[str] = Model.factory(list)  # Factory for mutable defaults
 
 # Type-safe creation
 user = User(name="Bob", age=35)
@@ -104,7 +104,7 @@ print(user.tags)        # []
 
 ```python
 # Automatic recursive conversion
-data = adict({
+data = Model({
     "users": [
         {"name": "Alice", "profile": {"city": "Paris"}},
         {"name": "Bob", "profile": {"city": "Lyon"}}
@@ -127,16 +127,16 @@ print(data.users[0].profile.city)                # "Paris"
 ### Computed Properties
 
 ```python
-class Calculator(adict):
+class Calculator(Model):
     a: float = 0
     b: float = 0
     
-    @adict.computed(cache=True, deps=['a', 'b'])
+    @Model.computed(cache=True, deps=['a', 'b'])
     def sum_ab(self):
         print("Computing sum...")
         return self.a + self.b
     
-    @adict.computed(cache=True, deps=['sum_ab'])  # Cascading dependencies
+    @Model.computed(cache=True, deps=['sum_ab'])  # Cascading dependencies
     def doubled_sum(self):
         return self.sum_ab * 2
 
@@ -151,11 +151,11 @@ print(calc.doubled_sum)    # 70
 ### Custom Validators
 
 ```python
-class Profile(adict):
+class Profile(Model):
     email: str
     age: int
     
-    @adict.check('email')
+    @Model.check('email')
     def validate_email(self, value):
         """Clean and validate email addresses"""
         email = value.lower().strip()
@@ -163,7 +163,7 @@ class Profile(adict):
             raise ValueError("Invalid email format")
         return email
     
-    @adict.check('age')  
+    @Model.check('age')  
     def validate_age(self, value):
         """Ensure age is reasonable"""
         age = int(value)
@@ -180,13 +180,13 @@ print(profile.age)    # 30 (converted to int)
 
 ```python
 # Deep merging
-network_config = adict({"db": {"host": "localhost", "port": 5432}})
+network_config = Model({"db": {"host": "localhost", "port": 5432}})
 overrides = {"db": {"port": 3306, "ssl": True}}
 network_config.merge(overrides)
 # Result: {"db": {"host": "localhost", "port": 3306, "ssl": True}}
 
 # Walking through nested structures
-data = adict({"users": [{"name": "Alice"}, {"name": "Bob"}]})
+data = Model({"users": [{"name": "Alice"}, {"name": "Bob"}]})
 for path, value in data.walk():
     print(f"{path}: {value}")
 # Output:
@@ -199,13 +199,13 @@ flat = data.walked()  # {"users.0.name": "Alice", "users.1.name": "Bob"}
 
 ## 🛠️ Configuration Options
 
-`adict.config` allows you to customize the behavior of your adict subclass.
-It returns an `AdictConfig` object (dataclass) that you may pass as the `_config` class variable.
+The cassmethod `Model.config` allows you to customize the behavior of your Model subclass.
+It returns an `ModelConfig` object (dataclass) that you may pass as the `_config` class variable or your Model.
 
 ```python
-class MyAdict(adict):
-    _config = adict.config(
-        auto_convert=True,          # Auto-convert dicts to adicts in nested sub-containers (upon access)
+class MyModel(Model):
+    _config = Model.config(
+        auto_convert=True,          # Auto-convert dicts to Models in nested sub-containers (upon access)
         strict=False,               # Strict runtime type checking
         coerce=False,               # Enable automatic type coercion
         allow_extra=True,           # Disallow extra attributes
@@ -214,30 +214,30 @@ class MyAdict(adict):
 ```
 
 `auto_convert` controls whether dicts found in nested mutable containers (MutableMappings, MutableSequence) 
-are automatically converted to `adict` (if they aren't already) on first access.
+are automatically converted to `Model` (if they aren't already) on first access.
 Note that MutableMappings that are NOT dicts won't be converted, but their content may if they are dicts.
 
 Subclass configs are properly merged with parent class configs, also supporting multiple inheritance patterns (following MRO order).
 
 ```python
-class Parent(adict):
-    _config = adict.config(strict=True, coerce=False)
+class Parent(Model):
+    _config = Model.config(strict=True, coerce=False)
 
 class Child(Parent):
-    _config = adict.config(coerce=True)  # strict=True, coerce=True (overrides Parent)
+    _config = Model.config(coerce=True)  # strict=True, coerce=True (overrides Parent)
 
-class A(adict):
-    _config = adict.config(strict=True)
+class A(Model):
+    _config = Model.config(strict=True)
     a: int=1
     value: str="A"
 
-class B(adict):
-    _config = adict.config(strict=False, coerce=True)
+class B(Model):
+    _config = Model.config(strict=False, coerce=True)
     b: int=2
     value: str="B"
 
 class C(A,B):
-    _config = adict.config(allow_extra=False) 
+    _config = Model.config(allow_extra=False) 
     # strict=True from A (A overrides B, since A follows B in MRO), 
     # coerce=True from B
     # allow_extra=False from C
@@ -263,9 +263,9 @@ except Exception as e:
 ### Example
 
 ```python
-class StrictConfig(adict):
+class StrictConfig(Model):
 
-    _config=adict.config(
+    _config=Model.config(
         strict = True          # Enable runtime type checking
         allow_extra = False    # Disallow undefined fields
         coerce = True          # Enable type coercion
@@ -285,9 +285,9 @@ config = StrictConfig(name="test", count=42)
 ```python
 
 # JSON-enforced mode
-class JSONConfig(adict):
+class JSONConfig(Model):
 
-    _config=adict.config(
+    _config=Model.config(
         enforce_json=True
     )
 
@@ -304,7 +304,7 @@ config.data = {1, 2, 3}   # ❌ ValueError (sets are not JSON-serializable)
 ## 🎨 Field Utilities
 
 ```python
-user = adict(name="Alice", age=30, email="alice@email.com", phone="123-456")
+user = Model(name="Alice", age=30, email="alice@email.com", phone="123-456")
 
 # Extract specific fields
 basic_info = user.extract('name', 'age')         # {"name": "Alice", "age": 30}
@@ -323,37 +323,37 @@ backup = user.deepcopy()
 
 ```python
 
-# let's turn auto-conversion off globally (affects all adicts instances)
-adict._config.auto_convert = False
+# let's turn auto-conversion off globally (affects all Model instances created after this change)
+Model._config.auto_convert = False
 
-# Convert existing dicts to adicts (recursive)
+# Convert existing dicts to Models (recursive)
 data = {"user": {"name": "Alice"}, "count": 42}
 
-safe_adict = adict(data)            # No auto-conversion
-safe_adict.user.name                # ❌ AttributeError (user is still a dict)
-safe_adict.user["name"]             # "Alice" (works with dict access)
-isinstance(safe_adict.user, adict)  # False (it's a plain dict)
-data["user"] is safe_adict.user     # True (same object)
+safe_model = Model(data)            # No auto-conversion
+safe_model.user.name                # ❌ AttributeError (user is still a dict)
+safe_model.user["name"]             # "Alice" (works with dict access)
+isinstance(safe_model.user, Model)  # False (it's a plain dict)
+data["user"] is safe_model.user     # True (same object)
 
-adict_data = safe_adict.to_adict()  # Deep conversion (in-place on the structure)
-isinstance(adict_data.user, adict)  # True (now it's an adict)
-data["user"] is adict_data.user     # False: user has been converted to a new adict
-adict_data.user.name                # ✅ "Alice" (user is now an adict)
-dict_data = adict_data.to_dict()    # Back to plain dicts
+model_data = safe_model.to_model()  # Deep conversion (in-place on the structure)
+isinstance(model_data.user, Model)  # True (now it's a Model)
+data["user"] is model_data.user     # False: user has been converted to a new Model
+model_data.user.name                # ✅ "Alice" (user is now a Model)
+dict_data = model_data.to_dict()    # Back to plain dicts
 
 # Factory method for clean conversion
-converted = adict.convert(complex_nested_dict)
-unconverted = adict.unconvert(converted)  # Back to plain dicts
+converted = Model.convert(complex_nested_dict)
+unconverted = Model.unconvert(converted)  # Back to plain dicts
 ```
 
 ## ⚠️ Important Behaviors & Limitations
 
 ### Descriptor Handling
 
-adict distinguishes between **definitions** and **assignments** in class namespaces:
+Model distinguishes between **definitions** and **assignments** in class namespaces:
 
 ```python
-class MyAdict(adict):
+class MyModel(Model):
     # ✅ DEFINITIONS (stay as class methods)
     @classmethod
     def my_classmethod(cls):
@@ -367,7 +367,7 @@ class MyAdict(adict):
     external_func = some_external_function        # Stored in dict
     external_cm = classmethod(external_function)  # Stored in dict (may be non-callable)
 
-obj = MyAdict()
+obj = MyModel()
 obj.my_classmethod()     # ✅ Works (bound method)
 obj.external_func("x")   # ✅ Works (raw function, no binding)
 obj.external_cm("x")     # ❌ May fail ('classmethod' object not callable)
@@ -383,17 +383,20 @@ Imports inside class namespaces are treated as field assignments:
 
 ```python
 # ❌ PROBLEMATIC
-class MyAdict(adict):
-    import json        # Becomes a field in the dict
+class MyModel(Model):
+    import json        # Becomes a 'json' field in the Model
+
+    def method(self):
+        return json.dumps(self)  # ❌ NameError: 'json' not defined
 
 # ✅ RECOMMENDED  
 import json
-class MyAdict(adict):
+class MyModel(Model):
     # json accessible via module scope
     pass
 ```
 
-This limitation rarely affects normal usage of adict as a data structure.
+This limitation rarely affects normal usage of Model as a data structure.
 
 ### Memory Considerations
 
@@ -403,7 +406,7 @@ This limitation rarely affects normal usage of adict as a data structure.
 
 ## 🆚 Comparison with Alternatives
 
-| Feature | adict | dict | dataclass | Pydantic |
+| Feature | Model | dict | dataclass | Pydantic |
 |---------|-------|------|-----------|----------|
 | Dict compatibility | ✅ Full | ✅ Native | ❌ No | ❌ Limited |
 | Attribute access | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
@@ -421,8 +424,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 
 ```bash
-git clone https://github.com/your-username/adict.git
-cd adict
+git clone https://github.com/your-username/model.git
+cd model
 pip install -e .[dev]
 pytest
 ```
@@ -439,4 +442,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**adict**: *Because data structures should be both powerful and pleasant to use* 🚀
+**Model**: *Because data structures should be both powerful and pleasant to use* 🚀

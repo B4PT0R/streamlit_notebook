@@ -1,5 +1,5 @@
 from .utils import text_content, total_tokens, NoContext, add_line_numbers, sort, timestamp, short_id, session_id, guess_extension_from_bytes, truncate, read_document_content
-from ..adict import adict
+from ..model import Model
 import json
 import os
 import shutil
@@ -13,7 +13,7 @@ from .voice import VoiceProcessor
 from datetime import datetime
 
 
-def default_show_stream(token,content):
+def default_process_text_chunk(token,content):
     """
     description: |
         Default function that prints streamed response tokens to stdout for visualization purposes.
@@ -32,9 +32,9 @@ def to_message(d):
     else:
         return Message(d)
 
-class AgentConfig(adict):
+class AgentConfig(Model):
 
-    _config = adict.config(enforce_json=True)
+    _config = Model.config(enforce_json=True)
 
     model="gpt-4.1-mini"
     system="You are a helpful AI assistant."
@@ -54,7 +54,7 @@ class AgentConfig(adict):
     voice_instructions="You speak with a friendly and intelligent tone."
     voice_enabled=True
     voice_buffer_size=3
-    workfolder=adict.factory(lambda :os.path.expanduser("~/agent_workfolder"))
+    workfolder=Model.factory(lambda :os.path.expanduser("~/agent_workfolder"))
 
 class Agent:
 
@@ -67,8 +67,8 @@ class Agent:
                 description: Additional keyword arguments to update the agent configuration.
         """
         self.config=AgentConfig(kwargs)
-        self.hooks=adict()
-        self.tools=adict()
+        self.hooks=Model()
+        self.tools=Model()
         self.current_session_id=None
         self.messages=[]
         self.pending=[] # to store messages created by tool calls temporarily

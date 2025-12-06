@@ -2086,7 +2086,7 @@ def coerce(value: Any, hint: Any) -> Any:
         CoercionError: Si la coercion n'est pas possible
         
     Examples:
-        >>> from adict import coerce
+        >>> from Model import coerce
         >>> coerce("42", int)
         42
         >>> coerce(("a", "b"), List[str])  

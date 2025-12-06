@@ -7,12 +7,12 @@ from typing import FrozenSet
 
 
 @dataclass
-class AdictConfig:
-    """Configuration for Adict instances.
+class ModelConfig:
+    """Configuration for Model instances.
 
     Attributes:
        auto_convert: If True, automatically convert dicts found in nested mutable containers
-                     (MutableMapping or MutableSequence) to adicts (on first access).
+                     (MutableMapping or MutableSequence) to Models (on first access).
        allow_extra: If True, allow keys not defined in __fields__.
        strict: If True, enforce runtime type checking (raise on mismatch).
        enforce_json: If True, enforce JSON-serializable values.
@@ -73,7 +73,7 @@ class AdictConfig:
         object.__setattr__(self, name, value)
 
     @classmethod
-    def _from_values(cls, values: dict[str, object], explicit: FrozenSet[str]) -> "AdictConfig":
+    def _from_values(cls, values: dict[str, object], explicit: FrozenSet[str]) -> "ModelConfig":
         """
         Constructeur interne qui contourne __init__ pour
         contrôler à la fois les valeurs et _explicit.
@@ -86,16 +86,16 @@ class AdictConfig:
         object.__setattr__(self, "_explicit", explicit)
         return self
 
-    def copy(self) -> "AdictConfig":
+    def copy(self) -> "ModelConfig":
         """Copie complète, en conservant _explicit."""
         values: dict[str, object] = {}
         for f in fields(self):
             if not f.init or f.name == "_explicit":
                 continue
             values[f.name] = getattr(self, f.name)
-        return AdictConfig._from_values(values, self._explicit)
+        return ModelConfig._from_values(values, self._explicit)
 
-    def merge(self, other: "AdictConfig") -> "AdictConfig":
+    def merge(self, other: "ModelConfig") -> "ModelConfig":
         """
         Comme dict.update :
         - les champs explicitement définis dans `other` écrasent ceux de `self`
@@ -116,10 +116,10 @@ class AdictConfig:
 
         merged_explicit = self._explicit | other._explicit
 
-        return AdictConfig._from_values(merged_values, merged_explicit)
+        return ModelConfig._from_values(merged_values, merged_explicit)
 
 
-class AdictKeysView(KeysView):
+class ModelKeysView(KeysView):
     def __init__(self, mapping):
         self._mapping = mapping
     
@@ -132,7 +132,7 @@ class AdictKeysView(KeysView):
     def __iter__(self):
         return iter(self._mapping)
 
-class AdictValuesView(ValuesView):
+class ModelValuesView(ValuesView):
     def __init__(self, mapping):
         self._mapping = mapping
     
@@ -149,7 +149,7 @@ class AdictValuesView(ValuesView):
         for key in self._mapping:
             yield self._mapping[key]  # Validation via __getitem__
 
-class AdictItemsView(ItemsView):
+class ModelItemsView(ItemsView):
     def __init__(self, mapping):
         self._mapping = mapping
     
@@ -200,7 +200,7 @@ class Computed:
     Represents a computed property that dynamically calculates its value.
     
     Args:
-        func: A callable that takes the adict instance and returns the computed value
+        func: A callable that takes the Model instance and returns the computed value
         cache: Whether to cache the computed value (default: False)
         deps: List of keys to watch for cache invalidation. If None, cache is invalidated
               on any change. If empty list [], cache is never invalidated automatically.
@@ -220,7 +220,7 @@ class Computed:
         return Computed(self.func,self.cache,deps=self.deps)
 
     def __call__(self, instance):
-        """Compute the value for the given adict instance."""
+        """Compute the value for the given Model instance."""
         if self.cache and self._cache_valid:
             return self._cached_value
             
@@ -312,11 +312,11 @@ def is_field(key: str, value: Any, name: str, bases: Tuple[Type, ...], dct: Dict
     if isinstance(value, Field):
         return True
     
-    # @adict.computed() decorated functions are always fields
+    # @Model.computed() decorated functions are always fields
     if hasattr(value, '_is_computed'):
         return True
     
-    # @adict.check() decorated functions are NOT fields - traitement spécial
+    # @Model.check() decorated functions are NOT fields - traitement spécial
     if hasattr(value, '_is_check'):
         return False
     
@@ -340,7 +340,7 @@ def is_field(key: str, value: Any, name: str, bases: Tuple[Type, ...], dct: Dict
     return True
 
 
-class adictMeta(type):
+class modelMeta(type):
 
     def __new__(mcls, name, bases, dct):
         fields = {}
@@ -356,7 +356,7 @@ class adictMeta(type):
             if key in dct:
                 value = dct[key]
                 if isinstance(value, FunctionType) and hasattr(value, '_is_computed'):
-                    # @adict.computed() decorated method
+                    # @Model.computed() decorated method
                     cache = getattr(value, '_computed_cache', False)
                     computed_obj = Computed(value, cache=cache)
                     # Utiliser l'annotation de retour de la fonction si disponible
@@ -380,7 +380,7 @@ class adictMeta(type):
             if key not in annotations:
                 if is_field(key, value, name, bases, dct):
                     if isinstance(value, FunctionType) and hasattr(value, '_is_computed'):
-                        # @adict.computed() decorated method
+                        # @Model.computed() decorated method
                         cache = getattr(value, '_computed_cache', False)
                         computed_obj = Computed(value, cache=cache)
                         # Utiliser l'annotation de retour de la fonction si disponible
@@ -412,7 +412,7 @@ class adictMeta(type):
         # Store fields in __fields__
         dct['__fields__'] = fields
 
-        # Setup _config using AdictConfig with proper MRO merging
+        # Setup _config using ModelConfig with proper MRO merging
 
         # Construire une config parent à partir de TOUTES les bases
         parent_config = None
@@ -434,10 +434,10 @@ class adictMeta(type):
         if '_config' in dct:
             # _config explicitement défini dans cette classe
             local_config = dct['_config']
-            if not isinstance(local_config, AdictConfig):
+            if not isinstance(local_config, ModelConfig):
                 raise TypeError(
-                    f"_config must be an AdictConfig instance created via adict.config(), "
-                    f"got {type(local_config)}. Use: _config = adict.config(enforce_json=True, ...)"
+                    f"_config must be an ModelConfig instance created via Model.config(), "
+                    f"got {type(local_config)}. Use: _config = Model.config(enforce_json=True, ...)"
                 )
 
             if parent_config is not None:
@@ -451,7 +451,7 @@ class adictMeta(type):
             if parent_config is not None:
                 effective_config = parent_config
             else:
-                effective_config = AdictConfig()
+                effective_config = ModelConfig()
 
         dct['_config'] = effective_config
 

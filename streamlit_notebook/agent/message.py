@@ -1,17 +1,17 @@
-from ..adict import adict
+from ..model import Model
 from .utils import short_id, timestamp, format
 from textwrap import dedent
 
-class Message(adict):
+class Message(Model):
 
     content=''
     role="assistant"
     name=''
     reasoning=''
     type="message"
-    id=adict.factory(lambda :short_id())
+    id=Model.factory(lambda :short_id())
     session_id=None
-    timestamp=adict.factory(lambda : timestamp())
+    timestamp=Model.factory(lambda : timestamp())
     lasting=0
     embedding=None
 

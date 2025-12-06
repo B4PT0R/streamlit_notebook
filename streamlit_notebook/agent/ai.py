@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from .image import Image
 from textwrap import dedent
 from queue import Queue
-from ..adict import adict
+from ..model import Model
 import io, os
 from openai import OpenAI, OpenAIError
 from typing import Union, List
@@ -74,7 +74,7 @@ class AIClient:
             BytesIO buffer containing MP3 audio
         """
         # Build TTS input
-        params = adict(
+        params = Model(
             model=model or "gpt-4o-mini-tts",
             voice=voice or "nova",
             instructions=voice_instructions or "You speak with a friendly and casual tone.",
@@ -239,9 +239,9 @@ class AIClient:
                     continue
                 delta=chunk.choices[0].delta
                 if isinstance(delta,BaseModel):
-                    delta=adict(delta.model_dump())
+                    delta=Model(delta.model_dump())
                 elif isinstance(delta,Mapping):
-                    delta=adict(delta)
+                    delta=Model(delta)
                 text_chunk,reasoning_chunk,tool_calls_chunk,message=self.aggregate_delta(delta,message)
                 if text_chunk: text_queue.put(text_chunk)
                 if reasoning_chunk: reasoning_queue.put(reasoning_chunk)

@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from typing import Optional,Union, Tuple, Set, Dict, List, Any, Callable
-from ._typechecker import check_type,TypeMismatchError, coerce
-from ._adict_meta import adictMeta, Factory, Computed, AdictItemsView,AdictKeysView,AdictValuesView, AdictConfig
+from ._typechecker import check_type, TypeMismatchError, coerce
+from ._model_meta import modelMeta, Factory, Computed, ModelItemsView,ModelKeysView,ModelValuesView, ModelConfig
 from ._collections_utils import (
     keys,
     set_key, 
@@ -29,14 +29,14 @@ import copy
 import json
 
 
-class adict(dict, metaclass=adictMeta):
+class Model(dict, metaclass=modelMeta):
     """
     A dict with additional capabilities.
     (All native dict methods are supported)
 
     Added features : 
         - attribute-style access.
-        - support for recursive conversion of all nested dicts to adicts (including those found in nested mutable containers)
+        - support for recursive conversion of all nested dicts to Models (including those found in nested mutable containers)
         - extract / exclude methods to conveniently extract selected keys, or exclude unwanted keys
         - type annotations and defaults via class fields
         - robust runtime type-checking and coercion (optional)
@@ -47,13 +47,13 @@ class adict(dict, metaclass=adictMeta):
         - native json support
 
     Example:
-        >>> ad=adict(a=[adict(b=1,c=2)])
-        >>> ad.a[0].b
+        >>> m=Model(a=[Model(b=1,c=2)])
+        >>> m.a[0].b
         1
-        >>> ad.get_nested("a.0.c")
+        >>> m.get_nested("a.0.c")
         2
-        >>> ad.set_nested("a.0.d",3)
-        >>> ad.walked()
+        >>> m.set_nested("a.0.d",3)
+        >>> m.walked()
         {"a.0.b":1, "a.0.c":2, "a.0.d":3}
     """
 
@@ -64,9 +64,9 @@ class adict(dict, metaclass=adictMeta):
         Used to define a factory of default value.
         Instead of passing a static default value to a field, the callable is used to create one for every new instance.
 
-        class user(adict):
+        class User(Model):
             name:str
-            id=adict.factory(lambda :random.choice(range(10000)))
+            id=Model.factory(lambda :random.choice(range(10000)))
 
 
         """
@@ -75,11 +75,11 @@ class adict(dict, metaclass=adictMeta):
     @classmethod
     def config(cls, **kwargs):
         """
-        Class method to create an AdictConfig for use in adict subclasses.
+        Class method to create an ModelConfig for use in Model subclasses.
 
         Usage:
-            class MyModel(adict):
-                _config = adict.config(enforce_json=True, allow_extra=False)
+            class MyModel(Model):
+                _config = Model.config(enforce_json=True, allow_extra=False)
                 name: str
                 age: int
 
@@ -90,9 +90,9 @@ class adict(dict, metaclass=adictMeta):
             coerce: Enable automatic type coercion
 
         Returns:
-            AdictConfig instance
+            ModelConfig instance
         """
-        return AdictConfig(**kwargs)
+        return ModelConfig(**kwargs)
 
     @classmethod
     def check(cls, field_name):
@@ -103,7 +103,7 @@ class adict(dict, metaclass=adictMeta):
             field_name: Le nom du field à checker
         
         Usage:
-            @adict.check('email')
+            @Model.check('email')
             def validate_email(self, value):
                 return value.lower().strip()
         """
@@ -128,31 +128,31 @@ class adict(dict, metaclass=adictMeta):
                   - []: never invalidate automatically 
         
         Usage as function:
-            sum = adict.computed(lambda ad: ad.a + ad.b, cache=True, deps=['a', 'b'])
+            sum = Model.computed(lambda m: m.a + m.b, cache=True, deps=['a', 'b'])
             
         Usage as decorator (always with parentheses):
-            @adict.computed(cache=True, deps=['a', 'b'])
+            @Model.computed(cache=True, deps=['a', 'b'])
             def sum_ab(self): return self.a + self.b
             
-            @adict.computed(cache=True, deps=['sum_ab', 'c'])  # Dépend d'un autre computed !
+            @Model.computed(cache=True, deps=['sum_ab', 'c'])  # Dépend d'un autre computed !
             def final_result(self): return self.sum_ab + self.c
             
-            @adict.computed(cache=True, deps=[])  # Never invalidate auto
+            @Model.computed(cache=True, deps=[])  # Never invalidate auto
             def expensive_once(self): return heavy_calc()
             
         Cascading invalidation example:
         
-        class Calculator(adict):
+        class Calculator(Model):
             a: float = 0
             b: float = 0
             c: float = 0
             
-            @adict.computed(cache=True, deps=['a', 'b'])
+            @Model.computed(cache=True, deps=['a', 'b'])
             def sum_ab(self):
                 print("Calculating sum_ab")
                 return self.a + self.b
             
-            @adict.computed(cache=True, deps=['sum_ab', 'c'])  # Dépend d'un autre computed
+            @Model.computed(cache=True, deps=['sum_ab', 'c'])  # Dépend d'un autre computed
             def final_result(self):
                 print("Calculating final_result") 
                 return self.sum_ab + self.c
@@ -165,7 +165,7 @@ class adict(dict, metaclass=adictMeta):
         print(calc.final_result)  # "Calculating sum_ab", "Calculating final_result", prints 15
         """
         if func is None:
-            # Called as decorator: @adict.computed() or @adict.computed(cache=True, deps=['a'])
+            # Called as decorator: @Model.computed() or @Model.computed(cache=True, deps=['a'])
             def decorator(f):
                 f._is_computed = True
                 f._computed_cache = cache
@@ -173,7 +173,7 @@ class adict(dict, metaclass=adictMeta):
                 return f
             return decorator
         else:
-            # Called as function: adict.computed(lambda ad: ad.a + ad.b, cache=True, deps=['a', 'b'])
+            # Called as function: Model.computed(lambda m: m.a + m.b, cache=True, deps=['a', 'b'])
             return Computed(func, cache=cache, deps=deps)
 
     def __init__(self, *args, **kwargs):
@@ -350,8 +350,8 @@ class adict(dict, metaclass=adictMeta):
             return value
         # Ici on reste data-structure agnostique
         if is_mutable_container(value):
-            # Important : on retourne un adict "pur", pas une sous-classe
-            return adict.convert(value)
+            # Important : on retourne un Model "pur", pas une sous-classe
+            return Model.convert(value)
         return value
 
     def _auto_convert_and_store(self, key, value):
@@ -366,15 +366,15 @@ class adict(dict, metaclass=adictMeta):
 
     def keys(self):
         """Retourne une view des clés (compatibilité dict native)."""
-        return AdictKeysView(self)
+        return ModelKeysView(self)
 
     def values(self):
         """Retourne une view des valeurs avec validation."""
-        return AdictValuesView(self)
+        return ModelValuesView(self)
 
     def items(self):
         """Retourne une view des items avec validation."""
-        return AdictItemsView(self)
+        return ModelItemsView(self)
 
     def __getitem__(self, key):
         value = dict.__getitem__(self, key)
@@ -450,7 +450,7 @@ class adict(dict, metaclass=adictMeta):
         
     @classmethod  
     def fromkeys(cls, iterable, value=None):
-        """Crée un adict depuis des clés avec validation."""
+        """Crée un Model depuis des clés avec validation."""
         return cls((key, value) for key in iterable)
             
     def __or__(self, other):
@@ -517,11 +517,11 @@ class adict(dict, metaclass=adictMeta):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{key}'")
 
     @classmethod
-    def convert(cls, obj:Any, seen: Optional[Dict] = None, root: bool = True) -> 'adict':
+    def convert(cls, obj:Any, seen: Optional[Dict] = None, root: bool = True) -> 'Model':
         """
-        Method used to convert dicts to adicts.
+        Method used to convert dicts to Models.
         Takes any obj as input.
-        if obj is a dict : we upgrade to adict and continue to the next step
+        if obj is a dict : we upgrade to Model and continue to the next step
         if obj is a MutableMapping or MutableSequence : we convert the items, and return obj
         else : returns obj directly
         Handles circular references gracefully.
@@ -533,12 +533,12 @@ class adict(dict, metaclass=adictMeta):
         if obj_id in seen:
             return seen[obj_id]
             
-        # if dict we upgrade to adict first
-        if isinstance(obj, dict) and not isinstance(obj,adict):
+        # if dict we upgrade to Model first
+        if isinstance(obj, dict) and not isinstance(obj,Model):
             if root:
                 obj=cls(obj)
             else:
-                obj=adict(obj)
+                obj=Model(obj)
 
         # Register the new instance as output for an already seen input
         seen[obj_id] = obj
@@ -547,7 +547,7 @@ class adict(dict, metaclass=adictMeta):
         if is_mutable_container(obj):
             # We convert in situ to preserve references of original containers as much as possible
             for k, v in unroll(obj):
-                if isinstance(obj, adict):
+                if isinstance(obj, Model):
                     dict.__setitem__(obj, k, cls.convert(v, seen, root=False))
                 else:
                     obj[k] = cls.convert(v, seen, root=False)
@@ -555,16 +555,16 @@ class adict(dict, metaclass=adictMeta):
         return obj
 
 
-    def to_adict(self):
+    def to_model(self):
         """Instance method: Convert the instance in-place and return it."""
         return self.__class__.convert(self)
     
     @classmethod
     def unconvert(cls, obj:Any, seen: Optional[Dict] = None) -> dict:
         """
-        Method used to convert adicts to dicts recursively
+        Method used to convert Models to dicts recursively
         Takes any obj as input.
-        if obj is an adict : we downgrade to dict and continue to next step
+        if obj is a Model : we downgrade to dict and continue to next step
         if obj is a MutableMapping or MutableSequence: We unconvert the items recursively and return obj
         else : returns obj directly
         Handles circular references gracefully.
@@ -576,8 +576,8 @@ class adict(dict, metaclass=adictMeta):
         if obj_id in seen:
             return seen[obj_id]
 
-        # if adict : we downgrade to dict first   
-        if isinstance(obj, adict):
+        # if Model : we downgrade to dict first   
+        if isinstance(obj, Model):
             obj=dict(obj)
 
         seen[obj_id] = obj
@@ -634,10 +634,10 @@ class adict(dict, metaclass=adictMeta):
         self.update(new_dict)
         
     def exclude(self,*excluded_keys):
-        return adict(exclude(self, *excluded_keys)) 
+        return Model(exclude(self, *excluded_keys)) 
     
     def extract(self,*extracted_keys):
-        return adict(extract(self, *extracted_keys)) 
+        return Model(extract(self, *extracted_keys)) 
 
     def walk(self, callback=None, filter=None, excluded=None):
         """ Itère sur les valeurs feuilles avec leur chemin et applique `callback` si fourni. """
@@ -645,7 +645,7 @@ class adict(dict, metaclass=adictMeta):
     
     def walked(self, callback=None,filter=None):
         """ Retourne un dictionnaire des valeurs feuilles transformées par `callback` si fourni. """
-        return adict(self.walk(callback=callback,filter=filter))
+        return Model(self.walk(callback=callback,filter=filter))
     
     @classmethod
     def unwalk(cls,walked):
@@ -664,7 +664,7 @@ class adict(dict, metaclass=adictMeta):
     def deep_equals(self,other:Mapping):
         return deep_equals(self,other)
 
-    def deepcopy(self) -> "adict":
+    def deepcopy(self) -> "Model":
         return type(self)(copy.deepcopy(dict(self)))
     
     # JSON support
@@ -672,10 +672,10 @@ class adict(dict, metaclass=adictMeta):
     @classmethod
     def loads(cls, s, *, cls_param=None, object_hook=None, parse_float=None,
               parse_int=None, parse_constant=None, object_pairs_hook=None, **kw):
-        """Return an adict instance from a JSON string.
+        """Return a Model instance from a JSON string.
         
         This method has the same signature and behavior as json.loads(),
-        but returns an adict instance instead of a plain dict.
+        but returns a Model instance instead of a plain dict.
         
         Args:
             s: JSON string to deserialize
@@ -689,7 +689,7 @@ class adict(dict, metaclass=adictMeta):
             **kw: Additional keyword arguments passed to json.loads()
             
         Returns:
-            adict: An adict instance containing the parsed JSON data
+            Model: An Model instance containing the parsed JSON data
             
         Raises:
             JSONDecodeError: If the JSON string is invalid
@@ -714,10 +714,10 @@ class adict(dict, metaclass=adictMeta):
     @classmethod 
     def load(cls, fp, *, cls_param=None, object_hook=None, parse_float=None,
              parse_int=None, parse_constant=None, object_pairs_hook=None, **kw):
-        """Return an adict instance from a JSON file.
+        """Return a Model instance from a JSON file.
         
         This method has the same signature and behavior as json.load(),
-        but returns an adict instance instead of a plain dict.
+        but returns a Model instance instead of a plain dict.
         
         Args:
             fp: File-like object containing JSON document, or path-like object
@@ -731,7 +731,7 @@ class adict(dict, metaclass=adictMeta):
             **kw: Additional keyword arguments passed to json.load()
             
         Returns:
-            adict: An adict instance containing the parsed JSON data
+            Model: An Model instance containing the parsed JSON data
             
         Raises:
             JSONDecodeError: If the JSON is invalid
@@ -766,7 +766,7 @@ class adict(dict, metaclass=adictMeta):
     def dumps(self, *, skipkeys=False, ensure_ascii=True, check_circular=True,
               allow_nan=True, cls=None, indent=None, separators=None,
               default=None, sort_keys=False, **kw):
-        """Return a JSON string representation of the adict.
+        """Return a JSON string representation of the Model.
         
         This method has the same signature and behavior as json.dumps().
         
@@ -803,7 +803,7 @@ class adict(dict, metaclass=adictMeta):
     def dump(self, fp, *, skipkeys=False, ensure_ascii=True, check_circular=True,
              allow_nan=True, cls=None, indent=None, separators=None,
              default=None, sort_keys=False, **kw):
-        """Write the adict as JSON to a file.
+        """Write the Model as JSON to a file.
         
         This method has the same signature and behavior as json.dump().
         
