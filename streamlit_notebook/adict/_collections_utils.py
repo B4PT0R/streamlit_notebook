@@ -416,33 +416,40 @@ def has_nested(obj:Container, path: Path):
         return False
 
 
-def extract(obj:C, *extracted_keys: Key) -> C:
+def extract(obj: C, *extracted_keys: Key) -> Iterator[Tuple[Key, Any]]:
     """
-    Extract specified keys from a container.
+    Extract specified keys from a container, preserving the original order.
     
     Args:
         obj (Mapping or Sequence): The source container.
-        keys (str): Keys to extract.
-    Returns:
-        (Mapping or Sequence): A container of same type containing only the specified keys.
-    """
-    if not is_container(obj):
-        raise TypeError(f"Expected a Mapping or Sequence container, got {type(obj)}")
-    return ((key, obj[key]) for key in keys(obj) if key in extracted_keys)
+        *extracted_keys (str): Keys to extract.
 
-def exclude(obj:C, *excluded_keys: Key) -> C:
-    """
-    Exclude specified keys from a container.
-    
-    Args:
-        obj (Mapping or Sequence): The source container.
-        keys (str): Keys to exclude.
     Returns:
-        Mapping or Sequence: A container of same type without the specified keys.
+        Iterator[Tuple[Key, Any]]: A generator of (key, value) pairs.
     """
     if not is_container(obj):
         raise TypeError(f"Expected a Mapping or Sequence container, got {type(obj)}")
-    return ((key, obj[key]) for key in keys(obj) if key not in excluded_keys)
+
+    ek = set(extracted_keys)
+    return ((key, obj[key]) for key in keys(obj) if key in ek)
+
+
+def exclude(obj: C, *excluded_keys: Key) -> Iterator[Tuple[Key, Any]]:
+    """
+    Exclude specified keys from a container, preserving the original order.
+    
+    Args:
+        obj (Mapping or Sequence): The source container.
+        *excluded_keys (str): Keys to exclude.
+
+    Returns:
+        Iterator[Tuple[Key, Any]]: A generator of (key, value) pairs.
+    """
+    if not is_container(obj):
+        raise TypeError(f"Expected a Mapping or Sequence container, got {type(obj)}")
+
+    ek = set(excluded_keys)
+    return ((key, obj[key]) for key in keys(obj) if key not in ek)
 
 def walk(
     obj: Container,

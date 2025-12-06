@@ -19,8 +19,10 @@ adict bridges the gap between different Python data paradigms:
 ```python
 # Traditional approaches require choosing between flexibility and structure
 data = {"name": "Alice", "age": 30}           # Dict: flexible but unstructured
+
 @dataclass
 class User: name: str; age: int               # Dataclass: structured but rigid
+
 class User(BaseModel): name: str; age: int    # Pydantic: powerful but heavy
 
 # adict: Best of all worlds
@@ -28,15 +30,17 @@ class User(adict):
     name: str
     age: int = 25
 
-user = User(name="Alice")                     # ✅ Structured
-user.email = "alice@email.com"                # ✅ Flexible  
-user['phone'] = "123-456-7890"               # ✅ Dict-compatible
+user = User(name="Alice")                   # ✅ Structured
+user.age                                    # 25 ✅ Default value
+user.email = "alice@email.com"              # ✅ Flexible  
+user['phone'] = "123-456-7890"              # ✅ Dict-compatible
+isinstance(user,dict)                       # True (still a dict!)
 ```
 
 ## 🚀 Key Features
 
 ### Core Capabilities
-- **Full dict inheritance** - All native dict methods work seamlessly
+- **Full dict inheritance** - All native dict methods work seamlessly. adicts ARE dicts!
 - **Attribute-style access** - `obj.key` and `obj['key']` both work
 - **Type annotations** - Optional type hints with runtime validation
 - **Recursive conversion** - Nested dicts automatically become adicts
@@ -166,29 +170,13 @@ print(profile.email)  # "alice@email.com" (cleaned)
 print(profile.age)    # 30 (converted to int)
 ```
 
-### Type Coercion
-
-```python
-class Config(adict):
-    _coerce = True  # Enable automatic type coercion
-    
-    port: int
-    enabled: bool
-    tags: List[str]
-
-config = Config(port="8080", enabled="true", tags=("web", "api"))
-print(config.port)     # 8080 (str → int)
-print(config.enabled)  # True (str → bool)
-print(config.tags)     # ["web", "api"] (tuple → list)
-```
-
 ### Deep Operations
 
 ```python
 # Deep merging
-config = adict({"db": {"host": "localhost", "port": 5432}})
+network_config = adict({"db": {"host": "localhost", "port": 5432}})
 overrides = {"db": {"port": 3306, "ssl": True}}
-config.merge(overrides)
+network_config.merge(overrides)
 # Result: {"db": {"host": "localhost", "port": 3306, "ssl": True}}
 
 # Walking through nested structures
@@ -205,39 +193,101 @@ flat = data.walked()  # {"users.0.name": "Alice", "users.1.name": "Bob"}
 
 ## 🛠️ Configuration Options
 
-### Class-level Settings
+`adict.config` allows you to customize the behavior of your adict subclass.
+It returns an `AdictConfig` object (dataclass) that you may pass as the `_config` class variable.
+
+```python
+class MyAdict(adict):
+    _config = adict.config(
+        strict=False,               # Strict runtime type checking
+        coerce=False,               # Enable automatic type coercion
+        allow_extra=True,           # Disallow extra attributes
+        enforce_json=False,         # Enforce JSON serializability of values
+    )
+```
+
+Subclass configs are properly merged with parent class configs, also supporting multiple inheritance patterns (following MRO order).
+
+```python
+class Parent(adict):
+    _config = adict.config(strict=True, coerce=False)
+
+class Child(Parent):
+    _config = adict.config(coerce=True)  # strict=True, coerce=True (overrides Parent)
+
+class A(adict):
+    _config = adict.config(strict=True)
+    a: int=1
+    value: str="A"
+
+class B(adict):
+    _config = adict.config(strict=False, coerce=True)
+    b: int=2
+    value: str="B"
+
+class C(A,B):
+    _config = adict.config(allow_extra=False) 
+    # strict=True from A (A overrides B, since A follows B in MRO), 
+    # coerce=True from B
+    # allow_extra=False from C
+
+c = C()
+print(c.a) # 1
+print(c.b) # 2
+print(c.value) # "A" (A overrides B)
+c.a = "3"
+print(c.a) # 3 (coercion enabled)
+
+try:
+    c.a = "invalid" 
+except Exception as e:
+    print(e) # ❌ TypeError (strict mode enabled)
+
+try:
+    c.undefined = "value" 
+except Exception as e:
+    print(e) # ❌ KeyError (extra fields not allowed)
+```
+
+### Example
 
 ```python
 class StrictConfig(adict):
-    _strict = True          # Enable runtime type checking
-    _allow_extra = False    # Disallow undefined fields
-    _coerce = True          # Enable type coercion
-    _enforce_json = True    # Ensure all values are JSON-serializable
-    
+
+    _config=adict.config(
+        strict = True          # Enable runtime type checking
+        allow_extra = False    # Disallow undefined fields
+        coerce = True          # Enable type coercion
+    )
+
     name: str
     count: int
 
 config = StrictConfig(name="test", count=42)
-# config.undefined = "value"  # ❌ KeyError (extra fields not allowed)
-# config.count = "invalid"    # ❌ TypeError (type checking enabled)
+# config.undefined = "value"    # ❌ KeyError (extra fields not allowed)
+# config.count = "32"           # coerced to int (coercion enabled)
+# config.count = "invalid"      # ❌ TypeError (can't be coerced, type checking raises an error)
 ```
 
 ## 📄 JSON Integration
 
 ```python
+
+# JSON-enforced mode
+class JSONConfig(adict):
+
+    _config=adict.config(
+        enforce_json=True
+    )
+
 # Built-in JSON support
-config = AppConfig.load("config.json")        # Load from file
-config = AppConfig.loads(json_string)         # Load from string
+config = JSONConfig.load("config.json")        # Load from file
+config = JSONConfig.loads(json_string)         # Load from string
 
 config.dump("output.json", indent=2)          # Save to file
 json_str = config.dumps(indent=2)             # Convert to string
 
-# JSON-enforced mode
-class JSONConfig(adict):
-    _enforce_json = True
-    
-    data: dict = {"key": "value"}
-    # data: set = {1, 2, 3}  # ❌ ValueError (sets not JSON-serializable)
+config.data = {1, 2, 3}   # ❌ ValueError (sets are not JSON-serializable)
 ```
 
 ## 🎨 Field Utilities

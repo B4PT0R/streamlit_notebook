@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from typing import Optional,Union, Tuple, Set, Dict, List, Any, Callable
 from ._typechecker import check_type,TypeMismatchError, coerce
-from ._adict_meta import adictMeta, Factory, Computed, AdictItemsView,AdictKeysView,AdictValuesView
+from ._adict_meta import adictMeta, Factory, Computed, AdictItemsView,AdictKeysView,AdictValuesView, AdictConfig
 from ._collections_utils import (
     keys,
     set_key, 
@@ -71,6 +71,28 @@ class adict(dict, metaclass=adictMeta):
 
         """
         return Factory(default_factory)
+
+    @classmethod
+    def config(cls, **kwargs):
+        """
+        Class method to create an AdictConfig for use in adict subclasses.
+
+        Usage:
+            class MyModel(adict):
+                _config = adict.config(enforce_json=True, allow_extra=False)
+                name: str
+                age: int
+
+        Args:
+            allow_extra: Allow keys not defined in __fields__
+            strict: Enable runtime type checking
+            enforce_json: Ensure all values are JSON-serializable
+            coerce: Enable automatic type coercion
+
+        Returns:
+            AdictConfig instance
+        """
+        return AdictConfig(**kwargs)
 
     @classmethod
     def check(cls, field_name):
@@ -162,14 +184,25 @@ class adict(dict, metaclass=adictMeta):
             value=field.get_default()
             if value is not MISSING:
                 if isinstance(value,Computed) or key not in self:
-                    self[key] = value
+                    dict.__setitem__(self, key, value)
 
         self.validate()
 
     def validate(self):
-        for key, value in super().items():
-            if not isinstance(value, Computed):
-                self[key]=self._check_value(key, value)
+        for key, value in dict.items(self):
+            # 1. Clé interdite ? → on coupe court
+            if not self._config.allow_extra and key not in self.__fields__:
+                raise KeyError(
+                    f"Key {key!r} is not allowed. Only the following keys are permitted: "
+                    f"{list(self.__fields__.keys())}"
+                )
+
+            # 2. On ne valide pas les Computed (leurs valeurs ne sont pas stockées)
+            if isinstance(value, Computed):
+                continue
+
+            # 3. Validation du contenu
+            dict.__setitem__(self, key, self._check_value(key, value))
 
     def _check_value(self, key, value, hint=None):
         """
@@ -189,10 +222,10 @@ class adict(dict, metaclass=adictMeta):
         value = self._apply_checks(key, value)
 
         # 2. Tenter la coercion
-        if self._coerce:
+        if self._config.coerce:
             value = self._coerce_value(key, value, hint)
         
-        # 2. Type checking ensuite (validation stricte du résultat)
+        # 3. Type checking ensuite (validation stricte du résultat)
         if hint is None:
             # Récupérer le hint du Field si pas fourni
             field = self.__fields__.get(key)
@@ -203,15 +236,8 @@ class adict(dict, metaclass=adictMeta):
         if hint is not None:
             self._check_type(key, value, hint)
 
-        if self._enforce_json:
+        if self._config.enforce_json:
             self._check_json_serializable(key, value)
-        
-        # 3. Vérifier _allow_extra pour les nouvelles clés
-        if not self._allow_extra and key not in self.__fields__:
-            raise KeyError(
-                f"Key {key!r} is not allowed. Only the following keys are permitted: "
-                f"{list(self.__fields__.keys())}"
-            )
         
         return value
 
@@ -278,7 +304,7 @@ class adict(dict, metaclass=adictMeta):
 
     def _check_type(self,key,value,hint):
         # basic isinstance check for now
-        if self._strict:
+        if self._config.strict:
             try:
                 check_type(hint,value)
                 return True
@@ -300,7 +326,7 @@ class adict(dict, metaclass=adictMeta):
         newly_invalidated = set()
         
         # Trouver tous les computed qui dépendent des clés modifiées
-        for field_name, value in super().items():
+        for field_name, value in dict.items(self):
             if isinstance(value, Computed):
                 if value.should_invalidate_for_keys(changed_keys):
                     if value.cache and value._cache_valid:  # Seulement si effectivement en cache
@@ -312,7 +338,7 @@ class adict(dict, metaclass=adictMeta):
             self._invalidate_dependants(newly_invalidated)
 
     def _invalidate_all(self):
-        for value in super().values():
+        for value in dict.values(self):
             if isinstance(value, Computed):
                 value.invalidate_cache()
 
@@ -331,24 +357,37 @@ class adict(dict, metaclass=adictMeta):
         return AdictItemsView(self)
 
     def __getitem__(self, key):
-        value = super().__getitem__(key)
+        value = dict.__getitem__(self,key)
         
         if isinstance(value, Computed):
             computed_value = value(self)
             # Validation consolidée pour computed
             return self._check_value(key, computed_value)
         
-        # Validation consolidée pour valeurs normales
-        return self._check_value(key, value)
+        return value
 
     def __setitem__(self, key, value):
+        if not self._config.allow_extra and key not in self.__fields__:
+            raise KeyError(
+                f"Key {key!r} is not allowed. Only the following keys are permitted: "
+                f"{list(self.__fields__.keys())}"
+            )
+
+        # Cas particulier : on stocke les Computed bruts, sans validation/invalidation
         if isinstance(value, Computed):
-            super().__setitem__(key, value)
+            dict.__setitem__(self, key, value)
             return
+
+        # Cas normal : validation / coercion / JSON / type
         value = self._check_value(key, value)
-        super().__setitem__(key, value)
+        dict.__setitem__(self, key, value)
         self._invalidate_dependants({key})
-    
+
+    def __delitem__(self, key):
+        # On laisse remonter le KeyError si pas de clé
+        dict.__delitem__(self, key)
+        self._invalidate_dependants({key})
+
     def __repr__(self):
         content=', '.join(f"{k!r}: {v!r}" for k,v in self.items())
         template=f"{{{content}}}"
@@ -417,7 +456,11 @@ class adict(dict, metaclass=adictMeta):
         else:
             self[key] = default 
             return default
-    
+
+    def clear(self):
+        dict.clear(self)
+        self._invalidate_all()
+
     # additonal methods
 
     def __getattr__(self, key):
@@ -481,8 +524,11 @@ class adict(dict, metaclass=adictMeta):
         if is_mutable_container(obj):
             # We convert in situ to preserve references of original containers as much as possible
             for k, v in unroll(obj):
-                obj[k] = cls.convert(v, seen, root=False)            
-
+                if isinstance(obj, adict):
+                    dict.__setitem__(obj, k, cls.convert(v, seen, root=False))
+                else:
+                    obj[k] = cls.convert(v, seen, root=False)
+                    
         return obj
 
 
@@ -595,9 +641,8 @@ class adict(dict, metaclass=adictMeta):
     def deep_equals(self,other:Mapping):
         return deep_equals(self,other)
 
-    def deepcopy(self) -> 'adict':
-        """ Retourne une copie profonde de l'adict. """
-        return type(self)(copy.deepcopy(super()))
+    def deepcopy(self) -> "adict":
+        return type(self)(copy.deepcopy(dict(self)))
     
     # JSON support
     

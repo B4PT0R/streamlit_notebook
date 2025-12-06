@@ -9,7 +9,7 @@ from .auto_play import auto_play
 # Optional agent imports
 try:
     from ..agent import Agent, Message
-    from ..agent.ai import AIClientError
+    from ..agent.ai import AIClientError, APIAuthenticationError
     HAS_AGENT = True
 except ImportError:
     HAS_AGENT = False
@@ -51,12 +51,14 @@ DEFAULT_SETTINGS = {
 }
 
 def load_settings(agent):
-    """Load settings from agent_workfolder/settings.json"""
+    """Load settings from agent_workfolder/settings.json with defaults"""
     settings_path = os.path.join(agent.config.workfolder, "settings.json")
+    settings = DEFAULT_SETTINGS.copy()
     if os.path.exists(settings_path):
         with open(settings_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return DEFAULT_SETTINGS.copy()
+            loaded = json.load(f)
+            settings.update(loaded)
+    return settings
 
 def save_settings(agent, settings):
     """Save settings to agent_workfolder/settings.json"""
@@ -290,20 +292,11 @@ def init_chat():
 
         # Load and apply saved settings
         settings = load_settings(state.agent)
-        state.agent.config.model = settings.get("model", "gpt-4.1-mini")
-        state.agent.config.temperature = settings.get("temperature", 0.7)
-        state.agent.config.max_completion_tokens = settings.get("max_completion_tokens", 4000)
-        state.agent.config.token_limit = settings.get("token_limit", 128000)
-        state.agent.config.reasoning_effort = settings.get("reasoning_effort", "medium")
-        state.agent.config.vision_enabled = settings.get("vision_enabled", True)
-        state.agent.config.voice_enabled = settings.get("voice_enabled", False)
-        state.agent.config.voice_model = settings.get("voice_model", "gpt-4o-mini-tts")
-        state.agent.config.voice = settings.get("voice", "nova")
-        state.agent.config.voice_instructions = settings.get("voice_instructions", "You speak with a friendly and intelligent tone.")
+        state.agent.config.update(settings)
         state.show_tool_calls = settings.get("show_tool_calls", True)
 
         state.agent.hooks.process_text_stream=show_text_stream
-        state.agent.hooks.show_message=show_message
+        state.agent.hooks.process_message=show_message
         state.agent.hooks.audio_playback_hook=audio_playback_backend
 
         def custom_notebook_messages():
@@ -513,7 +506,7 @@ def show_chat():
     with state.stream_area:
         try:
             if not state.setdefault('agent_has_finished',True):
-                    state.agent_has_finished=state.agent()
+                state.agent_has_finished=state.agent()
             # Process prompt
             elif prompt is not None:
                 if prompt.files:
@@ -526,12 +519,11 @@ def show_chat():
                     text=prompt.text
                 if text:
                     state.agent_has_finished=state.agent(text)
-        except AIClientError as e:
+        except APIAuthenticationError as e:
             with state.chat_area:
                 st.warning("AI features (including STT and TTS) can only be used with a valid OpenAI API key. Please set it in '⚙️ Settings' or provide it as an `OPENAI_API_KEY` environment variable. You can get one at https://platform.openai.com/account/api-keys")
         except Exception as e:
             with state.chat_area:
-                st.info(f"An error of type: {str(type(e))} occured.")
                 st.error(f"Error: {e}")
 
     # Back to notebook button

@@ -33,29 +33,31 @@ def to_message(d):
     else:
         return Message(d)
 
-class Agent:
+class AgentConfig(adict):
 
-    config=adict(
-        model="gpt-4.1-mini",
-        system="You are a helpful AI assistant.",
-        auto_proceed=True,
-        openai_api_key=None,
-        history=None,
-        name="Pandora",
-        username="Unknown",
-        userage="Unknown",
-        token_limit=128000,
-        max_completion_tokens=4000,
-        max_input_tokens=8000,
-        reasonning_effort="medium",
-        vision_enabled=True,
-        voice_model='gpt-4o-mini-tts',
-        voice="nova",
-        voice_instructions="You speak with a friendly and intelligent tone.",
-        voice_enabled=True,
-        voice_buffer_size=3,
-        workfolder=os.path.expanduser("~/agent_workfolder")
-    )
+    _config = adict.config(enforce_json=True)
+
+    model="gpt-4.1-mini"
+    system="You are a helpful AI assistant."
+    auto_proceed=True
+    openai_api_key=None
+    history=None
+    name="Pandora"
+    username="Unknown"
+    userage="Unknown"
+    token_limit=128000,
+    max_completion_tokens=4000
+    max_input_tokens=8000
+    reasonning_effort="medium"
+    vision_enabled=True
+    voice_model='gpt-4o-mini-tts'
+    voice="nova"
+    voice_instructions="You speak with a friendly and intelligent tone."
+    voice_enabled=True
+    voice_buffer_size=3
+    workfolder=adict.factory(lambda :os.path.expanduser("~/agent_workfolder"))
+
+class Agent:
 
     def __init__(self,**kwargs):
         """
@@ -65,8 +67,7 @@ class Agent:
             kwargs:
                 description: Additional keyword arguments to update the agent configuration.
         """
-        self.config=Agent.config.copy()
-        self.config.update(kwargs)
+        self.config=AgentConfig(kwargs)
         self.hooks=adict()
         self.tools=adict()
         self.current_session_id=None
@@ -87,6 +88,15 @@ class Agent:
         session_folder=os.path.join(self.config.workfolder,'sessions')
         if not os.path.isdir(session_folder):
             os.makedirs(session_folder,exist_ok=True)
+
+    def save_config(self):
+        config_file=os.path.join(self.config.workfolder,'agent_config.json')
+        self.config.dump(config_file,indent=2, ensure_ascii=False)
+
+    def load_config(self):
+        config_file=os.path.join(self.config.workfolder,'agent_config.json')
+        if os.path.isfile(config_file):
+            self.config.update(self.config.load(config_file))
 
     def init_native_tools(self):
         """
@@ -172,8 +182,8 @@ class Agent:
                 msg.session_id=self.current_session_id
             self.messages.append(msg)
             self.save_session()
-            if self.hooks.get('show_message'):
-                self.hooks.show_message(msg)
+            if self.hooks.get('process_message'):
+                self.hooks.process_message(msg)
         return msg
     
 

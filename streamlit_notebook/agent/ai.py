@@ -1,3 +1,4 @@
+from click import password_option
 import numpy as np
 from .message import Message
 from collections.abc import Mapping
@@ -13,6 +14,9 @@ from .utils import Thread
 from pydantic import BaseModel
 
 class AIClientError(Exception):
+    pass
+
+class APIAuthenticationError(AIClientError):
     pass
 
 class AIClient:
@@ -35,10 +39,10 @@ class AIClient:
                 self._client = OpenAI(api_key=api_key, timeout=180, max_retries=3)
                 if not self.api_key_is_valid():
                     self._client=None
-                    raise AIClientError("Missing or invalid OpenAI API key. You can pass it when creating the agent with `agent=Agent(openai_api_key='your_api_key')` or set the OPENAI_API_KEY environment variable. You can get an API key at https://platform.openai.com/account/api-keys.")
+                    raise APIAuthenticationError("Missing or invalid OpenAI API key. You can pass it when creating the agent with `agent=Agent(openai_api_key='your_api_key')` or via `agent.config.openai_api_key` or set the OPENAI_API_KEY environment variable. You can get an API key at https://platform.openai.com/account/api-keys.")
             except OpenAIError:
                 self._client=None
-                raise AIClientError("Missing or invalid OpenAI API key. You can pass it when creating the agent with `agent=Agent(openai_api_key='your_api_key')` or set the OPENAI_API_KEY environment variable. You can get an API key at https://platform.openai.com/account/api-keys.")
+                raise APIAuthenticationError("Missing or invalid OpenAI API key. You can pass it when creating the agent with `agent=Agent(openai_api_key='your_api_key')` or via `agent.config.openai_api_key` or set the OPENAI_API_KEY environment variable. You can get an API key at https://platform.openai.com/account/api-keys.")
         return self._client
 
     def api_key_is_valid(self):

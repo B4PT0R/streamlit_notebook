@@ -2,6 +2,77 @@ from collections.abc import ValuesView, ItemsView, KeysView
 from typing import  Optional,Union,Tuple, Set, Dict, List, Any, Type, Callable
 from types import FunctionType
 from ._collections_utils import MISSING
+from dataclasses import dataclass, field, fields, MISSING as DC_MISSING
+from typing import FrozenSet
+
+
+@dataclass(frozen=True)
+class AdictConfig:
+    allow_extra: bool = True
+    strict: bool = False
+    enforce_json: bool = False
+    coerce: bool = False
+
+    # champs passés explicitement à __init__
+    _explicit: FrozenSet[str] = field(default_factory=frozenset,init=False,repr=False)
+
+    def __init__(self, **kwargs):
+        # 1) garder la liste des clés explicitement fournies
+        object.__setattr__(self, "_explicit", frozenset(kwargs.keys()))
+
+        # 2) appliquer kwargs ou defaults de classe
+        for f in fields(self):
+            if not f.init or f.name == "_explicit":
+                continue
+
+            if f.name in kwargs:
+                value = kwargs[f.name]
+            else:
+                if f.default is not DC_MISSING:
+                    value = f.default
+                elif f.default_factory is not DC_MISSING:  # type: ignore[attr-defined]
+                    value = f.default_factory()         # type: ignore[misc]
+                else:
+                    raise TypeError(f"Missing required field {f.name!r}")
+
+            object.__setattr__(self, f.name, value)
+
+    @classmethod
+    def _from_values(cls, values: dict[str, object], explicit: FrozenSet[str]) -> "AdictConfig":
+        """
+        Constructeur interne qui contourne __init__ pour
+        contrôler à la fois les valeurs et _explicit.
+        """
+        self = object.__new__(cls)  # n'appelle pas __init__
+        for f in fields(cls):
+            if f.name == "_explicit":
+                continue
+            object.__setattr__(self, f.name, values[f.name])
+        object.__setattr__(self, "_explicit", explicit)
+        return self
+
+    def merge(self, other: "AdictConfig") -> "AdictConfig":
+        """
+        Comme dict.update :
+        - les champs explicitement définis dans `other` écrasent ceux de `self`
+        - les autres restent ceux de `self`
+        - _explicit du résultat = union des explicites de self et other
+        """
+        merged_values: dict[str, object] = {}
+
+        for f in fields(self):
+            if not f.init or f.name == "_explicit":
+                continue
+
+            name = f.name
+            if name in other._explicit:
+                merged_values[name] = getattr(other, name)
+            else:
+                merged_values[name] = getattr(self, name)
+
+        merged_explicit = self._explicit | other._explicit
+
+        return AdictConfig._from_values(merged_values, merged_explicit)
 
 
 class AdictKeysView(KeysView):
@@ -297,18 +368,47 @@ class adictMeta(type):
         # Store fields in __fields__
         dct['__fields__'] = fields
 
-        # _allow_extra
-        if '_allow_extra' not in dct:
-            dct['_allow_extra'] = True
+        # Setup _config using AdictConfig with proper MRO merging
 
-        # _strict pour toggle le runtime type checking
-        if '_strict' not in dct:
-            dct['_strict'] = False
+        # Construire une config parent à partir de TOUTES les bases
+        parent_config = None
 
-        if '_enforce_json' not in dct:
-            dct['_enforce_json'] = False
+        # On parcourt les bases de la dernière à la première
+        # pour que la base la plus à gauche (dans class X(A, B)) gagne
+        for base in reversed(bases):
+            base_conf = getattr(base, '_config', None)
+            if base_conf is None:
+                continue
 
-        if '_coerce' not in dct:
-            dct['_coerce'] = False
+            if parent_config is None:
+                parent_config = base_conf
+            else:
+                # merge comme dict.update : les champs explicites de base_conf
+                # écrasent ceux déjà dans parent_config
+                parent_config = parent_config.merge(base_conf)
+
+        if '_config' in dct:
+            # _config explicitement défini dans cette classe
+            local_config = dct['_config']
+            if not isinstance(local_config, AdictConfig):
+                raise TypeError(
+                    f"_config must be an AdictConfig instance created via adict.config(), "
+                    f"got {type(local_config)}. Use: _config = adict.config(enforce_json=True, ...)"
+                )
+
+            if parent_config is not None:
+                # On empile la config locale par-dessus la config combinée des bases
+                effective_config = parent_config.merge(local_config)
+            else:
+                # Pas de parents qui ont une config → on prend juste la locale
+                effective_config = local_config
+        else:
+            # Pas de _config local → héritage pur ou defaults
+            if parent_config is not None:
+                effective_config = parent_config
+            else:
+                effective_config = AdictConfig()
+
+        dct['_config'] = effective_config
 
         return super().__new__(mcls, name, bases, dct)
