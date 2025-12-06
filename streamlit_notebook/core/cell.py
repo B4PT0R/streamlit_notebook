@@ -650,7 +650,6 @@ class Cell:
         This method is called when we need to clear all previous results and run states like we start with a fresh cell.
         """
         self.initialize_output_area()
-        self.has_run=False
         self.last_code=None
         self.results=[]
         self.displays=[]

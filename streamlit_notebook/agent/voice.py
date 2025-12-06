@@ -174,6 +174,24 @@ class AudioPlayer(Streamer):
                     yield token
                     time.sleep(0.02)
 
+class Throttler(Streamer):
+
+    def __init__(self,agent):
+        super().__init__()
+        self.agent=agent
+
+    def stream_processor(self,stream):
+        buffer=''
+        buffer_size=self.agent.config.get('voice_buffer_size',3) # Number of tokens to buffer before yielding the result
+        for i,token in enumerate(stream):
+            buffer+=token
+            if i%buffer_size==0:
+                yield buffer
+                buffer=''
+        if buffer:
+            yield buffer
+            
+
 
 class VoiceProcessor(Streamer):
     """
@@ -192,6 +210,7 @@ class VoiceProcessor(Streamer):
         self.line_to_audio=LineToAudio(self.agent)
         self.speech_processor=AudioPlayer(self.agent)
         self.mute_analyzer=MuteAnalyzer(self.agent)
+        self.throttler=Throttler(self.agent)
 
     def speak(self,stream):
         if self.agent.config.get('voice_enabled',False):
@@ -205,5 +224,6 @@ class VoiceProcessor(Streamer):
         marked_lines = self.line_splitter.process(analyzed_stream)
         lines_with_playback = self.line_to_audio.process(marked_lines)
         synced_stream=self.speech_processor.process(lines_with_playback)
-        return synced_stream             
+        throttled_stream=self.throttler.process(synced_stream)
+        return throttled_stream            
 

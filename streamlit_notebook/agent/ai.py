@@ -202,7 +202,7 @@ class AIClient:
 
         return text_chunk, reasoning_chunk, tool_calls_chunk, message
 
-    def _stream_completion_target(self, params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, assistant_name=None):
+    def _stream_completion_target(self, params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, final_message_queue, assistant_name=None):
         """Private method to handle streaming completion in a separate thread"""
         success=False
         exc=None
@@ -210,7 +210,7 @@ class AIClient:
             # Extract reasoning_effort if present
             effort = params.pop('reasoning_effort', None)
             if effort and any(params['model'].startswith(prefix) for prefix in ('o', 'gpt-5')):
-                params['reasoning'] = dict(effort=effort)
+                params['reasoning_effort'] = effort
 
             # Call OpenAI chat completion API
             response = self.client.chat.completions.create(
@@ -252,6 +252,8 @@ class AIClient:
         text_queue.put("#END#")
         reasoning_queue.put("#END#")
         msg_queue.put("#END#")
+        final_message_queue.put(message)
+        final_message_queue.put("#END#")
 
     def stream(self, assistant_name=None, **params):
 
@@ -259,13 +261,14 @@ class AIClient:
         tool_calls_queue=Queue()
         reasoning_queue=Queue()
         msg_queue=Queue()
+        final_message_queue=Queue()
 
         params['messages']=[msg.to_llm_client_format(include_name=True) for msg in params.get('messages',[])]
         params['tools'] = [tool.to_llm_client_format() for tool in params.get('tools') or []] or None
 
         completion=Thread(
             target=self._stream_completion_target,
-            args=(params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, assistant_name)
+            args=(params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, final_message_queue, assistant_name)
         )
         completion.start()
 
@@ -285,8 +288,12 @@ class AIClient:
             while not (message:=msg_queue.get())=="#END#":
                 yield message
 
+        def final_msg_stream():
+            while not (message:=msg_queue.get())=="#END#":
+                yield message
 
-        return text_stream(), reasonning_stream(), tool_calls_stream(), msg_stream()
+
+        return text_stream(), reasonning_stream(), tool_calls_stream(), msg_stream(), final_msg_stream()
 
     def _normalize(self, vect, precision=5):
         """Normalize a vector and round to specified precision."""

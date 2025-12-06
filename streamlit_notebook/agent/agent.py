@@ -38,6 +38,7 @@ class Agent:
     config=adict(
         model="gpt-4.1-mini",
         system="You are a helpful AI assistant.",
+        auto_proceed=True,
         openai_api_key=None,
         history=None,
         name="Pandora",
@@ -52,6 +53,7 @@ class Agent:
         voice="nova",
         voice_instructions="You speak with a friendly and intelligent tone.",
         voice_enabled=True,
+        voice_buffer_size=3,
         workfolder=os.path.expanduser("~/agent_workfolder")
     )
 
@@ -265,31 +267,44 @@ class Agent:
             Streams and aggregates the response content from OpenAI, forwarding each token via hook if defined.
             If tool calls are present, records them along with the reply.
         """
-        text_stream, reasoning_stream, tool_calls_stream, message_stream=self.ai.stream(
+        text_stream, reasoning_stream, tool_calls_stream, message_stream, final_message_stream=self.ai.stream(
             assistant_name=self.config.name,
             messages=self.get_context(),
             tools=list(self.tools.values()) or None,
             **self.config.extract('model','temperature','max_completion_tokens','top_p','frequency_penalty','presence_penalty','stop','reasoning_effort')
         )
 
-        content=''
-        for reasoning_chunk in reasoning_stream:
-            content+=reasoning_chunk
-            if self.hooks.get('show_reasoning_stream'):
-                self.hooks.show_reasoning_stream(reasoning_chunk,content)        
+        if self.hooks.get('process_reasonning_stream'):
+            self.hooks.process_reasonning_stream(reasoning_stream)
+        elif self.hooks.get('process_reasoning_chunk'):
+            content=''
+            for reasoning_chunk in reasoning_stream:
+                content+=reasoning_chunk
+                self.hooks.process_reasonning_chunk(reasoning_chunk,content)        
         
-        content=''
-        for text_chunk in self.voice.speak(text_stream):
-            content+=text_chunk
-            if self.hooks.get('show_text_stream'):
-                self.hooks.show_text_stream(text_chunk,content)
+        text_stream=self.voice.speak(text_stream)
 
-        for message in message_stream:
-            if self.hooks.get('show_message_stream'):
-                self.hooks.show_message_stream(message)
+        if self.hooks.get('process_text_stream'):
+            self.hooks.process_text_stream(text_stream)
+        elif self.hooks.get('process_text_chunk'):
+            content=''
+            for text_chunk in text_stream:
+                content+=text_chunk
+                self.hooks.process_text_chunk(text_chunk,content)
 
-        if self.hooks.get('show_final_message'):
-            self.hooks.show_final_message(message)
+        if self.hooks.get('process_tool_calls_stream'):
+            self.hooks.process_tool_calls_stream(tool_calls_stream)
+        elif self.hooks.get('process_tool_call_chunk'):
+            for tool_call_chunk in tool_calls_stream:
+                self.hooks.process_tool_call_chunk(tool_call_chunk)
+
+        if self.hooks.get('process_message_stream'):
+            self.hooks.process_message_stream(message_stream)
+        elif self.hooks.get('process_message_chunk'):
+            for message_chunk in message_stream:
+                self.hooks.process_message_chunk(message_chunk)
+
+        message=next(iter(final_message_stream))
         
         return self.add_message(message)
 
@@ -337,7 +352,11 @@ class Agent:
         self.add_pending()
 
         if self.new_turn:
-            self.process()
+            if self.config.get('auto_proceed',True):
+                return self.process()
+            else:
+                return False # indicates the agent wants one more turn to continue processing
+        return True # indicates the agent has finished its process cycle
 
     def speak(self,text,**kwargs):
         from .voice import silent_play
@@ -363,9 +382,8 @@ class Agent:
 
         transcribed_text = self.transcribe(source, language, **kwargs)
 
-        # Add transcribed text as a user message and process
+        # Add transcribed text as a user message
         self.new_message(role="user", content=transcribed_text)
-        self.process()
 
     def transcribe(self, source, language=None, **kwargs):
         """
@@ -548,7 +566,7 @@ class Agent:
 
         return os.path.abspath(dest_path)
 
-    def __call__(self,prompt):
+    def __call__(self,prompt=None)->bool:
         """
         description: |
             Adds the user prompt to the message history and processes the conversation turn.
@@ -557,9 +575,12 @@ class Agent:
                 description: The user prompt or query.
         required:
             - prompt
+        return:
+            description: Returns True if the agent has finished, False if it needs to continue
         """
-        self.new_message(role="user",content=prompt)
-        self.process()
+        if prompt:
+            self.new_message(role="user",content=prompt)
+        return self.process()
 
     def interact(self):
         """

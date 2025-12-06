@@ -98,8 +98,8 @@ def settings_dialog():
             with c1:
                 model = st.selectbox(
                     "Model",
-                    ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
-                    index=["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"].index(state.agent.config.get("model", "gpt-4.1-mini"))
+                    ["gpt-5.1", "gpt-5.1-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"],
+                    index=["gpt-5.1", "gpt-5.1-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"].index(state.agent.config.get("model", "gpt-4.1-mini"))
                 )
             with c2:
                 reasoning_effort = st.selectbox(
@@ -284,8 +284,7 @@ def init_chat():
         state.agent=Agent(
             model="gpt-4.1-mini",
             system=root_join('agent','prompts','system_prompt.txt'),
-            vision_enabled=True,
-            voice_instructions="You speak with an intelligent and friendly tone. Always ready to tackle new coding challenges.",
+            auto_proceed=False,
             workfolder=workfolder
         )
 
@@ -303,7 +302,7 @@ def init_chat():
         state.agent.config.voice_instructions = settings.get("voice_instructions", "You speak with a friendly and intelligent tone.")
         state.show_tool_calls = settings.get("show_tool_calls", True)
 
-        state.agent.hooks.show_text_stream=show_text_stream
+        state.agent.hooks.process_text_stream=show_text_stream
         state.agent.hooks.show_message=show_message
         state.agent.hooks.audio_playback_hook=audio_playback_backend
 
@@ -433,12 +432,13 @@ def show_session():
             show_message(msg)
 
 
-def show_text_stream(token,buffer):
+def show_text_stream(stream):
     if not state.get('chat_initialized'):
         return
     with state.stream_area:
         with st.chat_message("assistant",avatar=avatar("assistant")):
-            st.write(buffer)
+            # Use markdown instead of write for more stable rendering
+            st.write_stream(stream)
 
 def show_chat():
     """Display the AI chat interface.
@@ -512,7 +512,10 @@ def show_chat():
 
     with state.stream_area:
         try:
-            if prompt is not None:
+            if not state.setdefault('agent_has_finished',True):
+                    state.agent_has_finished=state.agent()
+            # Process prompt
+            elif prompt is not None:
                 if prompt.files:
                     for file in prompt.files:
                         state.agent.upload_file(file)
@@ -522,7 +525,7 @@ def show_chat():
                 elif prompt.text:
                     text=prompt.text
                 if text:
-                    state.agent(text)
+                    state.agent_has_finished=state.agent(text)
         except AIClientError as e:
             with state.chat_area:
                 st.warning("AI features (including STT and TTS) can only be used with a valid OpenAI API key. Please set it in '⚙️ Settings' or provide it as an `OPENAI_API_KEY` environment variable. You can get one at https://platform.openai.com/account/api-keys")
