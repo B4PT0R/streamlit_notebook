@@ -505,7 +505,7 @@ def show_chat():
 
     with state.stream_area:
         try:
-            if not state.setdefault('agent_has_finished',True):
+            if not state.get('agent_has_finished',True):
                 state.agent_has_finished=state.agent()
             # Process prompt
             elif prompt is not None:
@@ -530,5 +530,8 @@ def show_chat():
     def on_back_click():
         state.chat_mode = False
     st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
+
+    if not state.get('agent_has_finished',True):
+        rerun()
 
 
