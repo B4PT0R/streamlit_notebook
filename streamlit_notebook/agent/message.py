@@ -1,17 +1,17 @@
-from ..model import Model
+from modict import modict
 from .utils import short_id, timestamp, format
 from textwrap import dedent
 
-class Message(Model):
+class Message(modict):
 
     content=''
     role="assistant"
     name=''
     reasoning=''
     type="message"
-    id=Model.factory(lambda :short_id())
+    id=modict.factory(lambda :short_id())
     session_id=None
-    timestamp=Model.factory(lambda : timestamp())
+    timestamp=modict.factory(lambda : timestamp())
     lasting=0
     embedding=None
 

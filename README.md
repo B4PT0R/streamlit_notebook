@@ -1192,7 +1192,7 @@ MIT License—see [LICENSE](LICENSE).
 - **Agent Modules**: Consolidated AI agent code in `streamlit_notebook/agent/` package
   - Modular tool system with `Tool` class
   - Separate modules for voice, image, and message handling
-  - Enhanced `Model` utility for flexible configuration
+  - Enhanced `modict` utility for flexible configuration
 - **Bug Fixes**:
   - Fixed typo in `has_fragment_toggle` property setter
   - Improved error handling in AI streaming

@@ -22,7 +22,8 @@ dependencies = [
     "asttokens",
     "python-dotenv",
     "filetype",
-    "pydub"
+    "pydub",
+    "modict"
 ]
 
 [project.optional-dependencies]
