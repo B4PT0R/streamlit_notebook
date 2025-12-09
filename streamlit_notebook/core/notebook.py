@@ -686,7 +686,7 @@ class Notebook:
         """
         count = 0
         for cell in list(self.cells):  # Convert to list to avoid modification during iteration
-            if cell in self.cells and not self.has_run_once:
+            if cell in self.cells and not cell.has_run_once:
                 cell.run()
                 count += 1
 
