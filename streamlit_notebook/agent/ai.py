@@ -8,7 +8,7 @@ from typing import Union, List
 from pydub import AudioSegment
 from .utils import Thread
 import time
-from .stream_utils import MappingStreamProcessor
+from .stream_utils import MappingStreamProcessor, END
 
 class ChunkStreamer(MappingStreamProcessor):
 
@@ -208,7 +208,7 @@ class AIClient:
             msg_chunk=MessageChunk(content=f"Hmmm, sorry! There was an error while calling the OpenAI client. Here is the error message I got:\n\n ```\n{str(exc)}\n```")
             queue.put(msg_chunk)
 
-        queue.put("#END#")
+        queue.put(END)
 
     def _stream_chunks(self, params):
 
@@ -224,7 +224,7 @@ class AIClient:
         completion.start()
 
         def chunk_stream():
-            while not (chunk:=queue.get())=="#END#":
+            while not (chunk:=queue.get()) is END:
                 yield chunk
 
         return chunk_stream()
@@ -242,7 +242,7 @@ class AIClient:
         queues.final_message.put(message)
 
         for queue in queues.values():
-            queue.put("#END#")
+            queue.put(END)
 
     def stream(self, **params):
 
@@ -267,7 +267,7 @@ class AIClient:
             streams=modict()
             for key, queue in queues.items():
                 def reader(queue=queue):
-                    while not (chunk:=queue.get())=="#END#":
+                    while not (chunk:=queue.get()) is END:
                         yield chunk
                 streams[key]=reader()
             return streams

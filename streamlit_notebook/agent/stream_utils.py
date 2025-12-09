@@ -14,6 +14,11 @@ def log(*data):
         print(*data)
         input()
 
+
+class END:
+    #sentinel value for end of stream
+    pass
+
 class Task:
 
     def __init__(self,target=None,args=None,kwargs=None):
@@ -44,7 +49,7 @@ class Tee:
                 self.queues[k].put(chunk)
             time.sleep(0.0005)
         for k in self.queues:
-            self.queues[k].put("#END#")
+            self.queues[k].put(END)
         
     def tee(self,stream, n=2):
         self.queues={k:Queue() for k in range(n)}
@@ -53,7 +58,7 @@ class Tee:
         readers={}
         for k in self.queues:
             def reader():
-                while not (processed_chunk:=self.queues[k].get())=="#END#":
+                while not (processed_chunk:=self.queues[k].get()) is END:
                     yield processed_chunk
             readers[k]=reader()
         return tuple(readers.values())
@@ -75,8 +80,8 @@ class Splitter:
                 self.queue_true.put(chunk)
             else:
                 self.queue_false.put(chunk)
-        self.queue_true.put("#END#")
-        self.queue_false.put("#END#")
+        self.queue_true.put(END)
+        self.queue_false.put(END)
         
     def split(self, stream):
         self.queue_true=Queue()
@@ -84,15 +89,13 @@ class Splitter:
         self.thread=Thread(target=self.target, args=(stream,))
         self.thread.start()
         def reader_true():
-            while not (chunk:=self.queue_true.get())=="#END#":
+            while not (chunk:=self.queue_true.get()) is END:
                 yield chunk
         def reader_false():
-            while not (chunk:=self.queue_false.get())=="#END#":
+            while not (chunk:=self.queue_false.get()) is END:
                 yield chunk
         return reader_true(),reader_false()
-
-
-    
+  
 class Streamer:
 
     def __init__(self,stream_processor=None,threaded=True):
@@ -111,7 +114,7 @@ class Streamer:
         for processed_chunk in self.process_stream(stream):
             time.sleep(0.0005)
             self.queue.put(processed_chunk)
-        self.queue.put("#END#")
+        self.queue.put(END)
         
     def process(self,stream):
         if self.threaded:
@@ -120,7 +123,7 @@ class Streamer:
             self.thread.daemon=True
             self.thread.start()
             def reader():
-                while not (processed_chunk:=self.queue.get())=="#END#":
+                while not (processed_chunk:=self.queue.get()) is END:
                     yield processed_chunk
             return reader()
         else:
@@ -129,7 +132,6 @@ class Streamer:
     def __call__(self, stream):
         return self.process(stream)
         
-
 class StreamLogger(Streamer):
 
     def __init__(self,threaded=True,file=None):
@@ -513,18 +515,20 @@ class MappingStreamSplitter:
         self.readers=dict()
         self.queues=dict()
         self.defaults=defaults or {}
+        self.done=False
 
     def maybe_init_readers(self, data):
         for key in data.keys():
             if key not in self.readers:
                 self.queues[key]=Queue()
                 def reader(key=key):
-                    while not (value:=self.queues[key].get())=="#END#":
+                    while (value:=self.queues[key].get()) is not END:
                         yield value
                 self.readers[key]=reader()
 
     def process(self,stream):
         self.queues=dict()
+        self.done=False
         if self.defaults:
             self.maybe_init_readers(self.defaults)
         for data in stream:
@@ -536,7 +540,8 @@ class MappingStreamSplitter:
             if self.threaded:
                 time.sleep(0.0005)
         for key in self.queues:
-            self.queues[key].put("#END#")
+            self.queues[key].put(END)
+        self.done=True
 
     def split(self, stream):
         if self.threaded:
@@ -547,7 +552,7 @@ class MappingStreamSplitter:
             self.process(stream)
         return self.readers 
         #warning! in threaded mode, readers will be added dynamically as new keys are encountered
-        #it's better suited for streams with a predictable set of keys
+        #it's better suited for streams of Mappings with a predictable set of keys
     
     def __call__(self, stream):
         return self.split(stream)
@@ -564,39 +569,48 @@ class MappingStreamGatherer:
         self.threaded=threaded
         self.queue=None
 
-    def process(self, streams:dict):
-        streams=streams.copy()
+    def process(self, streams:dict, processor_for_key=None, splitter=None):
+        active_streams={}
         while True:
             data={}
             for key, stream in list(streams.items()): #list because new readers may appear or be deleted as we loop
+                stream = active_streams.get(key) or stream
+                if processor_for_key and key not in active_streams:
+                    stream = active_streams[key] = processor_for_key(key, stream)
                 try:
                     data[key]=next(stream)
                 except StopIteration:
                     # the stream is consumed
                     del streams[key]
+                    active_streams.pop(key, None)
             if data:
                 for key, default in self.defaults.items():
                     data.setdefault(key, default)
                 self.queue.put(self.type(data))
             if not streams:
+                if splitter is not None and not splitter.done:
+                    time.sleep(0.0005)
+                    continue
                 break
-        self.queue.put("#END#")
+            if splitter is not None and not splitter.done:
+                time.sleep(0.0005)
+        self.queue.put(END)
 
-    def gather(self, streams:dict):
+    def gather(self, streams:dict, processor_for_key=None, splitter=None):
         self.queue=Queue()
         if self.threaded:
-            Thread(target=self.process, args=(streams,)).start()
+            Thread(target=self.process, args=(streams, processor_for_key, splitter)).start()
         else:
-            self.process(streams)
+            self.process(streams, processor_for_key=processor_for_key, splitter=splitter)
         
         def stream():
-            while not (mapping:=self.queue.get())=="#END#":
+            while (mapping:=self.queue.get()) is not END:
                 yield mapping
         
         return stream()
     
-    def __call__(self, streams:dict):
-        return self.gather(streams)
+    def __call__(self, streams:dict, processor_for_key=None, splitter=None):
+        return self.gather(streams, processor_for_key=processor_for_key, splitter=splitter)
 
 class MappingStreamProcessor(Streamer):
 
@@ -616,17 +630,15 @@ class MappingStreamProcessor(Streamer):
         if not self.processors:
             return stream
         streams=self.splitter(stream)
-        processed_streams=dict()
-        for key, stream in streams.items():
-            if key in self.processors:
-                if isinstance(self.processors[key],list):
-                    processors=self.processors[key]
-                    for processor in reversed(processors):
-                        stream=processor(stream)
-                elif callable(self.processors[key]):
-                    stream=self.processors[key](stream)
-            processed_streams[key]=stream
-        return self.gatherer(processed_streams)
+        def processor_for_key(key, stream):
+            processor=self.processors.get(key)
+            if isinstance(processor,list):
+                for proc in reversed(processor):
+                    stream=proc(stream)
+            elif callable(processor):
+                stream=processor(stream)
+            return stream
+        return self.gatherer(streams, processor_for_key=processor_for_key, splitter=self.splitter)
     
         
         
