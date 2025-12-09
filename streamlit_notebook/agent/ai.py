@@ -1,9 +1,5 @@
-from click import password_option
 import numpy as np
 from .message import Message, MessageChunk
-from collections.abc import Mapping
-from .image import Image
-from textwrap import dedent
 from queue import Queue
 from modict import modict
 import io, os

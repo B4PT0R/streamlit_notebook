@@ -395,6 +395,10 @@ class BaseCellType:
         """
         # Reactive cells without UI skeleton: defer to next turn
         # Avoids widgets displaying in wrong context (wherever the active container is)
+
+        if self.cell not in self.cell.notebook.cells:
+            return # Cell has been deleted, skip execution
+
         if self.reactive and not self.ready:
             self.run_requested = True
             return

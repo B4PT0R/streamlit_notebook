@@ -400,14 +400,16 @@ def show_message(msg):
                 if has_content:
                     st.markdown(msg.content)
                 if has_tool_calls:
-                    for tool_call in msg.tool_calls:
-                        args=modict.loads(tool_call.function.arguments)
-                        if tool_call.function.name=="run_code":
-                            st.code(args.content)
-                        else:
-                            with st.expander(f"🔧 Tool Call: {tool_call.function.name}"):
-                                st.markdown(f"**Arguments:**")
-                                st.json(args)
+                    with st.expander(f"🔧 Tool Calls ({len(msg.tool_calls)})"):
+                        for tool_call in msg.tool_calls:
+                            args=modict.loads(tool_call.function.arguments)
+                            with st.container(border=True):
+                                if tool_call.function.name=="run_code":
+                                    st.code(args.content)
+                                else:
+                                    st.markdown(f"Calling tool: **{tool_call.function.name}**")    
+                                    st.markdown(f"**Arguments:**")
+                                    st.json(args)
 
     elif msg.type=='image':
         with state.chat_area:
@@ -417,11 +419,9 @@ def show_message(msg):
         if show_tools:
             with state.chat_area:
                 if msg.content.strip():
-                    if msg.name=="run_code":
-                            st.code(msg.content,language="text")
-                    else:
+                    with st.chat_message(name="system", avatar=avatar("system")):
                         with st.expander(f'🔧 Tool Response: {msg.name}'):
-                            st.text(msg.content)
+                            st.code(msg.content,language="text")
 
 
 def show_session():
