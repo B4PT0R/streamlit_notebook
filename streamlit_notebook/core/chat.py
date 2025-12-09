@@ -5,6 +5,7 @@ import json
 from ..core.notebook import get_notebook
 from datetime import datetime
 from .auto_play import auto_play
+from modict import modict
 
 # Optional agent imports
 try:
@@ -295,7 +296,7 @@ def init_chat():
         state.agent.config.update(settings)
         state.show_tool_calls = settings.get("show_tool_calls", True)
 
-        state.agent.hooks.process_text_stream=show_text_stream
+        state.agent.hooks.process_content_stream=show_content_stream
         state.agent.hooks.process_message=show_message
         state.agent.hooks.audio_playback_hook=audio_playback_backend
 
@@ -310,19 +311,19 @@ def init_chat():
         state.agent.hooks.custom_messages_hook=custom_notebook_messages
 
         @state.agent.add_tool
-        def run_code(code):
+        def run_code(content=None):
             """
             description: |
                 Runs python code in the notebook shell
             parameters:
-               code:
+               content:
                     description: The python code to run
             required:
-                - code
+                - content
             """
             notebook=get_notebook()
-            if notebook:
-                response=notebook.shell.run(code)
+            if notebook and content:
+                response=notebook.shell.run(content)
                 if response.exception:
                     exception=response.exception
                     return f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
@@ -396,13 +397,17 @@ def show_message(msg):
 
         with state.chat_area:
             with st.chat_message(name=msg.role, avatar=avatar(msg.role)):
-                if has_tool_calls:
-                    for tool_call in msg.tool_calls:
-                        with st.expander(f"🔧 Tool Call: {tool_call.function.name}"):
-                            st.markdown(f"**Arguments:**")
-                            st.json(tool_call.function.arguments)
                 if has_content:
                     st.markdown(msg.content)
+                if has_tool_calls:
+                    for tool_call in msg.tool_calls:
+                        args=modict.loads(tool_call.function.arguments)
+                        if tool_call.function.name=="run_code":
+                            st.code(args.content)
+                        else:
+                            with st.expander(f"🔧 Tool Call: {tool_call.function.name}"):
+                                st.markdown(f"**Arguments:**")
+                                st.json(args)
 
     elif msg.type=='image':
         with state.chat_area:
@@ -411,8 +416,12 @@ def show_message(msg):
     elif msg.role=='tool':
         if show_tools:
             with state.chat_area:
-                with st.expander(f'🔧 Tool Response: {msg.name}'):
-                    st.text(f"{msg.content}")
+                if msg.content.strip():
+                    if msg.name=="run_code":
+                            st.code(msg.content,language="text")
+                    else:
+                        with st.expander(f'🔧 Tool Response: {msg.name}'):
+                            st.text(msg.content)
 
 
 def show_session():
@@ -425,7 +434,7 @@ def show_session():
             show_message(msg)
 
 
-def show_text_stream(stream):
+def show_content_stream(stream):
     if not state.get('chat_initialized'):
         return
     with state.stream_area:

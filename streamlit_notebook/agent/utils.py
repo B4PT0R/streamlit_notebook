@@ -150,10 +150,21 @@ def msg_token_count(msg):
 def total_tokens(messages):
     return sum(msg_token_count(msg) for msg in messages)
 
-def extract_python(text, pattern=None):
+def find_pattern(text, pattern=None):
+    """
+    Renvoie une liste de tuples contenant TOUS les groupes capturés par le pattern.
+
+    - Si le pattern contient 1 groupe  -> tuple de 1 élément
+    - Si le pattern contient n groupes -> tuple de n éléments
+    """
+
     pattern = pattern or r'```run_python(.*?)```'
     iterator = re.finditer(pattern, text, re.DOTALL)
-    return [match.group(1) for match in iterator]
+
+    return [
+        tuple(match.groups())     # groups() renvoie *tous* les groupes capturés
+        for match in iterator
+    ]
 
 def format(string, context=None):
     # Si aucun contexte n'est fourni, utiliser un dictionnaire vide

@@ -1,4 +1,4 @@
-from .utils import text_content, total_tokens, NoContext, add_line_numbers, sort, timestamp, short_id, session_id, guess_extension_from_bytes, truncate, read_document_content
+from .utils import root_join, text_content, total_tokens, NoContext, add_line_numbers, sort, timestamp, short_id, session_id, guess_extension_from_bytes, truncate, read_document_content
 from modict import modict
 import json
 import os
@@ -10,7 +10,10 @@ from .image import Image
 from .tool import Tool
 from .ai import AIClient
 from .voice import VoiceProcessor
+from .latex import LaTeXProcessor
+from .stream_utils import MarkdownBlockExtractor
 from datetime import datetime
+from typing import List
 
 
 def default_process_text_chunk(token,content):
@@ -77,6 +80,11 @@ class Agent:
         self.init_session_folder()
         self.ai=AIClient(self)
         self.voice=VoiceProcessor(self)
+        self.latex=LaTeXProcessor()
+        self.md_extractor=MarkdownBlockExtractor()
+        self.stream_processors=modict(
+            content=[self.voice,self.latex]
+        )
         self.init_native_tools()
 
     def init_workfolder(self):
@@ -241,6 +249,8 @@ class Agent:
 
         system=[self.get_system_message()]
 
+        tools=[tool.to_system_message() for tool in self.get_tools(filter=(lambda tool: not tool.mode=='api'))]
+
         custom_msgs=self.hooks.custom_messages_hook() if self.hooks.get('custom_messages_hook') else []
 
         max_images=self.config.get('max_images',1)
@@ -257,7 +267,7 @@ class Agent:
                 msg_copy.content = truncate(msg_copy.content, max_tokens=max_input_tokens)
             truncated_others.append(msg_copy)
 
-        current_count=total_tokens(system+images+custom_msgs)
+        current_count=total_tokens(system+tools+images+custom_msgs)
         available_tokens=self.config.token_limit - self.config.max_completion_tokens - current_count
         for i,msg in enumerate(reversed(truncated_others)):
             msg_count=total_tokens([msg])
@@ -266,9 +276,49 @@ class Agent:
             else:
                 break
         history=truncated_others[max(0,len(truncated_others)-i-1):]
-        context=system+sort(history+images+custom_msgs)
+        context=system+tools+sort(history+images+custom_msgs)
         return list(msg.format(context=dict(agent=self)) for msg in context) 
-        
+
+    def get_tools(self, filter=None)->List[Tool]:
+        """
+        description: |
+            Retrieves tools from the agent's tool registry, optionally filtered by a predicate function.
+        parameters:
+            filter:
+                description: Optional predicate function to filter tools.
+        returns:
+            List of Tool objects matching the filter criteria.
+        """
+        filter=filter or (lambda tool: True)
+        return list(tool for tool in self.tools.values() if filter(tool))
+
+    def aggregate_md_tool_calls(self,message):
+        tool_calls = []
+
+        for tc in self.md_extractor.matchs:
+            # On part de attrs (dict), qu’on copie pour ne pas muter l’original
+            tc = modict(tc)
+            # On ajoute le content comme argument séparé si tu veux
+
+            if tc.name in self.tools:
+
+                tool_call = {
+                    "id": f"mardown_block_call_{short_id(8)}",
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.args, ensure_ascii=False),
+                    },
+                    "index": len(tool_calls),  # utile si tu veux le champ index
+                }
+
+                tool_calls.append(tool_call)
+
+        if tool_calls:
+            message.setdefault('tool_calls',[]).extend(tool_calls)
+
+        return message
+
 
     def get_response(self):
         """
@@ -276,45 +326,44 @@ class Agent:
             Streams and aggregates the response content from OpenAI, forwarding each token via hook if defined.
             If tool calls are present, records them along with the reply.
         """
-        text_stream, reasoning_stream, tool_calls_stream, message_stream, final_message_stream=self.ai.stream(
-            assistant_name=self.config.name,
+        streams=self.ai.stream(
             messages=self.get_context(),
-            tools=list(self.tools.values()) or None,
+            tools=self.get_tools(filter=(lambda tool: tool.mode=='api')),
             **self.config.extract('model','temperature','max_completion_tokens','top_p','frequency_penalty','presence_penalty','stop','reasoning_effort')
         )
 
-        if self.hooks.get('process_reasonning_stream'):
-            self.hooks.process_reasonning_stream(reasoning_stream)
+        if self.hooks.get('process_reasoning_stream'):
+            self.hooks.process_reasoning_stream(streams.reasoning)
         elif self.hooks.get('process_reasoning_chunk'):
             content=''
-            for reasoning_chunk in reasoning_stream:
+            for reasoning_chunk in streams.reasoning:
                 content+=reasoning_chunk
-                self.hooks.process_reasonning_chunk(reasoning_chunk,content)        
-        
-        text_stream=self.voice.speak(text_stream)
+                self.hooks.process_reasoning_chunk(reasoning_chunk,content)        
 
-        if self.hooks.get('process_text_stream'):
-            self.hooks.process_text_stream(text_stream)
-        elif self.hooks.get('process_text_chunk'):
+        if self.hooks.get('process_content_stream'):
+            self.hooks.process_content_stream(streams.content)
+        elif self.hooks.get('process_content_chunk'):
             content=''
-            for text_chunk in text_stream:
+            for text_chunk in streams.content:
                 content+=text_chunk
-                self.hooks.process_text_chunk(text_chunk,content)
+                self.hooks.process_content_chunk(text_chunk,content)
 
         if self.hooks.get('process_tool_calls_stream'):
-            self.hooks.process_tool_calls_stream(tool_calls_stream)
+            self.hooks.process_tool_calls_stream(streams.tool_calls)
         elif self.hooks.get('process_tool_call_chunk'):
-            for tool_call_chunk in tool_calls_stream:
+            for tool_call_chunk in streams.tool_calls:
                 self.hooks.process_tool_call_chunk(tool_call_chunk)
 
         if self.hooks.get('process_message_stream'):
-            self.hooks.process_message_stream(message_stream)
+            self.hooks.process_message_stream(streams.message)
         elif self.hooks.get('process_message_chunk'):
-            for message_chunk in message_stream:
+            for message_chunk in streams.message:
                 self.hooks.process_message_chunk(message_chunk)
 
-        message=next(iter(final_message_stream))
+        message=next(iter(streams.final_message))
         
+        message=self.aggregate_md_tool_calls(message)
+
         return self.add_message(message)
 
     def call_tools(self,message):
@@ -358,7 +407,6 @@ class Agent:
         self.add_pending()
         message=self.get_response()
         self.call_tools(message)
-        self.add_pending()
 
         if self.new_turn:
             if self.config.get('auto_proceed',True):

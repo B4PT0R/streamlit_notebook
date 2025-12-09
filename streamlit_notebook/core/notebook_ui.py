@@ -70,7 +70,8 @@ class NotebookUI:
             self.logo()
 
         for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
-            cell.show()
+            if cell in self.notebook.cells: # may have been removed by the time we get here
+                cell.show()
 
         self.control_bar()
 

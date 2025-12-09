@@ -5,7 +5,7 @@ cell management, UI rendering, and utilities.
 """
 
 from .notebook import Notebook, st_notebook, get_notebook
-from .cell import Cell, new_cell
+from .cell import Cell
 from .utils import rerun, wait, display, format, check_rerun, root_join, state
 from .echo import echo
 from .shell import Shell
@@ -16,7 +16,6 @@ __all__ = [
     'get_notebook',
     'set_page_config',
     'Cell',
-    'new_cell',
     'rerun',
     'wait',
     'display',

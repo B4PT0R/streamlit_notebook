@@ -54,16 +54,16 @@ class MuteTagProcessor(Streamer):
         self.agent=agent 
         self.token_streamer = TokenStreamer([
             #Intentionally muted blocs -> aggregate in buffer and pass through
-            (fenced('<MUTE>','</MUTE>',flags=re.DOTALL|re.MULTILINE), lambda x: x),
+            (fenced('<MUTE>','</MUTE>',flags=re.DOTALL|re.MULTILINE), lambda m: m.group()),
             # Mute markdown code blocs
-            (fenced('```','```',flags=re.DOTALL|re.MULTILINE), lambda x: f'<MUTE>{x}</MUTE>'),
+            (fenced('```','```',flags=re.DOTALL|re.MULTILINE), lambda m: f'<MUTE>{m.group()}</MUTE>'),
             # Mute LaTeX formulas
-            #(fenced(r'\$\$',r'\$\$',flags=re.DOTALL|re.MULTILINE), lambda x: f'<MUTE>{x}</MUTE>'),
-            #(fenced(r'\\\[',r'\\\]',flags=re.DOTALL|re.MULTILINE), lambda x: f'<MUTE>{x}</MUTE>'),
-            #(fenced(r'\\\(',r'\\\)',flags=re.DOTALL|re.MULTILINE), lambda x: f'<MUTE>{x}</MUTE>'),
-            #(r'\$[^$\n]+?\$', lambda x: f'<MUTE>{x}</MUTE>'),
+            (fenced(r'\$\$',r'\$\$',flags=re.DOTALL|re.MULTILINE), lambda m: f'<MUTE>{m.group()}</MUTE>'),
+            (fenced(r'\\\[',r'\\\]',flags=re.DOTALL|re.MULTILINE), lambda m: f'<MUTE>{m.group()}</MUTE>'),
+            (fenced(r'\\\(',r'\\\)',flags=re.DOTALL|re.MULTILINE), lambda m: f'<MUTE>{m.group()}</MUTE>'),
+            (r'\$[^$\n]+?\$', lambda m: f'<MUTE>{m.group()}</MUTE>'),
             # Mute links
-            #(r'https?://\S+', lambda x: f'<MUTE>{x}</MUTE>'),
+            (r'https?://\S+', lambda m: f'<MUTE>{m.group()}</MUTE>'),
         ], threaded=False)
         
     def stream_processor(self, stream):
@@ -212,7 +212,7 @@ class VoiceProcessor(Streamer):
         self.mute_analyzer=MuteAnalyzer(self.agent)
         self.throttler=Throttler(self.agent)
 
-    def speak(self,stream):
+    def __call__(self,stream):
         if self.agent.config.get('voice_enabled',False):
             return self.process(stream)
         else:

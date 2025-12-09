@@ -1,6 +1,6 @@
 from click import password_option
 import numpy as np
-from .message import Message
+from .message import Message, MessageChunk
 from collections.abc import Mapping
 from .image import Image
 from textwrap import dedent
@@ -11,7 +11,15 @@ from openai import OpenAI, OpenAIError
 from typing import Union, List
 from pydub import AudioSegment
 from .utils import Thread
-from pydantic import BaseModel
+import time
+from .stream_utils import MappingStreamProcessor
+
+class ChunkStreamer(MappingStreamProcessor):
+
+    def __init__(self,agent, threaded=True):
+        self.agent=agent
+        super().__init__(defaults=dict(content='',reasoning='',tool_calls=None),processors=self.agent.stream_processors, type=MessageChunk, threaded=threaded)
+
 
 class AIClientError(Exception):
     pass
@@ -169,52 +177,15 @@ class AIClient:
         else:
             # For srt and vtt formats, return as-is
             return transcript
-    
-    def get_tools_call_by_index(self,message,index):
-        for tc in message.get('tool_calls',[]):
-            if tc.get('index')==index:
-                return tc
-        return None
-    
-    def aggregate_delta(self,delta,message):
-        """
-        description: |
-            Aggregates deltas from streaming response into the message being built.
-        parameters:
-            delta:
-                description: The delta object containing possible tool calls or content.
-            message:
-                description: The message being built.
-        """
 
-        tool_calls_chunk = delta.get('tool_calls')
-        text_chunk=delta.get('content') or ''
-        reasoning_chunk=delta.get('reasoning') or ''
-
-        # aggregate chunks in current message
-        message.content+=text_chunk
-        message.reasoning+=reasoning_chunk
-        if tool_calls_chunk:
-            for tc in delta.tool_calls:
-                existing_tc=self.get_tools_call_by_index(message,tc.index)
-                if existing_tc is None:
-                    message.setdefault('tool_calls',[]).append(tc)
-                else:
-                    #agregate function arguments
-                    args_chunk=tc.get('function',{}).get('arguments','')
-                    existing_tc.function.arguments+=args_chunk
-
-        return text_chunk, reasoning_chunk, tool_calls_chunk, message
-
-    def _stream_completion_target(self, params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, final_message_queue, assistant_name=None):
+    def _stream_completion_target(self, params, queue):
         """Private method to handle streaming completion in a separate thread"""
         success=False
         exc=None
         try:
-            # Extract reasoning_effort if present
-            effort = params.pop('reasoning_effort', None)
-            if effort and any(params['model'].startswith(prefix) for prefix in ('o', 'gpt-5')):
-                params['reasoning_effort'] = effort
+            # Remove reasoning_effort for models not supporting it
+            if not any(params['model'].startswith(prefix) for prefix in ('o', 'gpt-5')):
+                params.pop('reasoning_effort',None)
 
             # Call OpenAI chat completion API
             response = self.client.chat.completions.create(
@@ -231,73 +202,83 @@ class AIClient:
         else:
             success=True
 
-        message=Message(role="assistant", name=assistant_name)
-
         if success:
             for chunk in response:
                 if not hasattr(chunk,'choices') or not chunk.choices or not hasattr(chunk.choices[0],'delta'):
                     continue
-                delta=chunk.choices[0].delta
-                if isinstance(delta,BaseModel):
-                    delta=modict(delta.model_dump())
-                elif isinstance(delta,Mapping):
-                    delta=modict(delta)
-                text_chunk,reasoning_chunk,tool_calls_chunk,message=self.aggregate_delta(delta,message)
-                if text_chunk: text_queue.put(text_chunk)
-                if reasoning_chunk: reasoning_queue.put(reasoning_chunk)
-                if tool_calls_chunk: tool_calls_queue.put(tool_calls_chunk)
-                msg_queue.put(message)
+                msg_chunk=MessageChunk.from_delta(chunk.choices[0].delta)
+                queue.put(msg_chunk)
         else:
-            message.content=f"Hmmm, sorry! There was an error while calling the OpenAI client. Here is the error message I got:\n\n ```\n{str(exc)}\n```"
-            text_queue.put(message.content)
-            msg_queue.put(message)
-            print(exc)
+            msg_chunk=MessageChunk(content=f"Hmmm, sorry! There was an error while calling the OpenAI client. Here is the error message I got:\n\n ```\n{str(exc)}\n```")
+            queue.put(msg_chunk)
 
-        text_queue.put("#END#")
-        reasoning_queue.put("#END#")
-        msg_queue.put("#END#")
-        final_message_queue.put(message)
-        final_message_queue.put("#END#")
+        queue.put("#END#")
 
-    def stream(self, assistant_name=None, **params):
+    def _stream_chunks(self, params):
 
-        text_queue=Queue()
-        tool_calls_queue=Queue()
-        reasoning_queue=Queue()
-        msg_queue=Queue()
-        final_message_queue=Queue()
+        queue=Queue()
 
         params['messages']=[msg.to_llm_client_format(include_name=True) for msg in params.get('messages',[])]
         params['tools'] = [tool.to_llm_client_format() for tool in params.get('tools') or []] or None
 
         completion=Thread(
             target=self._stream_completion_target,
-            args=(params, text_queue, reasoning_queue, tool_calls_queue, msg_queue, final_message_queue, assistant_name)
+            args=(params, queue)
         )
         completion.start()
 
-        def text_stream():
-            while not (text_chunk:=text_queue.get())=="#END#":
-                yield text_chunk
+        def chunk_stream():
+            while not (chunk:=queue.get())=="#END#":
+                yield chunk
 
-        def reasonning_stream():
-            while not (reasoning_chunk:=reasoning_queue.get())=="#END#":
-                yield reasoning_chunk
+        return chunk_stream()
+    
+    def _process_chunk_stream(self, stream, message, queues):
 
-        def tool_calls_stream():
-            while not (tool_calls_chunk:=tool_calls_queue.get())=="#END#":
-                yield tool_calls_chunk
+        for chunk in stream:
+            queues.content.put(chunk.content)
+            queues.reasoning.put(chunk.reasoning)
+            queues.tool_calls.put(chunk.tool_calls)
+            message.add_chunk(chunk)
+            queues.message.put(message)
+            time.sleep(0.0005)
 
-        def msg_stream():
-            while not (message:=msg_queue.get())=="#END#":
-                yield message
+        queues.final_message.put(message)
 
-        def final_msg_stream():
-            while not (message:=msg_queue.get())=="#END#":
-                yield message
+        for queue in queues.values():
+            queue.put("#END#")
 
+    def stream(self, **params):
 
-        return text_stream(), reasonning_stream(), tool_calls_stream(), msg_stream(), final_msg_stream()
+        queues=modict(
+            content=Queue(),
+            reasoning=Queue(),
+            tool_calls=Queue(),
+            message=Queue(),
+            final_message=Queue(),
+        )
+
+        stream=ChunkStreamer(self.agent)(self._stream_chunks(params))
+
+        message=Message(role="assistant", name=self.agent.config.get('name','assistant'))
+
+        Thread(
+            target=self._process_chunk_stream,
+            args=(stream, message,  queues)
+        ).start()
+        
+        def get_streams(queues):
+            streams=modict()
+            for key, queue in queues.items():
+                def reader(queue=queue):
+                    while not (chunk:=queue.get())=="#END#":
+                        yield chunk
+                streams[key]=reader()
+            return streams
+
+        streams = get_streams(queues)
+
+        return streams
 
     def _normalize(self, vect, precision=5):
         """Normalize a vector and round to specified precision."""

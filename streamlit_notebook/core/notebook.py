@@ -43,7 +43,7 @@ See Also:
 
 from __future__ import annotations
 
-from .cell import Cell, new_cell
+from .cell import Cell
 from .echo import echo
 from .utils import display, format, rerun, check_rerun, root_join, state, wait
 from .shell import Shell
@@ -686,7 +686,7 @@ class Notebook:
         """
         count = 0
         for cell in list(self.cells):  # Convert to list to avoid modification during iteration
-            if not cell.has_run_once:
+            if cell in self.cells and not self.has_run_once:
                 cell.run()
                 count += 1
 
@@ -711,7 +711,7 @@ class Notebook:
         """
         executed = False
         for cell in list(self.cells):
-            if not cell.has_run_once:
+            if cell in self.cells and not cell.has_run_once:
                 cell.run()
                 executed = True
                 self.notify(f"Executed `{cell.id}`", icon="▶️")
@@ -821,7 +821,12 @@ class Notebook:
                 __notebook__.new_cell(type="markdown", code="# My Title")
         """
         key = self._gen_cell_key()
-        cell = new_cell(self, key, type=type, code=code, reactive=reactive, fragment=fragment)
+        cell = Cell(key, type=type, code=code, reactive=reactive, fragment=fragment)
+        return self.add_cell(cell)
+
+    def add_cell(self, cell: Cell) -> Cell:
+        """Add an existing cell to the notebook."""
+        cell.notebook=self
         self.cells.append(cell)
         rerun()
         return cell

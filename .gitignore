@@ -1,5 +1,5 @@
 # Custom exclusions
-.tmp/
+tmp/
 .documents/
 .claude/
 compile_package.py
