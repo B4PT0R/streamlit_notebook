@@ -36,8 +36,8 @@ def get_default_notebook_template() -> str:
     """Generate default empty notebook template code.
 
     Creates a minimal notebook script with environment-aware settings.
-    Detects app mode via ``ST_NOTEBOOK_APP_MODE`` environment variable or
-    ``--app`` command line flag and adjusts template accordingly.
+    Detects app mode via ``ST_NOTEBOOK_APP_MODE`` environment variable
+    and adjusts template accordingly.
 
     Returns:
         Python source code string for a new empty notebook with proper
@@ -64,8 +64,9 @@ def get_default_notebook_template() -> str:
         If app mode is detected, the template includes ``app_mode=True``
         parameter for production deployment (locked in app view).
     """
-    # Check for app mode via environment variable or --app flag
-    app_mode = os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true' or '--app' in sys.argv
+    # Check for app mode via environment variable
+    # The --app flag is captured and converted to ST_NOTEBOOK_APP_MODE in the st_notebook factory
+    app_mode = os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true'
 
     params = []
     params.append("title='new_notebook'")
@@ -120,6 +121,10 @@ def main() -> None:
         :func:`get_default_notebook_template`: Default template generator
         :mod:`~streamlit_notebook.launch_app`: CLI launcher module
     """
+    # Set environment variable to indicate we're in launcher mode
+    # This allows save() to work properly without triggering Streamlit reloads
+    os.environ['ST_NOTEBOOK_LAUNCHER_MODE'] = 'true'
+
     # Initialize notebook_script in session_state if not present
     if 'notebook_script' not in st.session_state:
         # Check if a notebook file was passed as command-line argument

@@ -384,7 +384,7 @@ def check_rerun() -> None:
         Typical usage at the end of a Streamlit script::
 
             # Your Streamlit app code here
-            st.title("My App")
+            st.config.title("My App")
             # ...
 
             # Check and execute any pending reruns

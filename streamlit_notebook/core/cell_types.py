@@ -4,7 +4,7 @@ This module provides the cell type classes that define how different
 types of cells (code, markdown, HTML) are executed and displayed.
 
 Cell Types:
-    - :class:`BaseCellType`: Base interface for all cell types
+    - :class:`BaseCellType`: Base interface for all cell types, implements all the core functionality
     - :class:`PyType`: Python code execution type
     - :class:`MDType`: Markdown rendering type
     - :class:`HTMLType`: HTML rendering type
@@ -332,7 +332,7 @@ class BaseCellType:
         """
         self.prepare_skeleton()
 
-        if not self.notebook.app_view and self.visible:
+        if not self.notebook.config.app_view and self.visible:
             with self.container.container():
                 self.update_ui()
                 self.ui.show()
@@ -365,10 +365,10 @@ class BaseCellType:
             with self.exception_area:
                 formatted_traceback=f"**{type(self.exception).__name__}**: {str(self.exception)}\n```\n{self.exception.enriched_traceback_string}\n```"
                 st.error(formatted_traceback)
-        if self.stdout and self.notebook.show_stdout:
+        if self.stdout and self.notebook.config.show_stdout:
             with self.stdout_area:
                 st.code(self.stdout,language="text")
-        if self.stderr and self.notebook.show_stderr:
+        if self.stderr and self.notebook.config.show_stderr:
             with self.stderr_area:
                 st.code(self.stderr,language="text")
 
@@ -470,9 +470,9 @@ class BaseCellType:
         """
         Callback used to deal with the "submit" event from the UI.
 
-        Runs the cell only if notebook.run_on_submit is true.
+        Runs the cell only if notebook.config.run_on_submit is true.
         """
-        if self.notebook.run_on_submit:
+        if self.notebook.config.run_on_submit:
             self.has_run=False
             self.run()
             self.notebook.notify(f"Executed `{self.id}`", icon="▶️")

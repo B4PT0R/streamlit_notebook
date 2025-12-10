@@ -66,7 +66,7 @@ class NotebookUI:
             3. Cells (delegated to each cell)
             4. Control bar (in notebook mode)
         """
-        if self.notebook.show_logo:
+        if self.notebook.config.show_logo:
             self.logo()
 
         for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
@@ -97,7 +97,7 @@ class NotebookUI:
         # Check if chat mode is active
         if state.get('chat_mode', False):
             self.sidebar_chat_mode()
-        elif self.notebook.app_view:
+        elif self.notebook.config.app_view:
             self.sidebar_app_mode()
         else:
             self.sidebar_notebook_mode()
@@ -119,7 +119,7 @@ class NotebookUI:
             self.logo()
             st.divider()
 
-            st.text_input("Notebook title:", value=self.notebook.title, key="notebook_title_show", disabled=True)
+            st.text_input("Notebook title:", value=self.notebook.config.title, key="notebook_title_show", disabled=True)
 
             # Open button with expandable section
             if st.button("Open notebook", width='stretch', key="button_open_notebook_trigger"):
@@ -143,19 +143,19 @@ class NotebookUI:
             st.divider()
 
             # Display settings
-            if not self.notebook.app_mode:
+            if not self.notebook.config.app_mode:
                 # In edit mode, allow toggling back to notebook view
                 def on_toggle_app_view():
-                    self.notebook.app_view = not self.notebook.app_view
+                    self.notebook.config.app_view = not self.notebook.config.app_view
                 st.toggle("App view", value=True, on_change=on_toggle_app_view, key="toggle_app_preview")
 
             def on_change():
-                self.notebook.show_logo = not self.notebook.show_logo
-            st.toggle("Show logo", value=self.notebook.show_logo, on_change=on_change, key="toggle_show_logo_app")
+                self.notebook.config.show_logo = not self.notebook.config.show_logo
+            st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo_app")
 
             st.divider()
 
-            if self.notebook.app_mode:
+            if self.notebook.config.app_mode:
                 st.caption("🔒 Running in locked app mode")
 
     def sidebar_notebook_mode(self) -> None:
@@ -175,8 +175,8 @@ class NotebookUI:
             st.divider()
 
             def on_title_change_edit():
-                self.notebook.title = state.notebook_title_edit
-            st.text_input("Notebook title:", value=self.notebook.title, key="notebook_title_edit", on_change=on_title_change_edit)
+                self.notebook.config.title = state.notebook_title_edit
+            st.text_input("Notebook title:", value=self.notebook.config.title, key="notebook_title_edit", on_change=on_title_change_edit)
 
             # Demo notebooks
             if st.button("Demo notebooks", width='stretch', key="button_load_demo"):
@@ -185,7 +185,7 @@ class NotebookUI:
             # New notebook button
             if st.button("New notebook", width='stretch', key="button_new_notebook"):
                 self.notebook.clear_cells()
-                self.notebook.title = "notebook"
+                self.notebook.config.title = "notebook"
                 self.notebook.notify("Created new notebook", icon="📄")
 
             # Save button
@@ -209,14 +209,14 @@ class NotebookUI:
             st.divider()
 
             # App view toggle (only if not in locked app mode)
-            if not self.notebook.app_mode:
+            if not self.notebook.config.app_mode:
                 def on_change():
-                    self.notebook.app_view = not self.notebook.app_view
-                st.toggle("App view", value=self.notebook.app_view, on_change=on_change, key="toggle_app_view")
+                    self.notebook.config.app_view = not self.notebook.config.app_view
+                st.toggle("App view", value=self.notebook.config.app_view, on_change=on_change, key="toggle_app_view")
 
             def on_change():
-                self.notebook.show_logo = not self.notebook.show_logo
-            st.toggle("Show logo", value=self.notebook.show_logo, on_change=on_change, key="toggle_show_logo")
+                self.notebook.config.show_logo = not self.notebook.config.show_logo
+            st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo")
 
             st.divider()
 
@@ -244,8 +244,8 @@ class NotebookUI:
         @st.dialog("⚙️ Settings")
         def show_settings():
             def on_change():
-                self.notebook.run_on_submit = not self.notebook.run_on_submit
-            st.toggle("Run cell on submit", value=self.notebook.run_on_submit, on_change=on_change, key="toggle_run_on_submit")
+                self.notebook.config.run_on_submit = not self.notebook.config.run_on_submit
+            st.toggle("Run cell on submit", value=self.notebook.config.run_on_submit, on_change=on_change, key="toggle_run_on_submit")
 
             def on_change():
                 self.notebook.shell.display_mode = state.select_display_mode
@@ -253,12 +253,12 @@ class NotebookUI:
             st.selectbox("Display mode", options=options, index=options.index(self.notebook.shell.display_mode), on_change=on_change, key="select_display_mode")
 
             def on_change():
-                self.notebook.show_stdout = state.toggle_show_stdout
-            st.toggle("Show stdout output", value=self.notebook.show_stdout, on_change=on_change, key="toggle_show_stdout")
+                self.notebook.config.show_stdout = state.toggle_show_stdout
+            st.toggle("Show stdout output", value=self.notebook.config.show_stdout, on_change=on_change, key="toggle_show_stdout")
 
             def on_change():
-                self.notebook.show_stderr = state.toggle_show_stderr
-            st.toggle("Show stderr output", value=self.notebook.show_stderr, on_change=on_change, key="toggle_show_stderr")
+                self.notebook.config.show_stderr = state.toggle_show_stderr
+            st.toggle("Show stderr output", value=self.notebook.config.show_stderr, on_change=on_change, key="toggle_show_stderr")
 
             if st.button("Close", width='stretch', type="primary"):
                 st.rerun()
@@ -276,7 +276,7 @@ class NotebookUI:
         Note:
             Only shown in edit mode (hidden in app view).
         """
-        if not self.notebook.app_view:
+        if not self.notebook.config.app_view:
             with st.container(gap="small", border=True):
                 a,b,c=st.columns(3,gap="small")
                 with a:
@@ -356,11 +356,12 @@ class NotebookUI:
                 with col1:
                     # Save Locally button
                     def on_save_locally():
-                        filename = f"{self.notebook.title}.py"
+                        filename = f"{self.notebook.config.title}.py"
                         filepath = os.path.join(os.getcwd(), filename)
                         try:
-                            self.notebook.save(filepath)
-                            self.notebook.notify(f"Saved to {filepath}", icon="💾")
+                            saved = self.notebook.save(filepath)
+                            if saved:
+                                self.notebook.notify(f"Saved to {filepath}", icon="💾")
                         except Exception as e:
                             self.notebook.notify(f"Failed to save: {str(e)}", icon="⚠️")
 
@@ -368,7 +369,7 @@ class NotebookUI:
 
                 with col2:
                     # Download button
-                    filename = f"{self.notebook.title}.py"
+                    filename = f"{self.notebook.config.title}.py"
                     python_code = self.notebook.to_python()
 
                     st.download_button(
@@ -396,7 +397,7 @@ class NotebookUI:
             :meth:`~streamlit_notebook.notebook.Notebook.open`: Core open logic
         """
         # File uploader for drag and drop (only if not in locked app mode)
-        if not self.notebook.app_mode:
+        if not self.notebook.config.app_mode:
             uploaded_file = st.file_uploader(
                 "📎 Drop a notebook file here or browse",
                 type=['py'],

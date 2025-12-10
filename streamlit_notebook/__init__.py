@@ -15,12 +15,14 @@ set_root_path(__file__)
 # Load .env file if it exists (for ST_NOTEBOOK_APP_MODE and other env vars)
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    import os
+    load_dotenv(os.path.join(os.getcwd(),'.env'))
 except ImportError:
     # python-dotenv not installed, skip
     pass
 
 # Patch streamlit.set_page_config to be context-aware
+
 import streamlit as st
 import sys
 

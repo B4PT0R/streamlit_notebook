@@ -158,14 +158,14 @@ You can open it with the st_notebook entry point
 
 ```bash
 
-st_notebook analysis.py         # Development mode - full notebook interface
-st_notebook analysis.py --app   # Locked app mode - clean interface, code cells hidden
+st_notebook analysis.py          # Development mode - full notebook interface
+st_notebook analysis.py -- --app # Locked app mode - clean interface, code cells hidden
 ```
 
-Or run it directly with Streamlit! (same result)
+Or run it directly with Streamlit! (identical behavior)
 ```bash
-streamlit run analysis.py        # Development mode
-streamlit run analysis.py --app  # Locked app mode
+streamlit run analysis.py          # Development mode
+streamlit run analysis.py -- --app # Locked app mode
 ```
 
 ### How it works?
@@ -304,7 +304,7 @@ nb.render()
 Once you're done working on your notebook you may run it using:
 
 ```bash
-streamlit run stock_dashboard.py --app
+streamlit run stock_dashboard.py -- --app
 ```
 Now the same file runs as a locked production app with restricted interface and no visible/editable code.
 This prevents untrusted users to run arbitrary code in the cloud environment.
@@ -563,9 +563,9 @@ This is especially powerful for automation, AI agents, and dynamic notebook gene
 nb = __notebook__
 
 # Access notebook properties
-print(f"Title: {nb.title}")
+print(f"Title: {nb.config.title}")
 print(f"Number of cells: {len(nb.cells)}")
-print(f"App mode: {nb.app_mode}")
+print(f"App mode: {nb.config.app_mode}")
 ```
 
 #### Creating Cells
@@ -763,9 +763,9 @@ Get complete JSON-serializable state of the notebook, including all information 
 info = nb.get_info()  # minimal=False by default
 
 # Access notebook metadata
-print(f"Notebook: {info['notebook']['title']}")
-print(f"Cell count: {info['notebook']['cell_count']}")
-print(f"App mode: {info['notebook']['app_mode']}")
+print(f"Notebook: {info['config']['title']}")
+print(f"Cell count: {info['cell_count']}")
+print(f"App mode: {info['config']['app_mode']}")
 
 # Iterate through cells
 for cell_state in info['cells']:
@@ -1027,6 +1027,42 @@ def add_custom_tools():
 
 Now the agent can use these tools in its responses!
 
+## CLI Options
+
+The schema for passing CLI arguments is:
+
+`st_notebook Optional[notebook_file] Optional[options_1] -- Optional[options_2]`
+
+or equivalently,
+
+`streamlit run [notebook_file] Optional[options_1] -- Optional[options_2]`
+
+Options before `--` are for streamlit (e.g., `--server.port 8080`), options after `--` are for your script (e.g., `--app`).
+
+Example with both:
+```bash
+st_notebook analysis.py --server.port 8080 -- --app  # Custom port + app mode
+```
+
+**Custom flags:** You can pass your own flags after `--` to implement custom behavior:
+```bash
+streamlit run dashboard.py -- --app --data-source=production --debug
+```
+
+Then somewhere in your notebook:
+```python
+import sys
+
+# sys.argv contains only [options_2] group of CLI arguments (as a single string)
+
+# Check for custom flags
+is_debug = '--debug' in sys.argv
+data_source = next((arg.split('=')[1] for arg in sys.argv if arg.startswith('--data-source=')), 'dev')
+
+if is_debug:
+    st.write(f"Debug mode enabled, using {data_source} data source")
+```
+
 ## Deployment
 
 ### Local Testing
@@ -1035,7 +1071,7 @@ First make sure your notebook looks and runs nice as an app.
 
 ```bash
 # Test in locked app mode (production simulation)
-st_notebook my_notebook.py --app
+st_notebook my_notebook.py -- --app
 ```
 
 ### Streamlit Cloud
