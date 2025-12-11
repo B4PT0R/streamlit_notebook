@@ -22,6 +22,14 @@ import zipfile
 import tarfile
 import email
 from email import policy
+from pathlib import Path
+
+# For gitignore handling
+try:
+    import pathspec
+    HAS_PATHSPEC = True
+except ImportError:
+    HAS_PATHSPEC = False
 
 # Try to import optional stdlib modules
 try:
@@ -436,40 +444,175 @@ def _extract_tar_text(file_obj, mode='r') -> str:
 # File System Handlers
 # ============================================================================
 
-def handle_directory(path: str) -> str:
+def _load_gitignore_patterns(directory: str) -> Optional['pathspec.PathSpec']:
+    """Load gitignore patterns from default and local .gitignore files.
+
+    Args:
+        directory: Directory to scan for local .gitignore
+
+    Returns:
+        PathSpec object with combined patterns, or None if pathspec not available
+    """
+    if not HAS_PATHSPEC:
+        return None
+
+    patterns = []
+
+    # Load default gitignore patterns bundled with get_text
+    default_gitignore = Path(__file__).parent / 'default_gitignore'
+    if default_gitignore.exists():
+        with open(default_gitignore, 'r') as f:
+            patterns.extend(f.readlines())
+
+    # Load local .gitignore if present
+    local_gitignore = Path(directory) / '.gitignore'
+    if local_gitignore.exists():
+        with open(local_gitignore, 'r') as f:
+            patterns.extend(f.readlines())
+
+    # Create PathSpec from patterns
+    if patterns:
+        return pathspec.PathSpec.from_lines('gitwildmatch', patterns)
+
+    return None
+
+
+def handle_directory(path: str, max_depth: int = 3) -> str:
     """Generate a tree-like representation of directory structure.
+
+    Automatically applies sensible exclusions from:
+    - Default gitignore patterns (bundled with get_text)
+    - Local .gitignore file (if present)
+
+    This filters out common junk directories like .git, __pycache__, node_modules, etc.
+    Recursion is limited to max_depth levels to avoid overwhelming output.
 
     Args:
         path: Path to directory
+        max_depth: Maximum recursion depth (default: 3)
 
     Returns:
         Tree structure as text, or error message
     """
-    def recurse_folder(folder: str, prefix: str = '') -> str:
-        """Recursively build directory tree."""
-        try:
-            contents = os.listdir(folder)
-        except PermissionError:
-            return prefix + '├── [Permission Denied]\n'
-
-        output = ''
-        for i, item in enumerate(contents):
-            output += prefix + '├── ' + item + '\n'
-            item_path = os.path.join(folder, item)
-
-            if os.path.isdir(item_path):
-                new_prefix = prefix + ('    ' if i == len(contents) - 1 else '│   ')
-                output += recurse_folder(item_path, new_prefix)
-
-        return output
-
     if not os.path.exists(path):
         return f'The path {path} does not exist.'
 
     if not os.path.isdir(path):
         return f'The path {path} is not a valid directory.'
 
-    return path + '\n' + recurse_folder(path)
+    # Load gitignore patterns
+    spec = _load_gitignore_patterns(path)
+
+    # Track directories that weren't fully explored
+    unexplored_dirs = []
+
+    def should_ignore(item_path: str, base_path: str) -> bool:
+        """Check if path should be ignored based on gitignore patterns."""
+        if spec is None:
+            return False
+
+        # Get relative path from base
+        try:
+            rel_path = os.path.relpath(item_path, base_path)
+            # pathspec expects forward slashes
+            rel_path = rel_path.replace(os.sep, '/')
+            # Check if it's a directory
+            if os.path.isdir(item_path):
+                rel_path += '/'
+            return spec.match_file(rel_path)
+        except ValueError:
+            # Handles case where paths are on different drives on Windows
+            return False
+
+    def has_contents(folder: str) -> bool:
+        """Check if a directory has non-ignored contents."""
+        try:
+            contents = os.listdir(folder)
+            for item in contents:
+                item_path = os.path.join(folder, item)
+                if not should_ignore(item_path, path):
+                    return True
+            return False
+        except PermissionError:
+            return False
+
+    def recurse_folder(folder: str, prefix: str = '', base_path: str = None, depth: int = 0) -> str:
+        """Recursively build directory tree with gitignore filtering and depth limit."""
+        if base_path is None:
+            base_path = folder
+
+        try:
+            contents = os.listdir(folder)
+        except PermissionError:
+            return prefix + '├── [Permission Denied]\n'
+
+        # Filter out ignored items
+        filtered_contents = []
+        for item in contents:
+            item_path = os.path.join(folder, item)
+            if not should_ignore(item_path, base_path):
+                filtered_contents.append(item)
+
+        output = ''
+        for i, item in enumerate(filtered_contents):
+            item_path = os.path.join(folder, item)
+            is_dir = os.path.isdir(item_path)
+
+            # Check if we've reached max depth for this directory
+            depth_limit_reached = is_dir and depth >= max_depth
+
+            # Check if directory has unexplored contents
+            has_more = is_dir and depth_limit_reached and has_contents(item_path)
+
+            # Format the item name with appropriate indicators
+            if has_more:
+                item_display = f"{item}/ [...explore further]"
+                unexplored_dirs.append(item_path)
+            elif is_dir and depth < max_depth:
+                # Check if empty after filtering
+                if not has_contents(item_path):
+                    item_display = f"{item}/ [empty]"
+                else:
+                    item_display = f"{item}/"
+            elif is_dir:
+                item_display = f"{item}/"
+            else:
+                item_display = item
+
+            output += prefix + '├── ' + item_display + '\n'
+
+            # Recurse into subdirectories if under depth limit
+            if is_dir and depth < max_depth:
+                new_prefix = prefix + ('    ' if i == len(filtered_contents) - 1 else '│   ')
+                output += recurse_folder(item_path, new_prefix, base_path, depth + 1)
+
+        return output
+
+    result = path + '\n' + recurse_folder(path, depth=0)
+
+    # Add notes about filtering and depth limit
+    notes = []
+
+    if spec is not None:
+        notes.append("Common junk directories (.git, __pycache__, node_modules, etc.) are automatically filtered")
+    elif HAS_PATHSPEC:
+        notes.append("No gitignore patterns found, showing all files")
+    else:
+        notes.append("Warning: pathspec not installed. Install with 'pip install pathspec' for gitignore filtering")
+
+    notes.append(f"Recursion limited to {max_depth} levels deep")
+
+    if unexplored_dirs:
+        notes.append(f"Directories with unexplored contents ({len(unexplored_dirs)} total):")
+        for unexplored_dir in unexplored_dirs[:10]:  # Show max 10 examples
+            notes.append(f"  - {unexplored_dir}")
+        if len(unexplored_dirs) > 10:
+            notes.append(f"  ... and {len(unexplored_dirs) - 10} more")
+        notes.append("Tip: Call get_text() on specific subdirectories to explore them further")
+
+    result += '\n\n[' + '\n '.join(notes) + ']'
+
+    return result
 
 
 def handle_file(source: str) -> str:

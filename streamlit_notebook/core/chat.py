@@ -323,40 +323,13 @@ def init_chat():
 
         state.agent.hooks.custom_messages_hook=custom_notebook_messages
 
-        @state.agent.add_tool
-        def run_code(content=None):
-            """
-            description: |
-                Runs python code in the notebook shell
-            parameters:
-               content:
-                    description: The python code to run
-            required:
-                - content
-            """
-            notebook=get_notebook()
-            if notebook and content:
-                response=notebook.shell.run(content)
-                if response.exception:
-                    exception=response.exception
-                    return f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
-                else:
-                    output=""
-                    if response.stdout:
-                        output+=f"stdout:\n{response.stdout}"
-                    if response.result:
-                        output+=f"result:\n{str(response.result)}"
-                    return output
-
-            return "Notebook not initialized. Cannot run code."
-
         # Always start with a new session
         state.agent.start_new_session()
 
         # Inject agent into shell namespace so it's accessible as __agent__
         notebook = get_notebook()
         if notebook and notebook.shell:
-            notebook.shell.update_namespace(__agent__=state.agent)
+            state.agent.init_shell(notebook.shell)
 
         state.chat_initialized=True
 

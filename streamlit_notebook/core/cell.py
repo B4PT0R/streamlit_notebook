@@ -48,7 +48,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, Literal
 from types import NoneType
 import streamlit as st
-from streamlit_notebook.core.shell import short_id
+from streamlit_notebook.shell.shell import short_id
 from .cell_types import BaseCellType, PyType, MDType, HTMLType
 
 if TYPE_CHECKING:

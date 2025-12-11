@@ -121,11 +121,26 @@ def main() -> None:
     # Get all arguments after 'st_notebook' command
     args = sys.argv[1:]
 
-    # If no arguments provided, launch empty notebook interface
-    if not args:
+    # Determine if a notebook file is provided
+    # Look for the first non-flag argument (doesn't start with - or --)
+    notebook_file = None
+    for arg in args:
+        if arg == '--':
+            # Separator reached, no file found before it
+            break
+        if not arg.startswith('-'):
+            # Found a positional argument (likely the notebook file)
+            notebook_file = arg
+            break
+
+    # If no notebook file provided, launch empty notebook interface
+    if notebook_file is None:
         script_directory = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_directory, 'main.py')
         command = ["streamlit", "run", script_path]
+        # Add any arguments that were provided (e.g., -- --app --no-quit)
+        if args:
+            command.extend(args)
     else:
         # Pass through all arguments to streamlit run
         command = ["streamlit", "run"] + args

@@ -142,24 +142,23 @@ class NotebookUI:
 
             st.divider()
 
-            # Display settings
-            if not self.notebook.config.app_mode:
-                # In edit mode, allow toggling back to notebook view
-                def on_toggle_app_view():
+            a,b=st.columns(2,gap='small')
+            with a:
+                # App view toggle (only if not in locked app mode)
+                def on_change():
                     self.notebook.config.app_view = not self.notebook.config.app_view
-                st.toggle("App view", value=True, on_change=on_toggle_app_view, key="toggle_app_preview")
-
-            def on_change():
-                self.notebook.config.show_logo = not self.notebook.config.show_logo
-            st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo_app")
+                st.toggle("App view", value=self.notebook.config.app_view, on_change=on_change, key="toggle_app_view" ,disabled=self.notebook.config.app_mode)
+            with b:
+                def on_change():
+                    self.notebook.config.show_logo = not self.notebook.config.show_logo
+                st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo")
 
             def on_change():
                 self.notebook.config.layout.width=state.slider_width
                 #rerun()
             width=self.notebook.config.layout.width
-            current_width=66 if width=="centered" else 100 if width=="wide" else width
-            st.slider("Layout Width (%)", min_value=66, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
-
+            current_width=68 if width=="centered" else 100 if width=="wide" else width
+            st.slider("Layout Width (%)", min_value=60, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
             st.divider()
 
             if self.notebook.config.app_mode:
@@ -215,27 +214,35 @@ class NotebookUI:
 
             st.divider()
 
-            # App view toggle (only if not in locked app mode)
-            if not self.notebook.config.app_mode:
+            a,b=st.columns(2,gap='small')
+            with a:
+                # App view toggle (only if not in locked app mode)
+                if not self.notebook.config.app_mode:
+                    def on_change():
+                        self.notebook.config.app_view = not self.notebook.config.app_view
+                    st.toggle("App view", value=self.notebook.config.app_view, on_change=on_change, key="toggle_app_view")
+            with b:
                 def on_change():
-                    self.notebook.config.app_view = not self.notebook.config.app_view
-                st.toggle("App view", value=self.notebook.config.app_view, on_change=on_change, key="toggle_app_view")
-
-            def on_change():
-                self.notebook.config.show_logo = not self.notebook.config.show_logo
-            st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo")
+                    self.notebook.config.show_logo = not self.notebook.config.show_logo
+                st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo")
 
             def on_change():
                 self.notebook.config.layout.width=state.slider_width
                 #rerun()
             width=self.notebook.config.layout.width
-            current_width=66 if width=="centered" else 100 if width=="wide" else width
-            st.slider("Layout Width (%)", min_value=66, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
+            current_width=68 if width=="centered" else 100 if width=="wide" else width
+            st.slider("Layout Width (%)", min_value=60, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
 
             st.divider()
 
             # Technical settings dialog
             self.settings_dialog()
+            # Quit button
+            self.quit_button()
+
+
+
+
 
     def sidebar_chat_mode(self) -> None:
         """Render the AI Assistant chat sidebar.
@@ -279,6 +286,21 @@ class NotebookUI:
 
         if st.button("⚙️ Settings", width='stretch', key="button_open_settings"):
             show_settings()
+
+    def quit_button(self) -> None:
+        """Render the quit button.
+
+        When clicked, calls notebook.quit() which displays a goodbye dialog
+        and cleanly shuts down the Streamlit server.
+
+        The button is hidden when no_quit is True (e.g., in cloud deployments).
+        """
+        # Don't show quit button if no_quit is enabled
+        if self.notebook.config.no_quit:
+            return
+
+        if st.button("🚪 Quit", width='stretch', key="button_quit", type="secondary"):
+            self.notebook.quit()
 
     def control_bar(self) -> None:
         """Render the new cell and execution control bar.

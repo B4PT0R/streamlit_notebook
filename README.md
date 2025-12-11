@@ -672,6 +672,16 @@ Clear the namespace and restart the Python interpreter to start fresh.
 nb.restart_session()
 ```
 
+**Quit the application:**
+
+Cleanly shutdown the Streamlit server. This performs cleanup operations and then terminates the server process.
+
+```python
+nb.quit()
+```
+
+This can be useful for automation scripts or when the AI agent needs to close the application at the user's request.
+
 **Smart rerun control:**
 
 The notebook provides an improved rerun API with flexible timing control and better compatibility.
@@ -806,6 +816,7 @@ context = json.dumps(nb.get_info(), indent=2)
 - `run_all_cells()` - Execute all cells in order
 - `run_next_cell()` - Execute the next unexecuted cell
 - `restart_session()` - Clear namespace and restart Python session
+- `quit()` - Cleanly shutdown the Streamlit server
 - `rerun(wait)` - Trigger a Streamlit rerun
 - `wait(delay)` - Control pending reruns (delay, execute now, or do nothing)
 - `notify(message, icon, delay)` - Show toast notification
@@ -1062,6 +1073,23 @@ if is_debug:
     st.write(f"Debug mode enabled, using {data_source} data source")
 ```
 
+**Built-in flags:**
+
+- `--app`: Locks the notebook in app mode (production mode) where users cannot edit cells or toggle back to edit mode
+- `--no-quit`: Disables the quit button and prevents programmatic shutdown via `nb.quit()`. Useful for cloud deployments where the server should not be terminated by users
+
+Example:
+```bash
+# Deploy with app mode and disable quit functionality
+st_notebook dashboard.py -- --app --no-quit
+```
+
+Alternatively, you can use environment variables:
+```bash
+# Using environment variables
+ST_NOTEBOOK_APP_MODE=true ST_NOTEBOOK_NO_QUIT=true st_notebook dashboard.py
+```
+
 ## Deployment
 
 ### Local Testing
@@ -1088,9 +1116,10 @@ st_notebook my_notebook.py -- --app
     backgroundColor = "black"
     ```
 
-3. Create `.env` file to enable locked app mode:
+3. Create `.env` file to enable locked app mode and disable quit:
     ```bash
     ST_NOTEBOOK_APP_MODE=true
+    ST_NOTEBOOK_NO_QUIT=true
     ```
 
 4. Push to GitHub:
@@ -1121,12 +1150,13 @@ COPY my_notebook.py .
 
 EXPOSE 8501
 
-# Option 1: Use --app flag
-CMD ["streamlit", "run", "my_notebook.py", "--app"]
+# Option 1: Use flags for app mode and disabled quit
+CMD ["streamlit", "run", "my_notebook.py", "--", "--app", "--no-quit"]
 
-# Option 2: Use environment variable
+# Option 2: Use environment variables
 # ENV ST_NOTEBOOK_APP_MODE=true
-# CMD ["streamlit", "run", "my_dashboard.py"]
+# ENV ST_NOTEBOOK_NO_QUIT=true
+# CMD ["streamlit", "run", "my_notebook.py"]
 ```
 
 Build and run:

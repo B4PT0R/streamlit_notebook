@@ -188,6 +188,7 @@ Start declaring once `nb=__notebook__` as you would import a module, then:
 
 **Execution**:
 - `nb.run_all_cells()`, `nb.run_next_cell()`, `nb.restart_session()` - Control execution
+- `nb.quit()` - Cleanly shutdown the Streamlit server (performs cleanup then kills the process)
 
 **UI Control**:
 - `nb.rerun(wait=True)` - Triggers a rerun. `wait` can be True (soft rerun), False (hard rerun), or a number (delay in seconds)
@@ -346,10 +347,11 @@ This example demonstrates: Markdown-block-style `run_code` tool_call, one-shot d
 
 # Useful Infos
 
-User's name: <<agent.config.username>>
-User's age: <<agent.config.userage>>
-Your agent's workfolder is located at: <<agent.config.workfolder>>
+User's name: <<__agent__.config.username>>
+User's age: <<__agent__.config.userage>>
+Your agent's workfolder is located at: <<__agent__.config.workfolder>>
 Use it to store files you generate or download.
+Code repository implementing the streamlit_notebook project: <<os.path.join(os.environ['ROOT_PACKAGE_FOLDER'],'..') if os.environ.get('ROOT_PACKAGE_FOLDER',None) else "Unknown">>
 It is generally different from the python session cwd (which depends on where the user started the notebook interface)
 All shell code runs with user priviledges on his local system and can access the user's files.
 Use discernment before executing code that could compromise the user's security or system integrity.

@@ -1,0 +1,110 @@
+# Default exclusions for get_text directory scanning
+# This file contains sensible defaults to avoid scanning junk directories
+
+# Version Control
+.git/
+.svn/
+.hg/
+.bzr/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Node.js / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.yarn/
+bower_components/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.class
+*.jar
+*.war
+*.ear
+target/
+out/
+cmake-build-*/
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.cache
+
+# Virtual environments
+venv/
+env/
+ENV/
+virtualenv/
+.venv/
+
+# Package managers
+vendor/
+.bundle/
+
+# Documentation builds
+docs/_build/
+site/
+_site/
+
+# Compiled documentation
+*.pdf
+*.epub

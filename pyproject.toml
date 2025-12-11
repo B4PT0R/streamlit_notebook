@@ -38,7 +38,8 @@ documents = [
     "odfpy",
     "pillow",
     "selenium",
-    "get-gecko-driver"
+    "get-gecko-driver",
+    "pathspec"
 ]
 
 # AI agent core (LLM integration, embeddings, tools)
@@ -95,7 +96,8 @@ streamlit_notebook = [
     "app_images/*",
     "demo_notebooks/*",
     "launch_app.py",
-    "agent/prompts/*"
+    "agent/prompts/*",
+    "agent/default_gitignore"
 ]
 
 [tool.setuptools.packages.find]

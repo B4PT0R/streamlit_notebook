@@ -12,6 +12,7 @@ from .ai import AIClient
 from .voice import VoiceProcessor
 from .latex import LaTeXProcessor
 from .stream_utils import MarkdownBlockExtractor
+from ..shell import Shell
 from datetime import datetime
 from typing import List
 
@@ -61,7 +62,7 @@ class AgentConfig(modict):
 
 class Agent:
 
-    def __init__(self,**kwargs):
+    def __init__(self,shell=None,**kwargs):
         """
         description: |
             Initializes the Agent instance with given or default configuration, OpenAI client, Editor, hooks, tools, and message history.
@@ -76,6 +77,8 @@ class Agent:
         self.messages=[]
         self.pending=[] # to store messages created by tool calls temporarily
         self.new_turn=False
+        self.shell=None
+        self.init_shell(shell=shell)
         self.init_workfolder()
         self.init_session_folder()
         self.ai=AIClient(self)
@@ -90,6 +93,18 @@ class Agent:
     def init_workfolder(self):
         if not os.path.isdir(self.config.workfolder):
             os.makedirs(self.config.workfolder,exist_ok=True)
+
+    def init_shell(self,shell=None):
+        if shell is None:
+            if self.hooks.get("get_shell_hook") is not None:
+                shell=self.hooks.get_shell_hook()
+            else:
+                shell=Shell()
+        shell.update_namespace(
+            __agent__=self,
+            os=os,
+        )
+        self.shell=shell
 
     def init_session_folder(self):
         session_folder=os.path.join(self.config.workfolder,'sessions')
@@ -111,9 +126,8 @@ class Agent:
             Initialize native tools that are built into the agent.
             These tools are automatically available to the agent.
         """
-        # Add read as a native tool
         self.add_tool(self.read)
-        # Add observe as a native tool
+        self.add_tool(self.run_code)
         self.add_tool(self.observe)
 
     def get_sessions(self):
@@ -277,7 +291,7 @@ class Agent:
                 break
         history=truncated_others[max(0,len(truncated_others)-i-1):]
         context=system+tools+sort(history+images+custom_msgs)
-        return list(msg.format(context=dict(agent=self)) for msg in context) 
+        return list(msg.format(context=self.shell.namespace) for msg in context) 
 
     def get_tools(self, filter=None)->List[Tool]:
         """
@@ -414,6 +428,31 @@ class Agent:
             else:
                 return False # indicates the agent wants one more turn to continue processing
         return True # indicates the agent has finished its process cycle
+
+    def run_code(self,content=None):
+        """
+        description: |
+            Runs python code in the notebook shell
+        parameters:
+            content:
+                description: The python code to run
+        required:
+            - content
+        """
+        if self.shell is not None and content:
+            response=self.shell.run(content)
+            if response.exception:
+                exception=response.exception
+                return f"**{type(exception).__name__}**: {str(exception)}\n```\n{exception.enriched_traceback_string}\n```"
+            else:
+                output=""
+                if response.stdout:
+                    output+=f"stdout:\n{response.stdout}"
+                if response.result:
+                    output+=f"result:\n{str(response.result)}"
+                return output
+
+        return "Notebook not initialized. Cannot run code."
 
     def speak(self,text,**kwargs):
         from .voice import silent_play

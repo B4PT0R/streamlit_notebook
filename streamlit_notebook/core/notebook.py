@@ -46,7 +46,7 @@ from __future__ import annotations
 from .cell import Cell
 from .echo import echo
 from .utils import display, format, rerun, check_rerun, root_join, state, wait
-from .shell import Shell
+from ..shell import Shell
 import streamlit as st
 import os
 from textwrap import dedent, indent
@@ -102,6 +102,7 @@ class NotebookConfig(modict):
         show_stderr: Whether to show stderr output. Defaults to False.
         run_on_submit: Whether to run cells on submit. Defaults to True.
         show_logo: Whether to show the logo. Defaults to True.
+        no_quit: Whether to disable the quit button. Defaults to False.
         layout: Page layout configuration (Layout model)
 
     Example:
@@ -109,6 +110,7 @@ class NotebookConfig(modict):
         config = NotebookConfig(
             title="My Notebook",
             app_mode=True,
+            no_quit=True,
             layout=Layout(width="wide")
         )
         nb = Notebook(**config)
@@ -126,6 +128,7 @@ class NotebookConfig(modict):
     show_stderr: bool = False
     run_on_submit: bool = True
     show_logo: bool = True
+    no_quit: bool = False
     layout: Layout = modict.factory(Layout)
 
 if TYPE_CHECKING:
@@ -197,7 +200,8 @@ class Notebook:
         show_logo: bool = True,
         show_stdout: bool = True,
         show_stderr: bool = False,
-        layout: Optional[dict] = None
+        layout: Optional[dict] = None,
+        no_quit: bool = False
     ) -> None:
         """Initialize a new Notebook instance.
 
@@ -219,6 +223,9 @@ class Notebook:
             layout: Page layout configuration as a dict with layout parameters
                 (e.g., ``{"width": "wide", "initial_sidebar_state": "collapsed"}``).
                 If None, uses default centered layout. Defaults to None.
+            no_quit: If True, disables the quit button and prevents programmatic
+                shutdown via quit() method. Useful for cloud deployments where
+                the server should not be terminated by users. Defaults to False.
 
         Note:
             The constructor automatically:
@@ -265,7 +272,8 @@ class Notebook:
             show_logo=show_logo,
             show_stdout=show_stdout,
             show_stderr=show_stderr,
-            layout=layout
+            layout=layout,
+            no_quit=no_quit
         )
         self.cells: list[Cell] = []
         self._current_cell: Optional[Cell] = None
@@ -371,14 +379,16 @@ class Notebook:
             input_hook=self._input_hook
         )
 
-        # Get agent from state if it exists
-        agent = state.get('agent', None)
-
         self.shell.update_namespace(
             st=st,
             __notebook__=self,
-            __agent__=agent
         )
+
+        # Get agent from state if it exists
+        agent = state.get('agent', None)
+
+        if agent is not None:
+            agent.init_shell(self.shell)
 
     @property
     def current_cell(self) -> Optional[Cell]:
@@ -807,6 +817,61 @@ class Notebook:
         self._init_shell()
         self.notify("Session restarted", icon="🔄")
         rerun()
+
+    def quit(self) -> None:
+        """Quit the Streamlit server cleanly.
+
+        This method performs cleanup operations and then terminates
+        the Streamlit server process. It can be called from the UI
+        or programmatically (e.g., by the AI agent).
+
+        If no_quit is enabled (e.g., in cloud deployments), this method
+        does nothing to prevent unauthorized server shutdown.
+
+        The method will:
+            1. Display a goodbye dialog with cleanup spinner
+            2. Wait a brief moment for the dialog to render
+            3. Terminate the server process with SIGTERM
+        """
+        # Don't allow quitting if no_quit is enabled
+        if self.config.no_quit:
+            return
+
+        import streamlit as st
+        import signal
+        import time
+        import os
+
+        # Show goodbye dialog
+        @st.dialog("👋 Goodbye!", width="small")
+        def show_goodbye():
+            # Centered goodbye message
+            st.markdown(
+                "<h3 style='text-align: center;'>Thank you for using Streamlit Notebook! 🎈</h3>",
+                unsafe_allow_html=True
+            )
+
+            st.divider()
+
+            # Centered spinner container
+            with st.container(horizontal=True, horizontal_alignment='center'):
+                st.space(size='stretch')
+                spinner_zone = st.empty()
+                st.space(size='stretch')
+                with spinner_zone:
+                    with st.spinner("Cleaning up...", width=120):
+                        # Allow time for UI to display
+                        time.sleep(3)
+
+            # This won't actually display since the process will be killed
+            st.success("See you soon! ✨")
+
+        # Display the dialog
+        show_goodbye()
+
+        # Kill the Streamlit server process
+        pid = os.getpid()
+        os.kill(pid, signal.SIGTERM)
 
     def get_cell(self, index_or_key: int | str) -> Optional[Cell]:
         """Find a cell by index or unique key.
@@ -1304,6 +1369,7 @@ def st_notebook(
     show_logo: bool = True,
     show_stdout: bool = True,
     show_stderr: bool = False,
+    no_quit: bool = False,
     layout: Optional[dict] = None,
 
 ) -> Notebook:
@@ -1400,10 +1466,19 @@ def st_notebook(
     if '--app' in sys.argv:
         os.environ['ST_NOTEBOOK_APP_MODE'] = 'true'
 
+    # If --no-quit flag is present in CLI arguments, set the environment variable
+    if '--no-quit' in sys.argv:
+        os.environ['ST_NOTEBOOK_NO_QUIT'] = 'true'
+
     # Check ST_NOTEBOOK_APP_MODE environment variable to enforce locked app mode
     # This overrides the script's app_mode parameter
     if os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true':
         app_mode = True
+
+    # Check ST_NOTEBOOK_NO_QUIT environment variable to disable quit button
+    # This overrides the script's no_quit parameter
+    if os.getenv('ST_NOTEBOOK_NO_QUIT', '').lower() == 'true':
+        no_quit = True
 
     # Check if we need to create or recreate the notebook
     should_create = False
@@ -1420,6 +1495,7 @@ def st_notebook(
         show_logo=show_logo,
         show_stdout=show_stdout,
         show_stderr=show_stderr,
+        no_quit=no_quit,
         layout=layout
     )
 
