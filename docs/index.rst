@@ -34,8 +34,6 @@ Create a notebook file ``my_notebook.py``:
     from streamlit_notebook import st_notebook
     import streamlit as st
 
-    st.set_page_config(page_title="My Notebook", layout="centered")
-
     nb = st_notebook(title="My First Notebook")
 
     @nb.cell(type='markdown')

@@ -50,14 +50,74 @@ from .shell import Shell
 import streamlit as st
 import os
 from textwrap import dedent, indent
-from typing import Any, Callable, Optional, Literal, TYPE_CHECKING
+from typing import Any, Callable, Optional, Literal, Union, TYPE_CHECKING
 import inspect
 from modict import modict
+from modict._collections_utils import MISSING
 
-class NotebookConfig(modict):
+class Layout(modict):
+    """Page layout configuration for the notebook.
+
+    This class provides control over the Streamlit page configuration,
+    replacing direct calls to st.set_page_config from notebook files.
+
+    Attributes:
+        width: Page layout width ("centered" or "wide"). Defaults to "centered".
+        initial_sidebar_state: Initial sidebar state ("auto", "expanded", or "collapsed").
+            Defaults to "auto".
+        menu_items: Dictionary of menu items to customize the hamburger menu.
+            Can include "Get Help", "Report a bug", and "About" keys.
+
+    Examples:
+        Configure page layout::
+
+            nb = Notebook(
+                title="My Dashboard",
+                layout=Layout(
+                    width="wide",
+                    initial_sidebar_state="collapsed"
+                )
+            )
+    """
     _config=modict.config(
         enforce_json=True,
-        allow_extra=False
+        allow_extra=False,
+        coerce=True
+    )
+    width: Union[int,float,Literal["centered", "wide"]] = "centered"
+    initial_sidebar_state: Literal["auto", "expanded", "collapsed"] = "auto"
+    menu_items: Optional[dict[str, str]] = None
+
+class NotebookConfig(modict):
+
+    """Configuration model for the notebook.
+
+    This class provides parameters for the Notebook class
+
+    Attributes:
+        title: Title of the notebook. Defaults to "new_notebook".
+        app_mode: Whether to run in app mode. Defaults to False.
+        app_view: Whether to start in app view mode. Defaults to False.
+        show_stdout: Whether to show stdout output. Defaults to True.
+        show_stderr: Whether to show stderr output. Defaults to False.
+        run_on_submit: Whether to run cells on submit. Defaults to True.
+        show_logo: Whether to show the logo. Defaults to True.
+        layout: Page layout configuration (Layout model)
+
+    Example:
+        Configure notebook settings::
+        config = NotebookConfig(
+            title="My Notebook",
+            app_mode=True,
+            layout=Layout(width="wide")
+        )
+        nb = Notebook(**config)
+    """
+
+    _config=modict.config(
+        enforce_json=True,
+        allow_extra=False,
+        coerce=True
     )
     title: str = "new_notebook"
     app_mode: bool = False
@@ -66,8 +126,7 @@ class NotebookConfig(modict):
     show_stderr: bool = False
     run_on_submit: bool = True
     show_logo: bool = True
-
-
+    layout: Layout = modict.factory(Layout)
 
 if TYPE_CHECKING:
     from .notebook_ui import NotebookUI
@@ -137,7 +196,8 @@ class Notebook:
         run_on_submit: bool = True,
         show_logo: bool = True,
         show_stdout: bool = True,
-        show_stderr: bool = False
+        show_stderr: bool = False,
+        layout: Optional[dict] = None
     ) -> None:
         """Initialize a new Notebook instance.
 
@@ -156,6 +216,9 @@ class Notebook:
                 Defaults to True.
             show_stderr: If True, displays stderr output from code cells.
                 Useful for debugging. Defaults to False.
+            layout: Page layout configuration as a dict with layout parameters
+                (e.g., ``{"width": "wide", "initial_sidebar_state": "collapsed"}``).
+                If None, uses default centered layout. Defaults to None.
 
         Note:
             The constructor automatically:
@@ -187,6 +250,13 @@ class Notebook:
         if app_mode:
             app_view=True
 
+        # Convert layout to Layout instance if needed (modict coercion + explicit defaults)
+        if layout is None:
+            layout = Layout()
+        elif not isinstance(layout, Layout):
+            # If it's a dict but not a Layout, convert it
+            layout = Layout(**layout) if isinstance(layout, dict) else layout
+
         self.config=NotebookConfig(
             title=title,
             app_mode=app_mode,
@@ -194,7 +264,8 @@ class Notebook:
             run_on_submit=run_on_submit,
             show_logo=show_logo,
             show_stdout=show_stdout,
-            show_stderr=show_stderr
+            show_stderr=show_stderr,
+            layout=layout
         )
         self.cells: list[Cell] = []
         self._current_cell: Optional[Cell] = None
@@ -439,9 +510,29 @@ class Notebook:
             execution. Streamlit callbacks fire at the beginning of the run, so
             resetting before would cause cells to run twice.
         """
+        # Configure page layout from notebook config
+        from .utils import original_set_page_config 
+
+        width=self.config.layout.width
+
+        draw_columns=isinstance(width,(int,float)) # considered 0-100% of width
+
+        original_set_page_config(
+            page_title="st.notebook",
+            layout="wide" if draw_columns else width if width in ['wide','centered'] else "wide",
+            initial_sidebar_state=self.config.layout.initial_sidebar_state,
+            menu_items=self.config.layout.menu_items
+        )
+
         self.initialized = True
 
-        self._show()
+        if draw_columns:
+            width=min(max(width,1),99)
+            _,c,_=st.columns([50-width/2,width,50-width/2])
+            with c:
+                self._show()
+        else:
+            self._show()
 
         # Though not very intuitive, resetting cells 'has_run' state AFTER show()
         # instead of before ensures that a cell isn't executed twice in the same run
@@ -972,13 +1063,19 @@ class Notebook:
         Returns:
             Comma-separated string of non-default parameters for st_notebook().
         """
-        defaults = NotebookConfig()
-        params = self.config
-        return ", ".join(
-            f"{k}={repr(v)}"
-            for k, v in params.items()
-            if v != defaults.get(k)
-        )
+
+        default=NotebookConfig()
+
+        flat_diff=modict((k,v[1]) for k,v in default.diff(self.config).items() if not v is MISSING)
+
+        diff=modict.unwalk(flat_diff).to_dict()
+
+        result = []
+        for k, v in diff.items():
+            result.append(f"{k}={repr(v)}")
+
+        return ", ".join(result)
+
 
     def _format_cells(self) -> str:
         """Format all cells as @cell decorator functions.
@@ -1013,8 +1110,6 @@ class Notebook:
 
             from streamlit_notebook import st_notebook
             import streamlit as st
-
-            st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
             nb = st_notebook({params})
             
@@ -1209,6 +1304,7 @@ def st_notebook(
     show_logo: bool = True,
     show_stdout: bool = True,
     show_stderr: bool = False,
+    layout: Optional[dict] = None,
 
 ) -> Notebook:
     """Get or create a notebook instance with session state management.
@@ -1237,6 +1333,9 @@ def st_notebook(
         show_logo: If True, displays the streamlit-notebook logo. Defaults to True.
         show_stdout: If True, displays stdout output from cells. Defaults to True.
         show_stderr: If True, displays stderr output from cells. Defaults to False.
+        layout: Page layout configuration as a dict with layout parameters
+            (e.g., ``{"width": "wide", "initial_sidebar_state": "collapsed"}``).
+            If None, uses default centered layout. Defaults to None.
 
     Returns:
         The :class:`Notebook` instance from session state, created if it doesn't exist
@@ -1280,8 +1379,18 @@ def st_notebook(
                 run_on_submit=False  # Manual execution for debugging
             )
 
+        Custom layout::
+
+            from streamlit_notebook import st_notebook
+
+            nb = st_notebook(
+                title="Dashboard",
+                layout={"width": "wide", "initial_sidebar_state": "collapsed"}
+            )
+
     See Also:
         :class:`Notebook`: The notebook class documentation
+        :class:`Layout`: Page layout configuration
         :meth:`Notebook.render`: Render the notebook UI
     """
     import sys
@@ -1299,6 +1408,10 @@ def st_notebook(
     # Check if we need to create or recreate the notebook
     should_create = False
 
+    # Convert layout to Layout instance if needed (modict coercion + explicit defaults)
+
+    layout = Layout(**(layout or {}))
+                    
     config=NotebookConfig(
         title=title,
         app_mode=app_mode,
@@ -1306,7 +1419,8 @@ def st_notebook(
         run_on_submit=run_on_submit,
         show_logo=show_logo,
         show_stdout=show_stdout,
-        show_stderr=show_stderr
+        show_stderr=show_stderr,
+        layout=layout
     )
 
     if 'notebook' not in state:
@@ -1333,7 +1447,7 @@ def st_notebook(
         # Only recreate if parameters don't match AND the notebook is not yet initialized
         # (initialized means it went through the exec pass and created cells)
         nb = state.notebook
-        should_create= (not nb.initialized and nb.config != config)
+        should_create= (not nb.initialized and not nb.config.deep_equals(config))
         if should_create:
             reason="Not initialized and config changed"
 

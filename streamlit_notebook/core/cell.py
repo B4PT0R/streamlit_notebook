@@ -91,15 +91,16 @@ class Cell:
         """        
         # Create a new cell with the dictionary values
         cell = cls(
-            d.get("key", short_id()), 
+            d.get("key", short_id()),
             d.get("type", "code"),
             d.get("code", ""),
             d.get("reactive", False),
-            d.get("fragment", False)
+            d.get("fragment", False),
+            d.get("minimized", False)
         )
         return cell
 
-    def __init__(self,key,type="code",code="",reactive=False,fragment=False):
+    def __init__(self,key,type="code",code="",reactive=False,fragment=False,minimized=False):
         """
         Initializes a new cell instance.
 
@@ -109,9 +110,10 @@ class Cell:
             code (str, optional): The code content of the cell. Defaults to ""
             reactive (bool, optional): Whether the cell is reactive. Defaults to False.
             fragment (bool, optional): Whether the cell is a fragment. Defaults to False.
+            minimized (bool, optional): Whether the cell code area is minimized. Defaults to False.
         """
 
-        self._cell_type: BaseCellType = self._to_type_class(type)(self,key,type,code,reactive,fragment)
+        self._cell_type: BaseCellType = self._to_type_class(type)(self,key,type,code,reactive,fragment,minimized)
         self._notebook : Notebook = None
 
     @property

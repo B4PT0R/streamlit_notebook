@@ -5,8 +5,6 @@
 from streamlit_notebook import st_notebook
 import streamlit as st
 
-st.set_page_config(page_title="Stock Dashboard", layout="wide")
-
 nb = st_notebook(title='stock_dashboard')
 
 @nb.cell(type='markdown', reactive=True, fragment=False)

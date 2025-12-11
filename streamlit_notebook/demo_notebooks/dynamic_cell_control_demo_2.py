@@ -5,8 +5,6 @@
 from streamlit_notebook import st_notebook
 import streamlit as st
 
-st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
-
 nb = st_notebook(title='dynamic_cell_control_demo_2')
 
 @nb.cell(type='code', reactive=False, fragment=False)

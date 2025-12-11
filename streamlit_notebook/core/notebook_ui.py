@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import streamlit as st
 import os
-from .utils import root_join, state
+from .utils import root_join, state, rerun
 from .chat import show_chat, init_chat, avatar, show_message
 
 if TYPE_CHECKING:
@@ -153,6 +153,13 @@ class NotebookUI:
                 self.notebook.config.show_logo = not self.notebook.config.show_logo
             st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo_app")
 
+            def on_change():
+                self.notebook.config.layout.width=state.slider_width
+                #rerun()
+            width=self.notebook.config.layout.width
+            current_width=66 if width=="centered" else 100 if width=="wide" else width
+            st.slider("Layout Width (%)", min_value=66, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
+
             st.divider()
 
             if self.notebook.config.app_mode:
@@ -217,6 +224,13 @@ class NotebookUI:
             def on_change():
                 self.notebook.config.show_logo = not self.notebook.config.show_logo
             st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key="toggle_show_logo")
+
+            def on_change():
+                self.notebook.config.layout.width=state.slider_width
+                #rerun()
+            width=self.notebook.config.layout.width
+            current_width=66 if width=="centered" else 100 if width=="wide" else width
+            st.slider("Layout Width (%)", min_value=66, max_value=100, value=current_width, step=1, key="slider_width", on_change=on_change)
 
             st.divider()
 

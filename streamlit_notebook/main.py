@@ -49,8 +49,6 @@ def get_default_notebook_template() -> str:
             from streamlit_notebook import st_notebook
             import streamlit as st
 
-            st.set_page_config(page_title="new_notebook", ...)
-
             nb = st_notebook(title='new_notebook')
 
             # Add cells below using @nb.cell() decorator
@@ -80,8 +78,6 @@ def get_default_notebook_template() -> str:
 
 from streamlit_notebook import st_notebook
 import streamlit as st
-
-st.set_page_config(page_title="st.notebook", layout="centered", initial_sidebar_state="collapsed")
 
 nb = st_notebook({params_str})
 

@@ -562,49 +562,50 @@ def original_set_page_config(*args,**kwargs) -> None:
         return st.set_page_config(*args,**kwargs)
 
 def set_page_config(*args: Any, **kwargs: Any) -> None:
-    """Context-aware wrapper for st.set_page_config.
+    """No-op wrapper for st.set_page_config.
 
-    This patched version of Streamlit's ``set_page_config`` only executes during
-    the notebook's exec context, preventing duplicate page config calls.
+    This patched version of Streamlit's ``set_page_config`` is a no-op that
+    prevents users from calling it directly from notebook files.
 
-    When a notebook file is run directly via ``streamlit run notebook.py``, the
-    ``st.set_page_config`` call in the user's script is skipped. When ``nb.render()``
-    re-executes the script in the ``<notebook_script>`` context, the page config
-    is applied. This ensures configuration happens exactly once, in the correct context.
+    Page configuration is now managed through the ``Notebook.config.layout``
+    attribute instead. This ensures consistent page configuration and prevents
+    conflicts.
 
     Args:
-        *args: Positional arguments passed to ``st.set_page_config``.
-        **kwargs: Keyword arguments passed to ``st.set_page_config``.
+        *args: Ignored positional arguments.
+        **kwargs: Ignored keyword arguments.
 
     Note:
         This function is automatically patched into Streamlit's API when the
-        notebook module is imported. Users don't need to call this directly;
-        just use ``st.set_page_config()`` normally in notebook files.
+        notebook module is imported. To configure the page layout, use the
+        ``layout`` parameter when creating your notebook instead.
 
     Examples:
-        Normal usage in notebook file::
+        Old (deprecated) usage::
 
             import streamlit as st
             from streamlit_notebook import st_notebook
 
-            # This will only execute in the correct context
-            st.set_page_config(
-                page_title="My Notebook",
-                layout="wide",
-                initial_sidebar_state="collapsed"
-            )
+            # This no longer works
+            st.set_page_config(layout="wide")
 
             nb = st_notebook()
-            # ... rest of notebook
+
+        New usage::
+
+            from streamlit_notebook import st_notebook, Layout
+
+            # Configure layout through the notebook
+            nb = st_notebook(
+                layout=Layout(
+                    width="wide",
+                    initial_sidebar_state="collapsed"
+                )
+            )
 
     See Also:
-        :meth:`Notebook.render`: The render method that creates the exec context
+        :class:`~streamlit_notebook.core.notebook.Layout`: Layout configuration class
+        :class:`~streamlit_notebook.core.notebook.NotebookConfig`: Notebook configuration
     """
-    # Check if running from exec context (via <notebook_script>)
-    frame = inspect.currentframe()
-    caller_globals = frame.f_back.f_globals if frame else {}
-    caller_file = caller_globals.get('__file__', '<notebook_script>')
-
-    # Only call set_page_config if in exec context
-    if caller_file == '<notebook_script>':
-        original_set_page_config(*args, **kwargs)
+    # No-op: page config is now managed by Notebook.config.layout
+    pass

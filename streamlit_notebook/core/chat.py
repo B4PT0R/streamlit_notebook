@@ -198,7 +198,15 @@ def settings_dialog():
 
         with st.container(border=True, gap="small", height='stretch'):
             # System prompt - full width at the bottom, outside columns
-            st.write("#### System Prompt")
+            with st.container(horizontal=True):
+                st.write("#### System Prompt")
+                st.space(size='stretch')
+                if st.button("🔄 Reset to Default", help="Restore factory default system prompt"):
+                    state.reset_system_prompt = True
+
+            # Initialize reset flag if not present
+            if 'reset_system_prompt' not in state:
+                state.reset_system_prompt = False
 
             current_system = state.agent.config.get("system", "")
             if os.path.isfile(current_system):
@@ -206,6 +214,11 @@ def settings_dialog():
                     current_system_content = f.read()
             else:
                 current_system_content = current_system if isinstance(current_system, str) else get_default_system_prompt()
+
+            # If reset was triggered, use default prompt
+            if state.reset_system_prompt:
+                current_system_content = get_default_system_prompt()
+                state.reset_system_prompt = False
 
             system_prompt = st.text_area(
                 "System Prompt",

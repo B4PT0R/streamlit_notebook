@@ -63,7 +63,8 @@ class BaseCellType:
         type: str = "code",  # code, markdown, html
         code: str = "",
         reactive: bool = False,
-        fragment: bool = False
+        fragment: bool = False,
+        minimized: bool = False
     ) -> None:
         if not key or not isinstance(key,str):
             raise ValueError(f"Cell must be declared with a valid key. Got {key}")
@@ -89,6 +90,7 @@ class BaseCellType:
         self._reactive = reactive
         self._type: Optional[Literal['code', 'markdown', 'html']] = type
         self._fragment = fragment
+        self._minimized = minimized
         self._language = "python"
         self._has_reactive_toggle=True
         self._has_fragment_toggle=True
@@ -261,6 +263,21 @@ class BaseCellType:
                 self.ui.buttons['Fragment'].toggled = value
                 rerun()
 
+    @property
+    def minimized(self) -> bool:
+        """Whether the cell runs as a Streamlit fragment."""
+        return self._minimized
+
+    @minimized.setter
+    def minimized(self, value: bool) -> None:
+        """Set the fragment state of the cell."""
+        if self._minimized != value:
+            self._minimized = value
+            # Trigger UI update if needed
+            if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Minimized' in self.ui.buttons:
+                self.ui.buttons['Minimized'].toggled = value
+                rerun()
+
     # UI methods
 
     def prepare_ui(self):
@@ -273,6 +290,8 @@ class BaseCellType:
         self.ui.buttons["Reactive"].toggled=self.reactive
         self.ui.buttons["Fragment"].callback=self._toggle_fragment
         self.ui.buttons["Fragment"].toggled=self.fragment
+        self.ui.buttons["Minimized"].callback=self._toggle_minimized
+        self.ui.buttons["Minimized"].toggled=self.minimized
         self.ui.buttons["Up"].callback=self.move_up
         self.ui.buttons["Down"].callback=self.move_down
         self.ui.buttons["Close"].callback=self.delete
@@ -291,6 +310,8 @@ class BaseCellType:
         self.ui.key=f"cell_ui_{self.ui_key}"
         self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         self.ui.buttons['Reactive'].visible=self.has_reactive_toggle
+        self.ui.buttons['HasRun'].visible=self.has_run_once
+        self.ui.minimized=self.minimized
 
         self.ui.info_bar.set_info(dict(name=f"{self.id}:",style=dict(fontSize="14px",width="100%")))
 
@@ -422,6 +443,7 @@ class BaseCellType:
     def _execute_cell(self):
         """Execute the cell code and update state."""
         if self.code:
+            never_ran=not self.has_run_once
             self.last_code=self.code
             self.results=[]
             self.displays=[]
@@ -432,6 +454,8 @@ class BaseCellType:
                 self.initialize_output_area()
                 with self.display_area:
                     self._exec()
+                if never_ran:
+                    rerun()  
             else:
                 # The cell skeleton isn't on screen yet
                 # The code runs anyway, but the outputs will be shown after a refresh
@@ -475,14 +499,14 @@ class BaseCellType:
         if self.notebook.config.run_on_submit:
             self.has_run=False
             self.run()
-            self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
+            #self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def _run_callback(self):
         """
         Callback used to deal with the "run" event from the ui.
         """
         self.run()
-        self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
+        #self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def _toggle_reactive(self):
         """Toggles the 'Auto-Rerun' feature for the cell (internal)."""
@@ -491,6 +515,10 @@ class BaseCellType:
     def _toggle_fragment(self):
         """Toggles the 'Fragment' feature for the cell (internal)."""
         self._fragment = self.ui.buttons["Fragment"].toggled
+
+    def _toggle_minimized(self):
+        """Toggles the 'Fragment' feature for the cell (internal)."""
+        self._minimized = self.ui.buttons["Minimized"].toggled
 
     def _set_type(self, new_type):
         """
@@ -503,9 +531,9 @@ class BaseCellType:
 
         if new_type == self.type:
             return  # Already this type, nothing to do
-        
+
         if new_type in Cell._supported_types:
-            self.cell._cell_type = Cell._supported_types[new_type](self.cell, self.key, new_type, self.code, self.reactive, self.fragment)
+            self.cell._cell_type = Cell._supported_types[new_type](self.cell, self.key, new_type, self.code, self.reactive, self.fragment, self.minimized)
         else:
             raise ValueError(f"Invalid cell type: {new_type}. Must be 'code', 'markdown', or 'html'")
         rerun()
@@ -642,7 +670,8 @@ class BaseCellType:
             type=self.type,
             code=self.code,
             reactive=self.reactive,
-            fragment=self.fragment
+            fragment=self.fragment,
+            minimized=self.minimized
         )
 
         # Add execution outputs and metadata if full state requested
@@ -676,9 +705,10 @@ class PyType(BaseCellType):
         type: str = "code",  # code, markdown, html
         code: str = "",
         reactive: bool = False,
-        fragment: bool = False):
+        fragment: bool = False,
+        minimized: bool = False):
 
-        super().__init__(cell,key,type,code,reactive,fragment)
+        super().__init__(cell,key,type,code,reactive,fragment,minimized)
         self._language='python'
         self._type="code"
 
@@ -729,9 +759,10 @@ class MDType(BaseCellType):
         type: str = "code",  # code, markdown, html
         code: str = "",
         reactive: bool = False,
-        fragment: bool = False):
-        
-        super().__init__(cell,key,type,code,reactive,fragment)
+        fragment: bool = False,
+        minimized: bool = False):
+
+        super().__init__(cell,key,type,code,reactive,fragment,minimized)
         self._language='markdown'
         self._type="markdown"
         self._has_fragment_toggle=False
@@ -760,9 +791,10 @@ class HTMLType(BaseCellType):
         type: str = "code",  # code, markdown, html
         code: str = "",
         reactive: bool = False,
-        fragment: bool = False):
-        
-        super().__init__(cell,key,type,code,reactive,fragment)
+        fragment: bool = False,
+        minimized: bool = False):
+
+        super().__init__(cell,key,type,code,reactive,fragment,minimized)
         self._language='markdown'
         self._type="html"
         self._has_fragment_toggle=False

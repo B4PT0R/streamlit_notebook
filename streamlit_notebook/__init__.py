@@ -2,13 +2,25 @@
 
 This module exposes the primary entry points of the package so they can be
 imported directly from :mod:`streamlit_notebook` while keeping a small, clean
-surface for Sphinx autodoc. It also installs the context-aware
-``set_page_config`` patch so users can simply ``import streamlit as st`` and
-configure their page normally inside notebook files.
+surface for Sphinx autodoc. It also installs a no-op ``set_page_config`` patch
+to prevent users from calling it directly (page config is now managed through
+the Notebook.config.layout attribute).
 """
 
-from .core.notebook import Notebook, st_notebook, get_notebook
+from .core.notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layout
 from .core.utils import rerun, wait, set_root_path, set_page_config
+
+__all__ = [
+    "Notebook",
+    "st_notebook",
+    "get_notebook",
+    "Layout",
+    "NotebookConfig",
+    "rerun",
+    "wait",
+    "set_root_path",
+    "set_page_config"
+]
 
 set_root_path(__file__)
 

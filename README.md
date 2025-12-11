@@ -4,7 +4,7 @@ The reactive notebook powered by Streamlit.
 
 Streamlit Notebook combines the interactive development experience of Jupyter notebooks with the reactivity and deployment simplicity of Streamlit apps. Write code in notebook-style cells with a professional-grade Python shell that maintains state across reruns, then deploy the exact same file as a production-ready Streamlit application.
 
-It was designed with AI integration in mind, and comes equipped with its own full-featured AI agent (requires an OpenAI API key) having full dynamic control over the notebook. It can create, edit, run code cells, read documents, view images, support voice interaction, etc.
+Designed with AI integration in mind, it comes equipped with its own full-featured AI agent having full dynamic control over the notebook (requires an OpenAI API key). It can create, edit, run code cells, read documents, view images, support voice interaction, etc.
 
 ## Table of Contents
 
@@ -39,6 +39,7 @@ It was designed with AI integration in mind, and comes equipped with its own ful
   - [Example Workflow](#example-workflow)
   - [Best Practices](#best-practices)
   - [Advanced: Custom Tools](#advanced-custom-tools)
+- [CLI Options](#cli-options)
 - [Deployment](#deployment)
   - [Local Testing](#local-testing)
   - [Streamlit Cloud](#streamlit-cloud)
@@ -130,8 +131,6 @@ Create cells interactively, then click "Save notebook" to save as a `.py` file.
 # analysis.py
 from streamlit_notebook import st_notebook
 import streamlit as st
-
-st.set_page_config(page_title="Analysis")
 
 # Create a notebook instance
 nb = st_notebook(title='analysis')
@@ -253,7 +252,6 @@ Building a stock price analysis dashboard. This example uses real data from the 
 from streamlit_notebook import st_notebook
 import streamlit as st
 
-st.set_page_config(page_title="Stock Dashboard", layout="wide")
 nb = st_notebook(title='stock_dashboard')
 
 @nb.cell(type='code')
@@ -941,7 +939,7 @@ def interact_with_agent():
 
 Access agent settings through the sidebar:
 
-- **Model Selection**: Choose from GPT-4, GPT-4o, o1-preview, etc.
+- **Model Selection**: Choose amongst a variety of OpenAI models (gpt-5.1, gpt-5.1-mini, etc.)
 - **Temperature**: Control response creativity
 - **Token Limits**: Configure context and completion limits
 - **Vision**: Toggle image/chart analysis
@@ -966,8 +964,8 @@ Access agent settings through the sidebar:
 
 **Security:**
 - Never share notebooks containing API keys
-- Use environment variables for sensitive data
-- Agent respects app mode - won't expose code in production
+- Use st.secrets for sensitive data
+- Agent respects app mode - won't be loaded in production
 
 **Performance:**
 - Agent responses count toward OpenAI API usage
@@ -986,22 +984,8 @@ Extend the agent with domain-specific capabilities:
 ```python
 @nb.cell(type='code')
 def add_custom_tools():
-    # Option 1: Using decorator syntax
-    @__agent__.add_tool
-    def fetch_stock_price(ticker: str) -> dict:
-        """
-        description: Fetch current stock price for a given ticker symbol
-        parameters:
-            ticker:
-                type: string
-                description: Stock ticker symbol (e.g., AAPL, GOOGL)
-        required:
-            - ticker
-        """
-        # Your implementation here
-        return {"ticker": ticker, "price": 150.00}
 
-    # Option 2: Direct function call
+    # Option 1: Direct function call
     def analyze_sentiment(text: str) -> str:
         """
         description: Analyze the sentiment of given text
@@ -1017,11 +1001,26 @@ def add_custom_tools():
 
     __agent__.add_tool(analyze_sentiment)
 
+    # Option 1: Using decorator syntax
+    @__agent__.add_tool
+    def fetch_stock_price(ticker: str) -> dict:
+        """
+        description: Fetch current stock price for a given ticker symbol
+        parameters:
+            ticker:
+                type: string
+                description: Stock ticker symbol (e.g., AAPL, GOOGL)
+        required:
+            - ticker
+        """
+        # Your implementation here
+        return {"ticker": ticker, "price": 150.00}
+
     st.success("Custom tools registered!")
 ```
 
 **Key Points:**
-- **YAML Docstrings**: Tool metadata is automatically extracted from the function's docstring
+- **YAML Docstrings**: Tool metadata is automatically extracted from the function's docstring in YAML format
 - **Decorator Syntax**: Use `@__agent__.add_tool` for clean, declarative tool registration
 - **Direct Call**: Use `__agent__.add_tool(func)` for conditional or dynamic registration
 
@@ -1037,7 +1036,7 @@ or equivalently,
 
 `streamlit run [notebook_file] Optional[options_1] -- Optional[options_2]`
 
-Options before `--` are for streamlit (e.g., `--server.port 8080`), options after `--` are for your script (e.g., `--app`).
+Options before `--` are for Streamlit (e.g., `--server.port 8080`), options after `--` are for your script (e.g., `--app`).
 
 Example with both:
 ```bash

@@ -218,16 +218,16 @@ class Bar:
             "name": self.name,
             "css": css_string,
             "style": {
-                        "order": f"{self.order}",
-                        "display": "flex",
-                        "flexDirection": "row",
-                        "alignItems": "center",
-                        "width": "100%",
-                        "height": "2.5rem",
-                        "padding": "0rem 0.75rem",
-                        "borderRadius": border_radius,
-                        "zIndex": "9990"
-                    },
+                "order": f"{self.order}",
+                "display": "flex",
+                "flexDirection": "row",
+                "alignItems": "center",
+                "width": "100%",
+                "height": "2.5rem",
+                "padding": "0rem 0.75rem",
+                "borderRadius": border_radius,
+                "zIndex": "9990"
+            },
             "info": self.get_info()
         }
         return info_bar
@@ -505,9 +505,20 @@ class Editor:
         Returns:
             dict: A dictionary of parameters used to configure the code editor.
         """
+        kwargs=dict(self.kwargs)
+
+        minimized_style=dict(
+            display="none",
+            height="0px",
+            padding="0px",
+            margin="0px",
+            border="0px"
+        ) if kwargs.pop('minimized',False) else dict()
+
         params=dict(
-            lang=self.kwargs.pop('lang','text'),
+            lang=kwargs.pop('lang','text'),
             key=self.key,
+            focus=True,
             buttons=[button.get_dict() for button in self.buttons.values() if button.visible],
             options={
                 "showLineNumbers":True
@@ -517,11 +528,12 @@ class Editor:
                 "enableLiveAutocompletion": False, 
                 "enableSnippets": False,
                 "style":{
-                    "borderRadius": "0px 0px 0px 0px"
+                    "borderRadius": "0px 0px 0px 0px",
+                    **minimized_style
                 }
             }
         )
-        params.update(self.kwargs)
+        params.update(kwargs)
         params.update(
             info=self.info_bar.get_dict(),
             menu=self.menu_bar.get_dict()
@@ -622,19 +634,21 @@ class CellUI(Editor):
 
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
-        self.add_toggle(name="Reactive",caption="Reactive",event="_toggle_reactive",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
-        self.add_toggle(name="Fragment",caption="Fragment",event="_toggle_fragment",style=dict(top="0px",left="80px",fontSize="14px"),has_caption=True)
+        self.add_toggle(name="Reactive",caption="Reactive",event="toggle_reactive",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
+        self.add_toggle(name="Fragment",caption="Fragment",event="toggle_fragment",style=dict(top="0px",left="100px",fontSize="14px"),has_caption=True)
         self.add_button(name="Run",caption="Run",icon="Play",event="run",style=dict(bottom="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
-        #self.add_button(name="Has_run",caption="Has_Run",icon="Check",event="Check",style=dict(bottom="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px",hover=False)
+        self.add_toggle(name="Minimized",caption="Minimized",icons=["Minimize","Maximize"],event="toggle_minimized",style=dict(top="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="16px")
+        self.add_button(name="HasRun",caption="HasRun",icon="Check",event="Check",style=dict(bottom="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px",hover=False)
         self.add_button(name="Close",caption="Close",icon="X",event="close",style=dict(top="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
-        self.add_button(name="Up",caption="Up",icon="ChevronUp",event="up",style=dict(top="0px",right="60px",fontSize="14px"),has_caption=False,icon_size="20px")
-        self.add_button(name="Down",caption="Down",icon="ChevronDown",event="down",style=dict(top="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px")
-        self.add_button(name="InsertAbove",caption="Insert Above",icon="Plus",event="insert_above",style=dict(top="0px",left="50%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
-        self.add_button(name="InsertBelow",caption="Insert Below",icon="Plus",event="insert_below",style=dict(bottom="0px",left="50%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
+        self.add_button(name="Up",caption="Up",icon="ChevronUp",event="up",style=dict(top="0px",right="45%",transform="translateX(-50%)", fontSize="14px"),has_caption=False,icon_size="20px")
+        self.add_button(name="Down",caption="Down",icon="ChevronDown",event="down",style=dict(bottom="0px",right="45%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
+        self.add_button(name="InsertAbove",caption="Insert Above",icon="Plus",event="insert_above",style=dict(top="0px",left="45%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
+        self.add_button(name="InsertBelow",caption="Insert Below",icon="Plus",event="insert_below",style=dict(bottom="0px",left="45%",transform="translateX(-50%)",fontSize="14px"),has_caption=False,icon_size="20px")
         # Type switching buttons (next to Cell[i]: info on bottom bar, caption only, no icon)
-        self.add_button(name="TypeCode",caption="PY",event="type_code",style=dict(bottom="0px",left="95px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
-        self.add_button(name="TypeMarkdown",caption="MD",event="type_markdown",style=dict(bottom="0px",left="120px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
-        self.add_button(name="TypeHTML",caption="HTML",event="type_html",style=dict(bottom="0px",left="145px",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeCode",caption="PY",event="type_code",style=dict(bottom="0px",left="15%",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeMarkdown",caption="MD",event="type_markdown",style=dict(bottom="0px",left="20%",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+        self.add_button(name="TypeHTML",caption="HTML",event="type_html",style=dict(bottom="0px",left="25%",fontSize="12px", transform="translateY(2px)"),has_caption=True,has_icon=False,icon_size="0px")
+
     
 
     

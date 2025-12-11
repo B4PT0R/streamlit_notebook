@@ -56,7 +56,7 @@ class AgentConfig(modict):
     voice="nova"
     voice_instructions="You speak with a friendly and intelligent tone."
     voice_enabled=True
-    voice_buffer_size=3
+    voice_buffer_size=2
     workfolder=modict.factory(lambda :os.path.expanduser("~/agent_workfolder"))
 
 class Agent:
