@@ -800,7 +800,7 @@ class HTMLType(BaseCellType):
         self._has_fragment_toggle=False
         self._has_reactive_toggle=True
 
-    def get_exec_code(self):
+    def _get_exec_code(self):
         """
         Formats the HTML code and converts it to a st.html call.
 
@@ -810,6 +810,6 @@ class HTMLType(BaseCellType):
         This method processes the cell's content, formats any variables,
         and wraps it in a Streamlit html function call.
         """
-        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
-        code=f"display(r'''{formatted_code}''', backend='html');"
+        formatted_code=format(self.code, context=self.notebook.shell.namespace).replace("'''","\'\'\'")
+        code=f"display(r'''{formatted_code}''',backend='html');"
         return code

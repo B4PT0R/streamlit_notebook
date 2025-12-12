@@ -1316,7 +1316,7 @@ class Notebook:
 
         Returns:
             A dictionary containing:
-                - **notebook**: Notebook metadata (title, settings, configuration)
+                - **config**: Notebook metadata (title, settings, configuration)
                 - **cells**: List of cell dictionaries (one per cell)
 
         Examples:
@@ -1335,9 +1335,9 @@ class Notebook:
             Inspect notebook configuration::
 
                 info = nb.get_info()
-                print(f"Notebook: {info['notebook']['title']}")
-                print(f"Cells: {info['notebook']['cell_count']}")
-                print(f"App mode: {info['notebook']['app_mode']}")
+                print(f"Notebook: {info['config']['title']}")
+                print(f"Cells: {info['config']['cell_count']}")
+                print(f"App mode: {info['config']['app_mode']}")
 
             Get minimal cell definitions::
 
@@ -1382,8 +1382,11 @@ def st_notebook(
     The function automatically detects deployment mode via:
         - ``--app`` command-line flag
         - ``ST_NOTEBOOK_APP_MODE`` environment variable
+        - ``--no-quit`` command-line flag
+        - ``ST_NOTEBOOK_NO_QUIT`` environment variable
 
-    When either is detected, it sets ``app_mode=True`` for locked production deployment.
+    When either is detected, it sets ``app_mode=True`` and/or ``no_quit=True`` for 
+    production deployment.
 
     Args:
         title: The notebook title displayed in the UI and used for filenames.
@@ -1402,6 +1405,8 @@ def st_notebook(
         layout: Page layout configuration as a dict with layout parameters
             (e.g., ``{"width": "wide", "initial_sidebar_state": "collapsed"}``).
             If None, uses default centered layout. Defaults to None.
+        no_quit: If True, hides the quit button to prevent the user from stopping the server
+            Defaults to False.
 
     Returns:
         The :class:`Notebook` instance from session state, created if it doesn't exist
@@ -1410,6 +1415,7 @@ def st_notebook(
     Note:
         If a notebook already exists and is initialized (has cells), changing parameters
         won't recreate it. Parameters only apply when creating a fresh notebook.
+        This happens at startup or when another notebook is opened from the interface.
 
     Examples:
         Basic notebook creation (editable)::
@@ -1427,7 +1433,7 @@ def st_notebook(
 
         Production deployment (locked in app view)::
 
-            # Run with: st_notebook my_app.py --app
+            # Run with: st_notebook my_app.py -- --app
             # or set: ST_NOTEBOOK_APP_MODE=true
 
             nb = st_notebook(title="Dashboard")
