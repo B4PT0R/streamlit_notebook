@@ -1,2 +1,2 @@
-# For deployment - installs with full data science stack
-streamlit-notebook[full]
+# Install the package itself with all dependencies
+-e .[full]
