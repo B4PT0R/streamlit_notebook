@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Literal
 from code_editor import code_editor
-from .utils import state, short_id, rerun
+from .utils import state, short_id, rerun, state_key
 import streamlit as st
 
 class editor_output_parser:
@@ -517,7 +517,7 @@ class Editor:
 
         params=dict(
             lang=kwargs.pop('lang','text'),
-            key=self.key,
+            key=state_key(self.key),
             focus=True,
             buttons=[button.get_dict() for button in self.buttons.values() if button.visible],
             options={
@@ -550,8 +550,9 @@ class Editor:
         Returns:
             The retrieved output, either from the session state (if available) or the raw output.
         """
-        if self.key in state:
-            return state[self.key]
+        editor_key = state_key(self.key)
+        if editor_key in state:
+            return state[editor_key]
         else:
             return output
             

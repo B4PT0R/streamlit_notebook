@@ -5,7 +5,7 @@ from typing import Optional
 import streamlit as st
 from pydub import AudioSegment
 import filetype
-from .utils import short_id
+from .utils import short_id, state_key
 
 # Mapping audio format → MIME type for browser compatibility
 AUDIO_FORMAT_TO_MIME = {
@@ -154,12 +154,13 @@ export default function(component) {
 
 # On enregistre le composant v2 une seule fois
 def _component(*args,**kwargs):
-    if not '_auto_play_component' in st.session_state:
-        st.session_state._auto_play_component = st.components.v2.component(
+    component_key = state_key("auto_play_component")
+    if component_key not in st.session_state:
+        st.session_state[component_key] = st.components.v2.component(
             "auto_play_tts",
             js=JS,
         )
-    return st.session_state._auto_play_component(*args,**kwargs)
+    return st.session_state[component_key](*args,**kwargs)
 
 def auto_play_bytes(
     audio_bytes: bytes,

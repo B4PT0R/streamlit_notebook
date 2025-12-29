@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamlit_notebook"
-version = "0.3.1"
+version = "0.3.2"
 description = "A notebook interface for Streamlit."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -18,12 +18,13 @@ classifiers = [
 ]
 dependencies = [
     "streamlit-code-editor",
-    "streamlit>=1.5.0",
-    "asttokens",
+    "streamlit>=1.52.0",
+    "pynteract>=0.1.1",
     "python-dotenv",
     "filetype",
     "pydub",
-    "modict"
+    "audioop-lts",
+    "modict>=0.3.3"
 ]
 
 [project.optional-dependencies]

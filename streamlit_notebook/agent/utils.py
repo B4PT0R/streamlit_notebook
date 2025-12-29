@@ -8,6 +8,7 @@ import json
 import regex
 from threading import Thread as ThreadBase
 import sys
+import inspect
 
 # Try to import full get_text with all document processing capabilities
 # Fall back to simpler version if dependencies are missing
@@ -191,7 +192,7 @@ def timestamp(digits=3):
 
 class NoContext:
     """
-    A context manager that does nothing, useful when no context manager is required to display a message.
+    A context manager that does nothing, useful when code expects a context manager but you don't want any special behavior.
     """
     def __init__(self,*args,**kwargs):
         pass
@@ -233,7 +234,7 @@ class Logger:
 
     def __init__(self,file=None):
         self.file=file or root_join('logs',"log.txt")
-        open(self.file,'w').close()
+        open(self.file,'w', encoding='utf-8').close()
 
     def log(self,message):
         with open(self.file,'a',encoding="utf-8") as f:
@@ -267,16 +268,30 @@ def read_document_content(source, start_at_line=1, max_tokens=8000):
 
 def is_running_in_streamlit_runtime():
     try:
-        import streamlit.runtime.scriptrunner
-        return True
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
     except Exception:
         return False
 
+    return get_script_run_ctx() is not None
+
+class ThreadPool:
+    threads = {}
+
+    @classmethod
+    def register(cls, thread):
+        cls.threads[thread.name] = thread
+
+    @classmethod
+    def join_all(cls, timeout=None):
+        for thread in list(cls.threads.values()):
+            if thread.is_alive():
+                thread.join(timeout=timeout)
+
 def Thread(*args,**kwargs):
-    thread=ThreadBase(*args,**kwargs)
+    thread = ThreadBase(*args,**kwargs)
     if is_running_in_streamlit_runtime():
         from streamlit.runtime.scriptrunner import get_script_run_ctx,add_script_run_ctx
-        ctx=get_script_run_ctx()
+        ctx = get_script_run_ctx()
         add_script_run_ctx(thread,ctx)
+    ThreadPool.register(thread)
     return thread
-

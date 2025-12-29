@@ -64,7 +64,8 @@ class BaseCellType:
         code: str = "",
         reactive: bool = False,
         fragment: bool = False,
-        minimized: bool = False
+        minimized: bool = False,
+        run_every: Optional[int | float] = None
     ) -> None:
         if not key or not isinstance(key,str):
             raise ValueError(f"Cell must be declared with a valid key. Got {key}")
@@ -91,6 +92,7 @@ class BaseCellType:
         self._type: Optional[Literal['code', 'markdown', 'html']] = type
         self._fragment = fragment
         self._minimized = minimized
+        self._run_every = run_every
         self._language = "python"
         self._has_reactive_toggle=True
         self._has_fragment_toggle=True
@@ -277,6 +279,48 @@ class BaseCellType:
             if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Minimized' in self.ui.buttons:
                 self.ui.buttons['Minimized'].toggled = value
                 rerun()
+
+    @property
+    def run_every(self) -> Optional[int | float]:
+        """Auto-rerun interval in seconds (requires fragment=True)."""
+        return self._run_every
+
+    @run_every.setter
+    def run_every(self, value: Optional[int | float]) -> None:
+        """Set the run_every interval of the cell."""
+        if self._run_every != value:
+            self._run_every = value
+            # Trigger rerun to update fragment decorator
+            rerun()
+
+    def get_config(self):
+        """Get a CellConfig object representing the current cell configuration.
+
+        Returns:
+            CellConfig: Configuration object with current cell parameters.
+
+        Example:
+            Get current configuration::
+
+                config = cell.get_config()
+                print(f"Cell type: {config.type}")
+                print(f"Fragment: {config.fragment}")
+                print(f"Run every: {config.run_every}")
+
+            Duplicate a cell with same config::
+
+                config = cell.get_config()
+                new_cell = Cell(key="new_key", **config)
+        """
+        from .cell import CellConfig
+        return CellConfig(
+            type=self.type,
+            code=self.code,
+            reactive=self.reactive,
+            fragment=self.fragment,
+            minimized=self.minimized,
+            run_every=self.run_every
+        )
 
     # UI methods
 
@@ -664,15 +708,10 @@ class BaseCellType:
             to ensure JSON serializability. Exception tracebacks are included
             as formatted strings when ``minimal=False``.
         """
-        # Basic cell definition (always included)
-        d = dict(
-            key=self.key,
-            type=self.type,
-            code=self.code,
-            reactive=self.reactive,
-            fragment=self.fragment,
-            minimized=self.minimized
-        )
+        # Use get_config() to build base dict with all cell parameters
+        config = self.get_config()
+        d = dict(config)
+        d['key'] = self.key
 
         # Add execution outputs and metadata if full state requested
         if not minimal:
@@ -706,9 +745,10 @@ class PyType(BaseCellType):
         code: str = "",
         reactive: bool = False,
         fragment: bool = False,
-        minimized: bool = False):
+        minimized: bool = False,
+        run_every: Optional[int | float] = None):
 
-        super().__init__(cell,key,type,code,reactive,fragment,minimized)
+        super().__init__(cell,key,type,code,reactive,fragment,minimized,run_every)
         self._language='python'
         self._type="code"
 
@@ -720,25 +760,41 @@ class PyType(BaseCellType):
         Executes the cell code.
 
         This method chooses between normal execution and fragment execution
-        based on the cell's fragment attribute.
+        based on the cell's fragment attribute, and applies run_every if specified.
         """
         if self.fragment:
-            self._exec_as_fragment()
+            # Apply fragment decorator dynamically with run_every support
+            if self.run_every is not None:
+                # Create fragment with run_every parameter
+                fragment_decorator = st.fragment(run_every=self.run_every)
+                fragment_func = fragment_decorator(self._exec_code)
+                fragment_func()
+            else:
+                # Use static decorator (pre-defined method)
+                self._exec_as_fragment()
         else:
             self._exec_normally()
 
+    def _exec_code(self):
+        """
+        Core execution logic for both fragment and normal execution.
+
+        This method contains the actual code execution logic that can be
+        wrapped by the fragment decorator when needed.
+        """
+        with self.cell:
+            response = self.notebook.shell.run(self._get_exec_code(), filename=f"<{self.id}>")
+        self._set_output(response)
 
     @st.fragment
     def _exec_as_fragment(self):
         """
-        Executes the cell as a Streamlit fragment.
+        Executes the cell as a Streamlit fragment (without run_every).
 
         This method is decorated with @st.fragment and executes
         the cell's code within a Streamlit fragment context.
         """
-        with self.cell:
-            response=self.notebook.shell.run(self._get_exec_code(),filename=f"<{self.id}>")
-        self._set_output(response)
+        self._exec_code()
 
     def _exec_normally(self):
         """
@@ -746,9 +802,7 @@ class PyType(BaseCellType):
 
         This method runs the cell's code in the normal execution context.
         """
-        with self.cell:
-            response=self.notebook.shell.run(self._get_exec_code(),filename=f"<{self.id}>")
-        self._set_output(response)
+        self._exec_code()
 
 class MDType(BaseCellType):
     """Markdown rendering cell type."""
@@ -760,9 +814,10 @@ class MDType(BaseCellType):
         code: str = "",
         reactive: bool = False,
         fragment: bool = False,
-        minimized: bool = False):
+        minimized: bool = False,
+        run_every: Optional[int | float] = None):
 
-        super().__init__(cell,key,type,code,reactive,fragment,minimized)
+        super().__init__(cell,key,type,code,reactive,fragment,minimized,run_every)
         self._language='markdown'
         self._type="markdown"
         self._has_fragment_toggle=False
@@ -778,7 +833,7 @@ class MDType(BaseCellType):
         This method processes the cell's content, formats any variables,
         and wraps it in a Streamlit markdown function call.
         """
-        formatted_code=format(self.code,**self.notebook.shell.namespace).replace("'''","\'\'\'")
+        formatted_code=format(self.code, context=self.notebook.shell.namespace).replace("'''","\'\'\'")
         code=f"display(r'''{formatted_code}''',backend='markdown');"
         return code
 
@@ -792,9 +847,10 @@ class HTMLType(BaseCellType):
         code: str = "",
         reactive: bool = False,
         fragment: bool = False,
-        minimized: bool = False):
+        minimized: bool = False,
+        run_every: Optional[int | float] = None):
 
-        super().__init__(cell,key,type,code,reactive,fragment,minimized)
+        super().__init__(cell,key,type,code,reactive,fragment,minimized,run_every)
         self._language='markdown'
         self._type="html"
         self._has_fragment_toggle=False

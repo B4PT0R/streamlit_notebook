@@ -1,4 +1,4 @@
-from .utils import root_join, text_content, total_tokens, NoContext, add_line_numbers, sort, timestamp, short_id, session_id, guess_extension_from_bytes, truncate, read_document_content
+from .utils import root_join, text_content, total_tokens, NoContext, add_line_numbers, sort, timestamp, short_id, session_id, guess_extension_from_bytes, truncate, read_document_content, ThreadPool
 from modict import modict
 import json
 import os
@@ -12,7 +12,7 @@ from .ai import AIClient
 from .voice import VoiceProcessor
 from .latex import LaTeXProcessor
 from .stream_utils import MarkdownBlockExtractor
-from ..shell import Shell
+from pynteract import Shell
 from datetime import datetime
 from typing import List
 
@@ -76,7 +76,6 @@ class Agent:
         self.current_session_id=None
         self.messages=[]
         self.pending=[] # to store messages created by tool calls temporarily
-        self.new_turn=False
         self.shell=None
         self.init_shell(shell=shell)
         self.init_workfolder()
@@ -385,6 +384,7 @@ class Agent:
         description: |
             Executes any pending tool calls and adds their output to the message history. Handles tool resolution and exceptions.
         """
+        called_tools=False
         if message.get('tool_calls'):
             tool_call_context=self.hooks.get('tool_call_context',NoContext)
             for tool_call in message.tool_calls:
@@ -398,7 +398,8 @@ class Agent:
                     else:
                         content=f"Error: Tool '{tool_call.function.name}' not found."
                 self.new_message(role="tool",name=tool_call.function.name,tool_call_id=tool_call.id,content=content)
-                self.new_turn=True
+                called_tools=True
+        return called_tools
 
     def add_pending(self):
         """
@@ -416,13 +417,14 @@ class Agent:
         description: |
             Processes a full turn: gets a response, handles tool calls, and repeats if needed.
         """
-        self.new_turn=False
 
         self.add_pending()
         message=self.get_response()
-        self.call_tools(message)
+        ThreadPool.join_all()
+        called_tools=self.call_tools(message)
+        self.add_pending()
 
-        if self.new_turn:
+        if called_tools:
             if self.config.get('auto_proceed',True):
                 return self.process()
             else:
@@ -685,7 +687,7 @@ class Agent:
         """
         import prompt_toolkit
         print("Starting interactive agent. Type 'exit' or 'quit' to stop.")
-        print('Use [Alt+Enter] to enter multi-line input.\n')
+        print('Use [Alt+Enter] to submit multi-line input.\n')
         while True:
             try:
                 prompt=prompt_toolkit.prompt('You: ', multiline=True)

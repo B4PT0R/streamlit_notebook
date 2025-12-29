@@ -32,7 +32,7 @@ from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
 import random
 import string
 import os
-from typing import Any
+from typing import Any, Literal, Optional
 import inspect
 
 def set_root_path(file):
@@ -68,6 +68,12 @@ def root_join(*args: str) -> str:
 
 # shortcut for st.session_state
 state=st.session_state
+STATE_PREFIX = "_streamlit_notebook_"
+
+def state_key(key: str) -> str:
+    if key.startswith(STATE_PREFIX):
+        return key
+    return f"{STATE_PREFIX}{key}"
 
 def short_id(length: int = 16) -> str:
     """Generate a random unique identifier string.
@@ -160,8 +166,8 @@ def original_rerun(*args,**kwargs) -> None:
     else:
         return st.rerun(*args,**kwargs)
 
-def rerun(wait: bool | float = True) -> None:
-    """Command a rerun of the app with optional wait control.
+def rerun(scope: str = "app", wait: bool | float = True) -> None:
+    """Command a rerun of the app with optional scope and wait control.
 
     This function sets a flag in the session state to trigger a rerun
     of the Streamlit app after the current execution is complete.
@@ -170,6 +176,9 @@ def rerun(wait: bool | float = True) -> None:
     the requests to ensure the longest total delay is respected.
 
     Args:
+        scope: Specifies what part of the app should rerun (Streamlit 1.52+):
+            - ``"app"`` (default): Rerun the full app
+            - ``"fragment"``: Only rerun the current fragment (must be called inside a fragment)
         wait: Controls the rerun behavior:
             - ``True`` (default): Soft rerun as soon as possible (equivalent to wait=0)
             - ``False``: Hard rerun immediately if possible, bypassing delays
@@ -180,11 +189,20 @@ def rerun(wait: bool | float = True) -> None:
           intelligently - the longest total delay will be respected.
         - When ``wait=False``, all pending delayed reruns are cleared and an
           immediate rerun is attempted.
+        - When ``scope="fragment"``, the wait parameter is ignored and the fragment
+          is rerun immediately, as fragment reruns are typically quick operations.
 
     Examples:
         Soft rerun as soon as possible::
 
-            rerun()  # or rerun(wait=True)
+            rerun()  # Full app rerun
+
+        Fragment-scoped rerun (Streamlit 1.52+ style)::
+
+            @st.fragment
+            def my_fragment():
+                if st.button("Refresh fragment"):
+                    rerun("fragment")  # Positional arg works!
 
         Ensure toast is visible before rerun::
 
@@ -208,17 +226,28 @@ def rerun(wait: bool | float = True) -> None:
 
             st.button("Click me", on_click=lambda: rerun(wait=False))
 
+        Named parameters for clarity::
+
+            rerun(scope="fragment")  # Fragment rerun
+            rerun(scope="app", wait=1.5)  # Full app with delay
+
     See Also:
         :func:`wait`: Request delay without triggering rerun
         :func:`check_rerun`: Execute pending reruns
     """
+
+    # Handle fragment scope: ignore wait and call original directly
+    # Fragment reruns are fast and don't need delay management
+    if scope == "fragment":
+        original_rerun(scope="fragment")
+        return
 
     # Handle wait=False (immediate hard rerun)
     if wait is False:
         # Execute immediately without waiting for current execution
         # This clears any pending delayed reruns and triggers an immediate rerun
         try:
-            state.rerun = None  # Clear any pending rerun
+            state[state_key("rerun")] = None  # Clear any pending rerun
             original_rerun()  # Trigger immediate rerun
         except Exception:
             # st.rerun() raises an exception when called from within a callback context
@@ -236,8 +265,9 @@ def rerun(wait: bool | float = True) -> None:
     current_time = time.time()
 
     # If there's already a pending delay or rerun, merge intelligently
-    if 'rerun' in state and state.rerun:
-        existing = state.rerun
+    rerun_key = state_key("rerun")
+    if rerun_key in state and state[rerun_key]:
+        existing = state[rerun_key]
         existing_requested_at = existing.get('requested_at', current_time)
         existing_delay = existing.get('delay', 0)
 
@@ -250,7 +280,7 @@ def rerun(wait: bool | float = True) -> None:
         # Use whichever execution time is later (longest total delay)
         if new_execute_at > existing_execute_at:
             # New request requires longer wait - update to new timestamp and delay
-            state.rerun = {
+            state[rerun_key] = {
                 'requested_at': current_time,
                 'delay': delay,
                 'requested': True
@@ -259,14 +289,14 @@ def rerun(wait: bool | float = True) -> None:
             # Existing delay already waits long enough
             # Keep the existing delay but mark as requested
             elapsed = current_time - existing_requested_at
-            state.rerun = {
+            state[rerun_key] = {
                 'requested_at': current_time,
                 'delay': max(0, existing_delay - elapsed),
                 'requested': True
             }
     else:
         # First request
-        state.rerun = {
+        state[rerun_key] = {
             'requested_at': current_time,
             'delay': delay,
             'requested': True
@@ -313,11 +343,12 @@ def wait(delay: bool | float = True) -> None:
     """
     # Handle wait(False) - execute pending rerun immediately
     if delay is False:
-        if 'rerun' in state and state.rerun:
-            existing_requested = state.rerun.get('requested', False)
+        rerun_key = state_key("rerun")
+        if rerun_key in state and state[rerun_key]:
+            existing_requested = state[rerun_key].get('requested', False)
             if existing_requested:
                 # There's a pending rerun - execute it immediately
-                state.rerun = None
+                state[rerun_key] = None
                 original_rerun()
         return
 
@@ -331,8 +362,9 @@ def wait(delay: bool | float = True) -> None:
     delay = float(delay)
 
     # Check if there's already a delay or rerun request
-    if 'rerun' in state and state.rerun:
-        existing = state.rerun
+    rerun_key = state_key("rerun")
+    if rerun_key in state and state[rerun_key]:
+        existing = state[rerun_key]
         existing_requested_at = existing.get('requested_at', current_time)
         existing_delay = existing.get('delay', 0)
         existing_requested = existing.get('requested', False)
@@ -345,7 +377,7 @@ def wait(delay: bool | float = True) -> None:
 
         # If our desired delay is longer, update it
         if desired_execute_at > existing_execute_at:
-            state.rerun = {
+            state[rerun_key] = {
                 'requested_at': current_time,
                 'delay': delay,
                 'requested': existing_requested  # Preserve requested flag
@@ -353,14 +385,14 @@ def wait(delay: bool | float = True) -> None:
         else:
             # Keep existing but update timestamp
             elapsed = current_time - existing_requested_at
-            state.rerun = {
+            state[rerun_key] = {
                 'requested_at': current_time,
                 'delay': max(0, existing_delay - elapsed),
                 'requested': existing_requested
             }
     else:
         # First delay request - create entry with requested=False
-        state.rerun = {
+        state[rerun_key] = {
             'requested_at': current_time,
             'delay': delay,
             'requested': False
@@ -395,8 +427,9 @@ def check_rerun() -> None:
         :func:`wait`: Request delay without rerun
     """
     import time
-    if 'rerun' in state and state.rerun:
-        rerun_info = state.rerun
+    rerun_key = state_key("rerun")
+    if rerun_key in state and state[rerun_key]:
+        rerun_info = state[rerun_key]
         requested = rerun_info.get('requested', False)
 
         # Only execute rerun if it was actually requested (not just a delay)
@@ -413,18 +446,18 @@ def check_rerun() -> None:
                 time.sleep(remaining_delay)
 
             # Clear the rerun flag and execute rerun
-            state.rerun = None
+            state[rerun_key] = None
             original_rerun()
 
-def format(string: str, **kwargs: Any) -> str:
+def format(string: str, context: Optional[dict[str, Any]] = None) -> str:
     """Format string by evaluating <<expression>> tags.
 
     This function finds all occurrences of ``<<...>>`` in the string and evaluates
-    the expressions within them using the provided keyword arguments as context.
+    the expressions within them using the provided context.
 
     Args:
         string: The input string containing ``<<...>>`` tags.
-        **kwargs: Keyword arguments used as the context namespace for evaluating expressions.
+        context: dict of keyword arguments used as the context namespace for evaluating expressions.
 
     Returns:
         The formatted string with all ``<<...>>`` tags replaced by their evaluated results.
@@ -433,27 +466,25 @@ def format(string: str, **kwargs: Any) -> str:
     Examples:
         Basic expression evaluation::
 
-            result = format("Result: <<x + y>>", x=10, y=20)
+            result = format("Result: <<x + y>>", context={'x': 10, 'y': 20})
             # Returns: "Result: 30"
 
         Multiple expressions::
 
-            text = format("Hello <<name>>, you are <<age>> years old", name="Alice", age=25)
+            text = format("Hello <<name>>, you are <<age>> years old", context={'name': "Alice", 'age': 25})
             # Returns: "Hello Alice, you are 25 years old"
 
         With error handling::
 
-            result = format("Value: <<undefined_var>>", x=5)
+            result = format("Value: <<undefined_var>>", context={'x': 5})
             # Returns: "Value: <<undefined_var>>" (original preserved)
 
     Note:
         Expressions are evaluated using Python's ``eval()`` function.
         Only use this with trusted input as it can execute arbitrary code.
     """
-    if not kwargs:
-        context: dict[str, Any] = {}
-    else:
-        context = kwargs
+
+    context = context or {}
     def replace_expr(match: re.Match[str]) -> str:
         expr = match.group(1)
         try:
@@ -562,10 +593,11 @@ def original_set_page_config(*args,**kwargs) -> None:
         return st.set_page_config(*args,**kwargs)
 
 def set_page_config(*args: Any, **kwargs: Any) -> None:
-    """No-op wrapper for st.set_page_config.
+    """No-op wrapper for st.set_page_config with deprecation warning.
 
     This patched version of Streamlit's ``set_page_config`` is a no-op that
-    prevents users from calling it directly from notebook files.
+    prevents users from calling it directly from notebook files and warns them
+    about the proper way to configure page layout.
 
     Page configuration is now managed through the ``Notebook.config.layout``
     attribute instead. This ensures consistent page configuration and prevents
@@ -586,7 +618,7 @@ def set_page_config(*args: Any, **kwargs: Any) -> None:
             import streamlit as st
             from streamlit_notebook import st_notebook
 
-            # This no longer works
+            # This no longer works - will show a warning
             st.set_page_config(layout="wide")
 
             nb = st_notebook()
@@ -607,5 +639,77 @@ def set_page_config(*args: Any, **kwargs: Any) -> None:
         :class:`~streamlit_notebook.core.notebook.Layout`: Layout configuration class
         :class:`~streamlit_notebook.core.notebook.NotebookConfig`: Notebook configuration
     """
-    # No-op: page config is now managed by Notebook.config.layout
-    pass
+    # Show warning to guide users
+    import warnings
+    warnings.warn(
+        "st.set_page_config() is not supported in streamlit_notebook. "
+        "Use the 'layout' parameter when creating your notebook instead:\n\n"
+        "  from streamlit_notebook import st_notebook, Layout\n"
+        "  nb = st_notebook(\n"
+        "      layout=Layout(\n"
+        "          width='wide',  # or 'centered'\n"
+        "          initial_sidebar_state='auto'  # or 'expanded', 'collapsed'\n"
+        "      )\n"
+        "  )\n\n"
+        "This provides the same functionality as st.set_page_config().",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+
+def apply_global_patches() -> None:
+    """Apply global patches to Streamlit functions.
+
+    This function patches st.set_page_config, st.rerun, and st.stop to work
+    properly within the notebook environment. These patches are global and
+    should be applied once at startup.
+
+    The patches are:
+        - st.set_page_config: Made into a no-op (config managed by notebook)
+        - st.rerun: Redirected to notebook's custom rerun with delays
+        - st.stop: Raises RuntimeError to halt cell execution gracefully
+
+    This function is idempotent - calling it multiple times has no effect
+    beyond the first call.
+
+    Note:
+        This should be called as early as possible when a Streamlit context
+        is available, but not from the CLI launcher process.
+
+    See Also:
+        :func:`set_page_config`: Patched version of st.set_page_config
+        :func:`rerun`: Custom rerun with delay support
+    """
+    import sys
+
+    # Patch st.set_page_config
+    if not hasattr(st.set_page_config, '_patched'):
+        set_page_config._patched = True
+        set_page_config._original = st.set_page_config
+        st.set_page_config = set_page_config
+        sys.modules["streamlit"].set_page_config = set_page_config
+
+    # Patch st.rerun
+    if not hasattr(st.rerun, '_patched'):
+        def patched_rerun(scope: Literal['app','fragment']='app', wait: bool | float = True):
+            """Patched st.rerun that implements the notebook's rerun method."""
+            # Use our custom rerun instead
+            rerun(scope=scope, wait=wait)
+
+        patched_rerun._patched = True
+        patched_rerun._original = st.rerun
+        st.rerun = patched_rerun
+        sys.modules["streamlit"].rerun = patched_rerun
+
+    # Patch st.stop
+    if not hasattr(st.stop, '_patched'):
+        def patched_stop():
+            """Patched st.stop that raises RuntimeError to stop cell execution."""
+            raise RuntimeError(
+                "Cell execution has been stopped."
+            )
+
+        patched_stop._patched = True
+        patched_stop._original = st.stop
+        st.stop = patched_stop
+        sys.modules["streamlit"].stop = patched_stop

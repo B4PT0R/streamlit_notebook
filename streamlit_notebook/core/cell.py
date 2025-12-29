@@ -45,16 +45,70 @@ See Also:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Literal
+from typing import TYPE_CHECKING, Any, Optional, Literal, Union
 from types import NoneType
 import streamlit as st
-from streamlit_notebook.shell.shell import short_id
+from modict import modict
+from .utils import short_id
 from .cell_types import BaseCellType, PyType, MDType, HTMLType
 
 if TYPE_CHECKING:
     from .notebook import Notebook
 
 state = st.session_state
+
+
+class CellConfig(modict):
+    """Configuration model for individual cells.
+
+    This class provides parameters for cell behavior and execution.
+
+    Attributes:
+        type: Cell type - "code", "markdown", or "html". Defaults to "code".
+        code: Code content of the cell. Defaults to "".
+        reactive: Whether the cell auto-reruns on UI changes. Defaults to False.
+        fragment: Whether the cell runs as a Streamlit fragment. Defaults to False.
+        minimized: Whether the cell code area is minimized. Defaults to False.
+        run_every: Auto-rerun interval in seconds (Streamlit 1.52+, requires fragment=True).
+            None (default) disables auto-rerun. Can be int or float.
+
+    Examples:
+        Create cell with configuration::
+
+            config = CellConfig(
+                type="code",
+                reactive=True,
+                fragment=True,
+                run_every=5.0  # Auto-refresh every 5 seconds
+            )
+
+        Auto-updating cell::
+
+            @nb.cell(fragment=True, run_every=1.0)
+            def live_data():
+                '''Display live updating data'''
+                st.write(f"Time: {time.time()}")
+
+    Note:
+        - run_every requires fragment=True (Streamlit fragments constraint)
+        - Useful for dashboards, live monitoring, progress tracking
+        - When run_every is set, cell reruns automatically at specified interval
+
+    See Also:
+        :class:`Cell`: Main cell class that uses this configuration
+        :class:`BaseCellType`: Cell type implementation
+    """
+    _config = modict.config(
+        extra='ignore',
+        strict=False,
+        enforce_json=True
+    )
+    type: str = "code"
+    code: str = ""
+    reactive: bool = False
+    fragment: bool = False
+    minimized: bool = False
+    run_every: Optional[Union[int, float]] = None
 
 class Cell:
 
@@ -88,19 +142,15 @@ class Cell:
 
         Returns:
            Cell: A new Cell object created from the dictionary.
-        """        
-        # Create a new cell with the dictionary values
+        """
+        # Use CellConfig to handle defaults and validation
         cell = cls(
-            d.get("key", short_id()),
-            d.get("type", "code"),
-            d.get("code", ""),
-            d.get("reactive", False),
-            d.get("fragment", False),
-            d.get("minimized", False)
+            key=d.get("key", short_id()),
+            **CellConfig(d)
         )
         return cell
 
-    def __init__(self,key,type="code",code="",reactive=False,fragment=False,minimized=False):
+    def __init__(self, key, type="code", code="", reactive=False, fragment=False, minimized=False, run_every=None):
         """
         Initializes a new cell instance.
 
@@ -111,9 +161,10 @@ class Cell:
             reactive (bool, optional): Whether the cell is reactive. Defaults to False.
             fragment (bool, optional): Whether the cell is a fragment. Defaults to False.
             minimized (bool, optional): Whether the cell code area is minimized. Defaults to False.
+            run_every (int | float | None, optional): Auto-rerun interval in seconds (requires fragment=True). Defaults to None.
         """
 
-        self._cell_type: BaseCellType = self._to_type_class(type)(self,key,type,code,reactive,fragment,minimized)
+        self._cell_type: BaseCellType = self._to_type_class(type)(self, key, type, code, reactive, fragment, minimized, run_every)
         self._notebook : Notebook = None
 
     @property

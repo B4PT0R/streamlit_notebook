@@ -1,14 +1,9 @@
-"""Public package exports for ``streamlit_notebook``.
+"""Public package exports for ``streamlit_notebook``."""
 
-This module exposes the primary entry points of the package so they can be
-imported directly from :mod:`streamlit_notebook` while keeping a small, clean
-surface for Sphinx autodoc. It also installs a no-op ``set_page_config`` patch
-to prevent users from calling it directly (page config is now managed through
-the Notebook.config.layout attribute).
-"""
+from __future__ import annotations
 
-from .core.notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layout
-from .core.utils import rerun, wait, set_root_path, set_page_config
+import os
+import sys
 
 __all__ = [
     "Notebook",
@@ -18,29 +13,43 @@ __all__ = [
     "NotebookConfig",
     "rerun",
     "wait",
-    "set_root_path",
-    "set_page_config"
 ]
 
-set_root_path(__file__)
+
+def _ensure_root_path(file_path: str) -> None:
+    os.environ["ROOT_PACKAGE_FOLDER"] = os.path.dirname(os.path.abspath(file_path))
+
+
+_ensure_root_path(__file__)
 
 # Load .env file if it exists (for ST_NOTEBOOK_APP_MODE and other env vars)
 try:
     from dotenv import load_dotenv
-    import os
-    load_dotenv(os.path.join(os.getcwd(),'.env'))
+    load_dotenv(os.path.join(os.getcwd(), ".env"))
 except ImportError:
     # python-dotenv not installed, skip
     pass
 
-# Patch streamlit.set_page_config to be context-aware
+def _just_trying_to_access_launch_app_entry_point() -> bool:
+    """
+    True when the module is first imported via the CLI entry point 'st_notebook'.
+    It's just trying to access launch_app.py without really needing to import the Streamlit 
+    or streamlit-notebook machinery at all.
 
-import streamlit as st
-import sys
+    importing Streamlit at this stage can cause bare-mode warnings and other issues because 
+    streamlit runtime isn't yet initialized.
+    As a matter of fact, the CLI launcher just wants to delegate to streamlit run main.py + args in a
+    subprocess.
 
-# Replace st.set_page_config in the streamlit module
-if not hasattr(st.set_page_config, '_patched'):
-    set_page_config._patched = True
-    set_page_config._original=st.set_page_config
-    st.set_page_config = set_page_config
-    sys.modules['streamlit'].set_page_config = set_page_config
+    Once the subprocess is running, main.py will reimport the full package
+    and Streamlit can be safely imported there.
+    """
+    return os.path.basename(sys.argv[0]) in {"st_notebook", "st_notebook.exe"}
+
+# Avoid importing Streamlit during CLI startup to prevent bare-mode warnings.
+if not _just_trying_to_access_launch_app_entry_point():
+    from .core.utils import apply_global_patches, rerun, wait
+    from .core.notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layout
+    apply_global_patches()
+    
+

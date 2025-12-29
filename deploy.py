@@ -74,7 +74,7 @@ def bump_patch_version(version):
 def update_version_in_file(new_version):
     """Update the version in pyproject.toml using line-by-line replacement."""
     pyproject_path = Path("pyproject.toml")
-    lines = pyproject_path.read_text().splitlines(keepends=True)
+    lines = pyproject_path.read_text(encoding="utf-8").splitlines(keepends=True)
 
     # Track if we're in the [project] section
     in_project_section = False
@@ -103,7 +103,7 @@ def update_version_in_file(new_version):
         print("Error: Could not find version field in [project] section")
         sys.exit(1)
 
-    pyproject_path.write_text(''.join(new_lines))
+    pyproject_path.write_text(''.join(new_lines), encoding="utf-8")
     print(f"Updated pyproject.toml to version {new_version}")
 
 

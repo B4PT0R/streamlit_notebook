@@ -56,7 +56,6 @@ See Also:
 
 from __future__ import annotations
 
-from streamlit.runtime.scriptrunner import add_script_run_ctx,get_script_run_ctx
 import subprocess
 import os
 import sys
@@ -118,6 +117,13 @@ def main() -> None:
         :func:`~streamlit_notebook.notebook.st_notebook`: Notebook factory
         :mod:`~streamlit_notebook.main`: Empty notebook template
     """
+
+    # Set environment variable to indicate we're in launcher mode
+    # This allows save() to work properly without triggering Streamlit reloads
+    env=os.environ.copy()
+    env['ST_NOTEBOOK_LAUNCHER_MODE'] = 'true'
+
+
     # Get all arguments after 'st_notebook' command
     args = sys.argv[1:]
 
@@ -133,21 +139,40 @@ def main() -> None:
             notebook_file = arg
             break
 
-    # If no notebook file provided, launch empty notebook interface
+    # Always delegate to main.py to avoid file locking and hot-reload issues
+    # This allows the notebook file to be edited and saved while running
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(script_directory, 'main.py')
+
     if notebook_file is None:
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_directory, 'main.py')
+        # Launch empty notebook interface
         command = ["streamlit", "run", script_path]
-        # Add any arguments that were provided (e.g., -- --app --no-quit)
+        # Add any arguments that were provided (e.g., -- --app)
         if args:
             command.extend(args)
     else:
-        # Pass through all arguments to streamlit run
-        command = ["streamlit", "run"] + args
+        # Pass notebook file via argument to main.py
+        # Remove the notebook file from args and pass it after --
+        remaining_args = [arg for arg in args if arg != notebook_file]
+        command = ["streamlit", "run", script_path]
+        # Add streamlit options (before --)
+        if remaining_args and '--' in remaining_args:
+            separator_idx = remaining_args.index('--')
+            streamlit_args = remaining_args[:separator_idx]
+            script_args = remaining_args[separator_idx:]  # Includes the --
+            command.extend(streamlit_args)
+            command.extend(script_args)
+            command.append(f"--file={notebook_file}")
+        elif remaining_args:
+            # Args exist but no separator, treat as streamlit args
+            command.extend(remaining_args)
+            command.extend(["--", f"--file={notebook_file}"])
+        else:
+            # No other args, just pass the file
+            command.extend(["--", f"--file={notebook_file}"])
 
-    subprocess.run(command)
+    subprocess.run(command, env=env)
 
 
 if __name__ == '__main__':
     main()
-

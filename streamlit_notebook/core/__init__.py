@@ -8,7 +8,7 @@ from .notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layou
 from .cell import Cell
 from .utils import rerun, wait, display, format, check_rerun, root_join, state
 from .echo import echo
-from ..shell.shell import Shell
+from pynteract import Shell
 
 __all__ = [
     'Notebook',

@@ -31,65 +31,8 @@ from __future__ import annotations
 import streamlit as st
 import os
 import sys
-
-def get_default_notebook_template() -> str:
-    """Generate default empty notebook template code.
-
-    Creates a minimal notebook script with environment-aware settings.
-    Detects app mode via ``ST_NOTEBOOK_APP_MODE`` environment variable
-    and adjusts template accordingly.
-
-    Returns:
-        Python source code string for a new empty notebook with proper
-        imports, configuration, and placeholder cells.
-
-    Examples:
-        The generated template looks like::
-
-            from streamlit_notebook import st_notebook
-            import streamlit as st
-
-            nb = st_notebook(title='new_notebook')
-
-            # Add cells below using @nb.cell() decorator
-            # @nb.cell(type='code')
-            # def cell_0():
-            #     st.write("Hello, World!")
-
-            nb.render()
-
-    Note:
-        If app mode is detected, the template includes ``app_mode=True``
-        parameter for production deployment (locked in app view).
-    """
-    # Check for app mode via environment variable
-    # The --app flag is captured and converted to ST_NOTEBOOK_APP_MODE in the st_notebook factory
-    app_mode = os.getenv('ST_NOTEBOOK_APP_MODE', '').lower() == 'true'
-
-    params = []
-    params.append("title='new_notebook'")
-    if app_mode:
-        params.append("app_mode=True")
-
-    params_str = ", ".join(params)
-
-    return f"""# Streamlit Notebook
-# This is a self-contained notebook file
-
-from streamlit_notebook import st_notebook
-import streamlit as st
-
-nb = st_notebook({params_str})
-
-# Add cells below using @nb.cell() decorator
-# Example:
-# @nb.cell(type='code')
-# def cell_0():
-#     st.write("Hello, World!")
-
-# Render the notebook
-nb.render()
-"""
+from core.utils import state_key
+from core.templates import get_default_notebook_template
 
 def main() -> None:
     """Main entry point for the notebook application.
@@ -117,24 +60,31 @@ def main() -> None:
         :func:`get_default_notebook_template`: Default template generator
         :mod:`~streamlit_notebook.launch_app`: CLI launcher module
     """
-    # Set environment variable to indicate we're in launcher mode
-    # This allows save() to work properly without triggering Streamlit reloads
-    os.environ['ST_NOTEBOOK_LAUNCHER_MODE'] = 'true'
 
     # Initialize notebook_script in session_state if not present
-    if 'notebook_script' not in st.session_state:
-        # Check if a notebook file was passed as command-line argument
-        if len(sys.argv) > 1 and sys.argv[1].endswith('.py'):
-            filepath = sys.argv[1]
+    notebook_script_key = state_key("notebook_script")
+    if notebook_script_key not in st.session_state:
+        # Check if a notebook file was passed via --file= argument
+        filepath = None
+        for arg in sys.argv[1:]:
+            if arg.startswith('--file='):
+                filepath = arg.split('=', 1)[1]
+                break
+            # Also support legacy format for backwards compatibility
+            elif arg.endswith('.py') and not arg.startswith('-'):
+                filepath = arg
+                break
+
+        if filepath:
             try:
-                with open(filepath, 'r') as f:
-                    st.session_state.notebook_script = f.read()
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    st.session_state[notebook_script_key] = f.read()
             except Exception as e:
                 st.error(f"Failed to load notebook: {str(e)}")
-                st.session_state.notebook_script = get_default_notebook_template()
+                st.session_state[notebook_script_key] = get_default_notebook_template()
         else:
             # No file provided, use default empty notebook template
-            st.session_state.notebook_script = get_default_notebook_template()
+            st.session_state[notebook_script_key] = get_default_notebook_template()
 
     # Execute the notebook script
     # Use special filename so get_source() can retrieve the script from session_state
@@ -147,7 +97,7 @@ def main() -> None:
     })
     try:
         # Compile with special filename
-        code_obj = compile(st.session_state.notebook_script, '<notebook_script>', 'exec')
+        code_obj = compile(st.session_state[notebook_script_key], '<notebook_script>', 'exec')
         exec(code_obj, exec_globals)
     except Exception as e:
         import traceback
@@ -156,4 +106,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

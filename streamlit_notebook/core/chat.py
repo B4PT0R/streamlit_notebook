@@ -1,5 +1,5 @@
 import streamlit as st
-from .utils import root_join, rerun, short_id
+from .utils import root_join, rerun, short_id, state_key
 import os
 import json
 from ..core.notebook import get_notebook
@@ -73,6 +73,7 @@ def settings_dialog():
 
     # Create two main columns
     left_col, right_col = st.columns(2)
+    agent = state[state_key("agent")]
 
     with left_col:
         
@@ -81,17 +82,26 @@ def settings_dialog():
             st.write("#### User & API")
             c1, c2 = st.columns(2, gap="small")
             with c1:
-                username=st.text_input("Your name", value=state.agent.config.get("username", "Unknown"))
+                username=st.text_input(
+                    "Your name",
+                    value=agent.config.get("username", "Unknown"),
+                    key=state_key("chat_settings_username"),
+                )
             with c2:
-                userage=st.text_input("Your age", value=state.agent.config.get("userage", "Unknown"))
+                userage=st.text_input(
+                    "Your age",
+                    value=agent.config.get("userage", "Unknown"),
+                    key=state_key("chat_settings_userage"),
+                )
 
             # OpenAI API Key
-            current_api_key = state.agent.config.get("openai_api_key", "") or ""
+            current_api_key = agent.config.get("openai_api_key", "") or ""
             api_key = st.text_input(
                 "OpenAI API Key",
                 value=current_api_key,
                 type="password",
-                help="Leave empty to use OPENAI_API_KEY environment variable"
+                help="Leave empty to use OPENAI_API_KEY environment variable",
+                key=state_key("chat_settings_api_key"),
             )
 
         # Model and Reasoning - horizontal
@@ -102,13 +112,15 @@ def settings_dialog():
                 model = st.selectbox(
                     "Model",
                     ["gpt-5.1", "gpt-5.1-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"],
-                    index=["gpt-5.1", "gpt-5.1-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"].index(state.agent.config.get("model", "gpt-4.1-mini"))
+                    index=["gpt-5.1", "gpt-5.1-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"].index(agent.config.get("model", "gpt-4.1-mini")),
+                    key=state_key("chat_settings_model"),
                 )
             with c2:
                 reasoning_effort = st.selectbox(
                     "Reasoning Effort",
                     ["low", "medium", "high"],
-                    index=["low", "medium", "high"].index(state.agent.config.get("reasoning_effort", "medium"))
+                    index=["low", "medium", "high"].index(agent.config.get("reasoning_effort", "medium")),
+                    key=state_key("chat_settings_reasoning_effort"),
                 )
 
             # Temperature
@@ -116,8 +128,9 @@ def settings_dialog():
                 "Temperature",
                 min_value=0.0,
                 max_value=2.0,
-                value=state.agent.config.get("temperature", 0.7),
-                step=0.1
+                value=agent.config.get("temperature", 0.7),
+                step=0.1,
+                key=state_key("chat_settings_temperature"),
             )
 
         # Token limits - 3 columns
@@ -129,24 +142,27 @@ def settings_dialog():
                     "Max Completion",
                     min_value=100,
                     max_value=16000,
-                    value=state.agent.config.get("max_completion_tokens", 4000),
-                    step=100
+                    value=agent.config.get("max_completion_tokens", 4000),
+                    step=100,
+                    key=state_key("chat_settings_max_completion"),
                 )
             with c2:
                 max_input_tokens = st.number_input(
                     "Max Input",
                     min_value=4000,
                     max_value=32000,
-                    value=state.agent.config.get("max_input_tokens", 8000),
-                    step=1000
+                    value=agent.config.get("max_input_tokens", 8000),
+                    step=1000,
+                    key=state_key("chat_settings_max_input"),
                 )
             with c3:
                 token_limit = st.number_input(
                     "Token Limit",
                     min_value=1000,
                     max_value=200000,
-                    value=state.agent.config.get("token_limit", 128000),
-                    step=1000
+                    value=agent.config.get("token_limit", 128000),
+                    step=1000,
+                    key=state_key("chat_settings_token_limit"),
                 )
 
     with right_col:
@@ -158,17 +174,20 @@ def settings_dialog():
             with c1:
                 voice_enabled = st.checkbox(
                     "Voice Enabled",
-                    value=state.agent.config.get("voice_enabled", False)
+                    value=agent.config.get("voice_enabled", False),
+                    key=state_key("chat_settings_voice_enabled"),
                 )
             with c2:
                 vision_enabled = st.checkbox(
                     "Vision Enabled",
-                    value=state.agent.config.get("vision_enabled", True)
+                    value=agent.config.get("vision_enabled", True),
+                    key=state_key("chat_settings_vision_enabled"),
                 )
             with c3:
                 show_tool_calls = st.checkbox(
                     "Show Tool Calls",
-                    value=state.get("show_tool_calls", True)
+                    value=state.get(state_key("show_tool_calls"), True),
+                    key=state_key("chat_settings_show_tool_calls"),
                 )
 
         # Voice model and voice - horizontal
@@ -180,20 +199,23 @@ def settings_dialog():
                 voice_model = st.selectbox(
                     "Voice Model",
                     ["gpt-4o-mini-tts", "gpt-4o-tts"],
-                    index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(state.agent.config.get("voice_model", "gpt-4o-mini-tts"))
+                    index=["gpt-4o-mini-tts", "gpt-4o-tts"].index(agent.config.get("voice_model", "gpt-4o-mini-tts")),
+                    key=state_key("chat_settings_voice_model"),
                 )
             with c2:
                 voice = st.selectbox(
                     "Voice",
                     ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-                    index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(state.agent.config.get("voice", "nova"))
+                    index=["alloy", "echo", "fable", "onyx", "nova", "shimmer"].index(agent.config.get("voice", "nova")),
+                    key=state_key("chat_settings_voice"),
                 )
 
             # Voice instructions
             voice_instructions = st.text_area(
                 "Voice Instructions",
-                value=state.agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
-                height=80
+                value=agent.config.get("voice_instructions", "You speak with a friendly and intelligent tone."),
+                height=80,
+                key=state_key("chat_settings_voice_instructions"),
             )
 
         with st.container(border=True, gap="small", height='stretch'):
@@ -201,14 +223,19 @@ def settings_dialog():
             with st.container(horizontal=True):
                 st.write("#### System Prompt")
                 st.space(size='stretch')
-                if st.button("🔄 Reset to Default", help="Restore factory default system prompt"):
-                    state.reset_system_prompt = True
+                if st.button(
+                    "🔄 Reset to Default",
+                    help="Restore factory default system prompt",
+                    key=state_key("chat_settings_reset_system_prompt"),
+                ):
+                    state[state_key("reset_system_prompt")] = True
 
             # Initialize reset flag if not present
-            if 'reset_system_prompt' not in state:
-                state.reset_system_prompt = False
+            reset_prompt_key = state_key("reset_system_prompt")
+            if reset_prompt_key not in state:
+                state[reset_prompt_key] = False
 
-            current_system = state.agent.config.get("system", "")
+            current_system = agent.config.get("system", "")
             if os.path.isfile(current_system):
                 with open(current_system, 'r', encoding='utf-8') as f:
                     current_system_content = f.read()
@@ -216,15 +243,16 @@ def settings_dialog():
                 current_system_content = current_system if isinstance(current_system, str) else get_default_system_prompt()
 
             # If reset was triggered, use default prompt
-            if state.reset_system_prompt:
+            if state[reset_prompt_key]:
                 current_system_content = get_default_system_prompt()
-                state.reset_system_prompt = False
+                state[reset_prompt_key] = False
 
             system_prompt = st.text_area(
                 "System Prompt",
                 value=current_system_content,
                 height='stretch',
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key=state_key("chat_settings_system_prompt"),
             )
 
 
@@ -237,26 +265,26 @@ def settings_dialog():
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("Save", type="primary", width='stretch'):
+            if st.button("Save", type="primary", width='stretch', key=state_key("chat_settings_save")):
                 # Apply settings to agent config
-                state.agent.config.username=username
-                state.agent.config.userage=userage
-                state.agent.config.model = model
-                state.agent.config.temperature = temperature
-                state.agent.config.max_completion_tokens = max_tokens
-                state.agent.config.max_input_tokens = max_input_tokens
-                state.agent.config.token_limit = token_limit
-                state.agent.config.reasoning_effort = reasoning_effort
-                state.agent.config.vision_enabled = vision_enabled
-                state.agent.config.voice_enabled = voice_enabled
-                state.agent.config.voice_model = voice_model
-                state.agent.config.voice = voice
-                state.agent.config.voice_instructions = voice_instructions
-                state.agent.config.system = system_prompt
-                state.show_tool_calls = show_tool_calls
+                agent.config.username=username
+                agent.config.userage=userage
+                agent.config.model = model
+                agent.config.temperature = temperature
+                agent.config.max_completion_tokens = max_tokens
+                agent.config.max_input_tokens = max_input_tokens
+                agent.config.token_limit = token_limit
+                agent.config.reasoning_effort = reasoning_effort
+                agent.config.vision_enabled = vision_enabled
+                agent.config.voice_enabled = voice_enabled
+                agent.config.voice_model = voice_model
+                agent.config.voice = voice
+                agent.config.voice_instructions = voice_instructions
+                agent.config.system = system_prompt
+                state[state_key("show_tool_calls")] = show_tool_calls
 
                 # Apply API key (None if empty string)
-                state.agent.config.openai_api_key = api_key if api_key.strip() else None
+                agent.config.openai_api_key = api_key if api_key.strip() else None
 
                 # Save to settings file (don't save the API key for security)
                 new_settings = {
@@ -273,13 +301,13 @@ def settings_dialog():
                     "show_tool_calls": show_tool_calls,
                     "system_prompt": system_prompt,
                 }
-                save_settings(state.agent, new_settings)
+                save_settings(agent, new_settings)
 
                 st.success("Settings saved!")
                 rerun(wait=False)
 
         with col2:
-            if st.button("Cancel", width='stretch'):
+            if st.button("Cancel", width='stretch', key=state_key("chat_settings_cancel")):
                 rerun(wait=False)
     
         st.space(size='stretch')
@@ -293,25 +321,26 @@ def init_chat():
     if not HAS_AGENT:
         return False
 
-    if not state.get("chat_initialized",False):
+    if not state.get(state_key("chat_initialized"), False):
         workfolder = os.path.expanduser("~/agent_workfolder")
 
         # Create agent with default settings first
-        state.agent=Agent(
+        state[state_key("agent")] = Agent(
             model="gpt-4.1-mini",
             system=root_join('agent','prompts','system_prompt.txt'),
-            auto_proceed=False,
+            auto_proceed=True,
             workfolder=workfolder
         )
 
         # Load and apply saved settings
-        settings = load_settings(state.agent)
-        state.agent.config.update(settings)
-        state.show_tool_calls = settings.get("show_tool_calls", True)
+        agent = state[state_key("agent")]
+        settings = load_settings(agent)
+        agent.config.update(settings)
+        state[state_key("show_tool_calls")] = settings.get("show_tool_calls", True)
 
-        state.agent.hooks.process_content_stream=show_content_stream
-        state.agent.hooks.process_message=show_message
-        state.agent.hooks.audio_playback_hook=audio_playback_backend
+        agent.hooks.process_content_stream=show_content_stream
+        agent.hooks.process_message=show_message
+        agent.hooks.audio_playback_hook=audio_playback_backend
 
         def custom_notebook_messages():
             notebook=get_notebook()
@@ -321,17 +350,17 @@ def init_chat():
             else:
                 return []
 
-        state.agent.hooks.custom_messages_hook=custom_notebook_messages
+        agent.hooks.custom_messages_hook=custom_notebook_messages
 
         # Always start with a new session
-        state.agent.start_new_session()
+        agent.start_new_session()
 
         # Inject agent into shell namespace so it's accessible as __agent__
         notebook = get_notebook()
         if notebook and notebook.shell:
-            state.agent.init_shell(notebook.shell)
+            agent.init_shell(notebook.shell)
 
-        state.chat_initialized=True
+        state[state_key("chat_initialized")] = True
 
     return True
 
@@ -364,13 +393,13 @@ def show_message(msg):
     required:
         - msg
     """
-    if not state.get('chat_initialized'):
+    if not state.get(state_key("chat_initialized")):
         return
     
-    state.stream_area.empty()
+    state[state_key("stream_area")].empty()
 
     # Check if we should show tool calls
-    show_tools = state.get('show_tool_calls', False)
+    show_tools = state.get(state_key("show_tool_calls"), False)
 
     if msg.role in ['user','assistant'] and not msg.type=='image':
         # Check if there's actual content to display
@@ -381,7 +410,7 @@ def show_message(msg):
         if not has_content and not has_tool_calls:
             return
 
-        with state.chat_area:
+        with state[state_key("chat_area")]:
             with st.chat_message(name=msg.role, avatar=avatar(msg.role)):
                 if has_content:
                     st.markdown(msg.content)
@@ -398,12 +427,12 @@ def show_message(msg):
                                     st.json(args)
 
     elif msg.type=='image':
-        with state.chat_area:
+        with state[state_key("chat_area")]:
             st.image(msg.as_bytesio(),width='stretch')
 
     elif msg.role=='tool':
         if show_tools:
-            with state.chat_area:
+            with state[state_key("chat_area")]:
                 if msg.content.strip():
                     with st.chat_message(name="system", avatar=avatar("system")):
                         with st.expander(f'🔧 Tool Response: {msg.name}'):
@@ -415,15 +444,16 @@ def show_session():
     description: |
         Iterates through the session message history and displays each message in the UI.
     """
-    for msg in state.agent.messages:
-        if msg.session_id==state.agent.current_session_id:
+    agent = state[state_key("agent")]
+    for msg in agent.messages:
+        if msg.session_id==agent.current_session_id:
             show_message(msg)
 
 
 def show_content_stream(stream):
-    if not state.get('chat_initialized'):
+    if not state.get(state_key("chat_initialized")):
         return
-    with state.stream_area:
+    with state[state_key("stream_area")]:
         with st.chat_message("assistant",avatar=avatar("assistant")):
             # Use markdown instead of write for more stable rendering
             st.write_stream(stream)
@@ -442,9 +472,11 @@ def show_chat():
             "```"
         )
         def on_back_click():
-            state.chat_mode = False
-        st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
+            state[state_key("chat_mode")] = False
+        st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key=state_key("button_back_to_notebook"))
         return
+
+    agent = state[state_key("agent")]
 
     # session management and settings
 
@@ -453,31 +485,31 @@ def show_chat():
 
         with col1:
             # Session selector
-            sessions = state.agent.get_sessions()
+            sessions = agent.get_sessions()
             if sessions:
                 st.caption("Load a session")
                 selected_session = st.selectbox(
                     "Load a session",
                     options=sessions,
                     format_func=lambda x: x.replace('.json', '') if x.endswith('.json') else x,
-                    index=sessions.index(state.agent.current_session_id) if state.agent.current_session_id in sessions else 0,
-                    key="session_selector",
+                    index=sessions.index(agent.current_session_id) if agent.current_session_id in sessions else 0,
+                    key=state_key("session_selector"),
                     label_visibility="collapsed"
                 )
 
                 # Load selected session if different from current
-                if selected_session != state.agent.current_session_id:
-                    state.agent.load_session(selected_session)
+                if selected_session != agent.current_session_id:
+                    agent.load_session(selected_session)
                     rerun()
 
         with col2:
             # New session button
             st.caption("Or create a new one")
-            if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session"):
-                state.agent.start_new_session()
+            if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session", key=state_key("chat_new_session_button")):
+                agent.start_new_session()
                 rerun()
 
-        if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings"):
+        if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings", key=state_key("chat_settings_button")):
             settings_dialog()
 
     # Logo
@@ -489,44 +521,36 @@ def show_chat():
 
     # Chat area
 
-    state.chat_area=st.container()
-    state.stream_area=st.empty()
+    state[state_key("chat_area")] = st.container()
+    state[state_key("stream_area")] = st.empty()
 
-    with state.chat_area:
+    with state[state_key("chat_area")]:
         show_session()
 
     # Chat input
-    prompt=st.chat_input("Ask me anything", accept_audio=True, accept_file="multiple", key="chat_input")
+    prompt=st.chat_input("Ask me anything", accept_audio=True, accept_file="multiple", key=state_key("chat_input"))
 
-    with state.stream_area:
+    with state[state_key("stream_area")]:
         try:
-            if not state.get('agent_has_finished',True):
-                state.agent_has_finished=state.agent()
-            # Process prompt
-            elif prompt is not None:
+            if prompt is not None:
                 if prompt.files:
                     for file in prompt.files:
-                        state.agent.upload_file(file)
+                        agent.upload_file(file)
                 text=None
                 if prompt.audio:
-                    text=state.agent.transcribe(prompt.audio)
+                    text=agent.transcribe(prompt.audio)
                 elif prompt.text:
                     text=prompt.text
                 if text:
-                    state.agent_has_finished=state.agent(text)
+                    agent(text)
         except APIAuthenticationError as e:
-            with state.chat_area:
+            with state[state_key("chat_area")]:
                 st.warning("AI features (including STT and TTS) can only be used with a valid OpenAI API key. Please set it in '⚙️ Settings' or provide it as an `OPENAI_API_KEY` environment variable. You can get one at https://platform.openai.com/account/api-keys")
         except Exception as e:
-            with state.chat_area:
+            with state[state_key("chat_area")]:
                 st.error(f"Error: {e}")
 
     # Back to notebook button
     def on_back_click():
-        state.chat_mode = False
-    st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key="button_back_to_notebook")
-
-    if not state.get('agent_has_finished',True):
-        rerun()
-
-
+        state[state_key("chat_mode")] = False
+    st.button("← Back to Notebook", on_click=on_back_click, width='stretch', type='tertiary', key=state_key("button_back_to_notebook"))

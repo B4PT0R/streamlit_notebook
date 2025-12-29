@@ -147,12 +147,12 @@ class StreamLogger(Streamer):
         if self.file is not None:
             import os
             if not os.path.isfile(self.file):
-                open(self.file,'w').close()
-            with open(self.file,'a') as f:
+                open(self.file,'w', encoding='utf-8').close()
+            with open(self.file,'a', encoding='utf-8') as f:
                 f.write(output)
         
 def fenced(start: Union[str,regex.Pattern,re.Pattern], end: Union[str,regex.Pattern,re.Pattern], flags=0) -> regex.Pattern:
-    """
+    r"""
     Generates a regex pattern that matches text enclosed between a start and an end delimiter,
     The inner part is captured as the 'content' group (default).
     There can be other captured groups defined in the start and end patterns.

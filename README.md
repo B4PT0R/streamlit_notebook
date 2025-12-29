@@ -161,11 +161,13 @@ st_notebook analysis.py          # Development mode - full notebook interface
 st_notebook analysis.py -- --app # Locked app mode - clean interface, code cells hidden
 ```
 
-Or run it directly with Streamlit! (identical behavior)
+Or run it directly with Streamlit! (same result)
 ```bash
 streamlit run analysis.py          # Development mode
 streamlit run analysis.py -- --app # Locked app mode
 ```
+
+The main difference lies in that streamlit-notebook won't allow you to save changes to the notebook file on which `streamlit run` is currently looping on, which isn't a limitation if you open it with the dedicated `st_notebook` entry point.
 
 ### How it works?
 
@@ -192,7 +194,7 @@ Note: the functions defining the cells will never get called. Doing so would res
 
 ### Cell Types
 
-**One-shot cells:** Run only once when you click Run. Used for imports, data loading, expensive computations.
+**One-shot cells:** Run only when you trigger them manually. Used for imports, initialization, data loading, expensive computations.
 
 **Reactive cells:** Toggle the `Reactive` option on any code cell to make it reactive. These will rerun automatically on every UI interaction and update the python namespace accordingly. Used for widgets and reactive displays.
 
@@ -200,7 +202,7 @@ This selective reactivity lets you separate expensive setup from interactive exp
 
 ### Persistent Shell
 
-All cells execute in an embedded custom interactive shell object, stored in `st.session_state`, that maintains a single long-lived Python session. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results will persist in the shell's namespace across UI interactions.
+All cells execute in an embedded interactive shell (see [Pynteract](https://github.com/B4PT0R/pynteract) for more details), stored in `st.session_state`, that maintains a single long-lived Python session. Unlike regular Streamlit apps that restart from scratch on every rerun, imports, variables, and computed results will persist in the shell's namespace across UI interactions.
 
 **Example:**
 ```python
@@ -240,9 +242,9 @@ def widgets():
     st.bar_chart([value, value*2, value*3])
 ```
 
-Streamlit Notebook doesn't do anything too hacky with Streamlit's internals and only uses the stable Streamlit API for its own functionning. You can think of it as an extension, rather than a replacement. It will adapt to any future versions of Streamlit you may want to install seamlessly, thus letting you benefit from new widgets or features in your notebooks.
+Streamlit Notebook doesn't do anything too hacky with Streamlit's internals and only uses the stable Streamlit API for its own functionning. You can think of it as an extension, rather than a replacement. It will adapt seamlessly to any future versions of Streamlit you may want to install, thus letting you benefit from new widgets or features in your notebooks.
 
-*Note*: It uses the new `width='stretch'` instead of the now deprecated `use_container_width=True` parameter to control its own widgets layout, thus requiring Streamlit 1.5.0 or higher.
+*Note*: It uses the new `width='stretch'` instead of the now deprecated `use_container_width=True` parameter to control its own widgets layout, thus requiring Streamlit 1.52.0 or higher.
 
 ## Real-World Example
 
@@ -684,30 +686,40 @@ This can be useful for automation scripts or when the AI agent needs to close th
 
 **Smart rerun control:**
 
-The notebook provides an improved rerun API with flexible timing control and better compatibility.
+The notebook provides an improved rerun API with flexible timing control, fragment support (Streamlit 1.52+), and better compatibility.
 
 ```python
-# Soft rerun as soon as possible (default)
-nb.rerun()  # or nb.rerun(wait=True)
+# Full app rerun (default)
+st.rerun()  # Soft rerun as soon as possible
 ```
 
 This requests a rerun at the end of the current Streamlit cycle, letting it finish executing without interrupting subsequent operations.
 
 ```python
+# Fragment-scoped rerun (Streamlit 1.52+)
+@st.fragment
+def my_fragment():
+    if st.button("Refresh"):
+        st.rerun("fragment")  # Only reruns this fragment
+```
+
+Fragment reruns are immediate and don't use delay management since they're typically fast operations.
+
+```python
 # Delayed rerun
-nb.rerun(wait=1.5)
+st.rerun(wait=1.5)
 ```
 
 Wait for the specified duration (in seconds) before rerunning. This is useful to let animations or toasts display before the page refreshes.
 
 ```python
 # Hard rerun (immediate)
-nb.rerun(wait=False)
+st.rerun(wait=False)
 ```
 
 Triggers an immediate rerun, equivalent to standard `st.rerun()` where it doesn't fail (e.g., in widget callbacks). In circumstances where `st.rerun()` would fail, it falls back to a soft rerun.
 
-**Note:** In the notebook environment, `st.rerun` is patched to use this upgraded `nb.rerun()`, making it less likely to interfere with the notebook's interface rerun strategy.
+**Note:** In the notebook environment, `st.rerun()` is automatically upgraded to use this enhanced implementation with delay management and fragment support. You can use it directly or via `nb.rerun()` - both work identically.
 
 **Control pending reruns with `wait()`:**
 
@@ -817,7 +829,7 @@ context = json.dumps(nb.get_info(), indent=2)
 - `run_next_cell()` - Execute the next unexecuted cell
 - `restart_session()` - Clear namespace and restart Python session
 - `quit()` - Cleanly shutdown the Streamlit server
-- `rerun(wait)` - Trigger a Streamlit rerun
+- `rerun(scope, wait)` - Trigger a Streamlit rerun (scope: "app" or "fragment", wait: True/False/float)
 - `wait(delay)` - Control pending reruns (delay, execute now, or do nothing)
 - `notify(message, icon, delay)` - Show toast notification
 - `save(filepath)` - Save notebook to file
@@ -1167,8 +1179,6 @@ docker run -p 8501:8501 my-dashboard
 
 Deploy to AWS ECS, Google Cloud Run, Azure Container Apps, or any container platform.
 
-
-
 ### Production Best Practices
 
 ✅ **Do:**
@@ -1236,6 +1246,34 @@ MIT License—see [LICENSE](LICENSE).
 ## Changelog
 
 ### 2025-12 (Latest)
+
+**v0.3.2:**
+
+- **Shell code extraction to `pynteract`**: The former `streamlit_notebook.shell` sub-package has been moved to a standalone package (`pynteract`: [here](https://github.com/B4PT0R/pynteract)) to improve maintainability and separation of concerns.
+
+
+- Explicit UTF-8 encoding for file IO to fix Windows compatibility issues.
+- Internal `st.session_state` keys are now consistently prefixed with `_streamlit_notebook_` to avoid collisions with user-defined keys.
+- Sidebar title inputs now properly stays in sync with the current notebook title.
+- Threads spawned by the agent stream processing pipeline are registered in a global pool and joined after response generation to avoid stray background threads.
+- Added `audioop-lts` as an explicit dependency to ensure pydub compatibility with Python >= 3.13 (the standard lib `audioop` package on which pydub relies has been deprecated and removed from latest python versions). Tested working with 3.14.
+
+- `nb.new_notebook()` now regenerates a new notebook instance from the default template instead of clearing the current one (same behavior as open).
+
+- Streamlit import/patching is deferred to avoid `missing ScriptRunContext` in CLI startup.
+
+- `rerun()` now supports Streamlit 1.52+ fragment scope: `rerun("fragment")` for fragment-only reruns, `rerun("app")` for full app reruns (default). Fragment reruns bypass delay management for immediate execution.
+
+
+
+**v0.3.0:**
+- Improved UI/UX : better cell UI interface, possibility to minimize cells to free up screen space, new Quit button to close the Streamlit server elegantly (having to hit Ctrl+C in the terminal was not ideal…), and other little stuff.
+    
+- new `layout` parameter in the st_notebook factory. Basically equivalent to st.set_page_config, but letting you choose the initial layout width (in %) of the main display, rather than just ‘centered’ or ‘wide’). I also added a slider in the sidebar to adapt the width live from the interface. Note: **You don’t need to call st.set_page_config anymore in your notebook files, and attempting to do so will raise an error**.
+- most features now working properly (many bug fixes)
+- better modularity, organization and documentation of the codebase
+- moved the modict utility used throughout the project to a separate package ([here](https://github.com/B4PT0R/modict)).
+
 
 **v0.2.0 Release:**
 

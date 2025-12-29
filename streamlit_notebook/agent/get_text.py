@@ -461,13 +461,13 @@ def _load_gitignore_patterns(directory: str) -> Optional['pathspec.PathSpec']:
     # Load default gitignore patterns bundled with get_text
     default_gitignore = Path(__file__).parent / 'default_gitignore'
     if default_gitignore.exists():
-        with open(default_gitignore, 'r') as f:
+        with open(default_gitignore, 'r', encoding='utf-8') as f:
             patterns.extend(f.readlines())
 
     # Load local .gitignore if present
     local_gitignore = Path(directory) / '.gitignore'
     if local_gitignore.exists():
-        with open(local_gitignore, 'r') as f:
+        with open(local_gitignore, 'r', encoding='utf-8') as f:
             patterns.extend(f.readlines())
 
     # Create PathSpec from patterns

@@ -45,8 +45,8 @@ from __future__ import annotations
 
 from .cell import Cell
 from .echo import echo
-from .utils import display, format, rerun, check_rerun, root_join, state, wait
-from ..shell import Shell
+from .utils import display, format, rerun, check_rerun, root_join, state, wait, state_key
+from pynteract import Shell
 import streamlit as st
 import os
 from textwrap import dedent, indent
@@ -62,7 +62,7 @@ class Layout(modict):
     replacing direct calls to st.set_page_config from notebook files.
 
     Attributes:
-        width: Page layout width ("centered" or "wide"). Defaults to "centered".
+        width: Page layout width ("centered" or "wide" or 0-100 number). Defaults to "centered".
         initial_sidebar_state: Initial sidebar state ("auto", "expanded", or "collapsed").
             Defaults to "auto".
         menu_items: Dictionary of menu items to customize the hamburger menu.
@@ -78,11 +78,13 @@ class Layout(modict):
                     initial_sidebar_state="collapsed"
                 )
             )
+
+        
     """
     _config=modict.config(
-        enforce_json=True,
-        allow_extra=False,
-        coerce=True
+        extra='ignore',
+        strict=False,
+        enforce_json=True
     )
     width: Union[int,float,Literal["centered", "wide"]] = "centered"
     initial_sidebar_state: Literal["auto", "expanded", "collapsed"] = "auto"
@@ -103,7 +105,7 @@ class NotebookConfig(modict):
         run_on_submit: Whether to run cells on submit. Defaults to True.
         show_logo: Whether to show the logo. Defaults to True.
         no_quit: Whether to disable the quit button. Defaults to False.
-        layout: Page layout configuration (Layout model)
+        layout: Page layout configuration (dict or Layout model)
 
     Example:
         Configure notebook settings::
@@ -111,15 +113,15 @@ class NotebookConfig(modict):
             title="My Notebook",
             app_mode=True,
             no_quit=True,
-            layout=Layout(width="wide")
+            layout={'width': "wide"}
         )
         nb = Notebook(**config)
     """
 
     _config=modict.config(
-        enforce_json=True,
-        allow_extra=False,
-        coerce=True
+        extra='ignore',
+        strict=False,
+        enforce_json=True
     )
     title: str = "new_notebook"
     app_mode: bool = False
@@ -260,9 +262,6 @@ class Notebook:
         # Convert layout to Layout instance if needed (modict coercion + explicit defaults)
         if layout is None:
             layout = Layout()
-        elif not isinstance(layout, Layout):
-            # If it's a dict but not a Layout, convert it
-            layout = Layout(**layout) if isinstance(layout, dict) else layout
 
         self.config=NotebookConfig(
             title=title,
@@ -311,48 +310,12 @@ class Notebook:
             :meth:`rerun`: Public rerun method
             :func:`~streamlit_notebook.utils.rerun`: Underlying rerun implementation
         """
-        import sys
+        # Apply global patches (idempotent)
+        from .utils import apply_global_patches
+        apply_global_patches()
 
         # Patch st.echo to fit the notebook environment
         st.echo = echo(self._get_current_code).__call__
-
-        if not hasattr(st.rerun,'_patched'):
-            # Patch st.rerun to use our custom rerun with a warning
-            def patched_rerun():
-                """Patched st.rerun that warns users to use the notebook's rerun method."""
-                import warnings
-                warnings.warn(
-                    "Using st.rerun() directly may disrupt the notebook's rerun strategy."
-                    "Consider using __notebook__.rerun() or importing it from streamlit_notebook: "
-                    "from streamlit_notebook import rerun",
-                    UserWarning,
-                    stacklevel=2
-                )
-                # Use our custom rerun instead
-                rerun()
-            
-            patched_rerun._patched=True
-            patched_rerun._original=st.rerun
-
-            st.rerun = patched_rerun
-
-        if not hasattr(st.stop,'_patched'):
-            # Patch st.stop to raise an exception that the shell can catch
-            def patched_stop():
-                """Patched st.stop that raises RuntimeError to stop cell execution."""
-                raise RuntimeError(
-                    "st.stop() is not supported in notebook mode. "
-                    "Cell execution has been stopped."
-                )
-            
-            patched_stop._patched=True
-            patched_stop._original=st.stop
-
-            st.stop = patched_stop
-
-        # Replace streamlit module in sys.modules to ensure the interactive shell
-        # uses the patched version
-        sys.modules['streamlit'] = st
 
     def _init_shell(self) -> None:
         """Initialize or reinitialize the execution shell (internal).
@@ -385,7 +348,7 @@ class Notebook:
         )
 
         # Get agent from state if it exists
-        agent = state.get('agent', None)
+        agent = state.get(state_key("agent"), None)
 
         if agent is not None:
             agent.init_shell(self.shell)
@@ -427,7 +390,7 @@ class Notebook:
         st.toast(message, icon=icon)
         self.wait(delay)
 
-    def _input_hook(self, code: str) -> None:
+    def _input_hook(self, code: str, ctx:str) -> None:
         """Shell hook called whenever code is inputted (internal).
 
         Args:
@@ -443,7 +406,7 @@ class Notebook:
         """
         return self.current_code
 
-    def _stdout_hook(self, data: str, buffer: str) -> None:
+    def _stdout_hook(self, data: str, buffer: str, ctx:str) -> None:
         """Shell hook called whenever the shell writes to stdout (internal).
 
         Args:
@@ -456,7 +419,7 @@ class Notebook:
                 if buffer:
                     st.code(buffer, language="text")
 
-    def _stderr_hook(self, data: str, buffer: str) -> None:
+    def _stderr_hook(self, data: str, buffer: str, ctx:str) -> None:
         """Shell hook called whenever the shell writes to stderr (internal).
 
         Args:
@@ -469,7 +432,7 @@ class Notebook:
                 if buffer:
                     st.code(buffer, language="text")
 
-    def _display_hook(self, result: Any, backend: str | None = None, **kwargs) -> None:
+    def _display_hook(self, result: Any, kwargs: dict, ctx:str) -> None:
         """Shell hook called whenever the shell displays a result (internal).
 
         Args:
@@ -480,6 +443,7 @@ class Notebook:
                 (e.g., height=400, width='stretch').
         """
         current_cell=self.current_cell
+        backend=kwargs.pop('backend','write')
         if current_cell:
             # Store result in results list (for backward compatibility)
             current_cell.results.append(result)
@@ -489,7 +453,7 @@ class Notebook:
                 with current_cell.display_area:
                     display(result, backend=backend, **kwargs)
 
-    def _exception_hook(self, exception: Exception) -> None:
+    def _exception_hook(self, exception: Exception, ctx:str) -> None:
         """Shell hook called whenever the shell catches an exception (internal).
 
         Args:
@@ -575,14 +539,15 @@ class Notebook:
 
         if caller_file != '<notebook_script>':
             # Direct run - need to bootstrap
-            if 'notebook_script' not in state:
+            if state_key("notebook_script") not in state:
                 # First run - capture the script
                 if os.path.exists(caller_file):
-                    with open(caller_file, 'r') as f:
-                        state.notebook_script = f.read()
+                    with open(caller_file, 'r', encoding='utf-8') as f:
+                        state[state_key("notebook_script")] = f.read()
                 # Clear notebook on first bootstrap so exec creates it fresh
-                if 'notebook' in state:
-                    del state['notebook']
+                notebook_key = state_key("notebook")
+                if notebook_key in state:
+                    del state[notebook_key]
 
             # Execute the notebook script
             exec_globals = globals().copy()
@@ -590,18 +555,18 @@ class Notebook:
                 '__name__': '__main__',
                 '__file__': '<notebook_script>',
             })
-            code_obj = compile(state.notebook_script, '<notebook_script>', 'exec')
+            code_obj = compile(state[state_key("notebook_script")], '<notebook_script>', 'exec')
             exec(code_obj, exec_globals)
             return  # New script already rendered
 
         # Normal render
-        if 'notebook' not in state:
+        if state_key("notebook") not in state:
             st.error("No notebook found in session state. Did you call st_notebook() first?")
             return
 
-        state.notebook._render()
+        state[state_key("notebook")]._render()
 
-    def rerun(self, wait: bool | float = True) -> None:
+    def rerun(self, scope: str = "app", wait: bool | float = True) -> None:
         """Trigger a rerun of the notebook.
 
         This is the recommended way to trigger reruns in notebook cells,
@@ -609,6 +574,9 @@ class Notebook:
         ``wait()`` and ``check_rerun()`` helpers.
 
         Args:
+            scope: Specifies what part of the app should rerun (Streamlit 1.52+):
+                - ``"app"`` (default): Rerun the full app
+                - ``"fragment"``: Only rerun the current fragment (must be called inside a fragment)
             wait: Controls the rerun behavior:
                 - ``True`` (default): Soft rerun as soon as possible (equivalent to wait=0)
                 - ``False``: Hard rerun immediately if possible, bypassing delays
@@ -620,6 +588,9 @@ class Notebook:
                 # Soft rerun as soon as possible
                 __notebook__.rerun()
 
+                # Fragment rerun (Streamlit 1.52+)
+                __notebook__.rerun("fragment")
+
                 # Delayed rerun (useful after showing toast)
                 st.toast("Saved!", icon="💾")
                 __notebook__.rerun(wait=1.5)
@@ -630,8 +601,9 @@ class Notebook:
             Or import directly::
 
                 from streamlit_notebook import rerun
-                rerun(wait=1.0)
-                rerun(wait=False)
+                rerun("fragment")  # Fragment rerun
+                rerun(wait=1.0)    # App rerun with delay
+                rerun(wait=False)  # Immediate rerun
 
         Note:
             Prefer this over ``st.rerun()`` to avoid disrupting the notebook's
@@ -642,7 +614,7 @@ class Notebook:
             :meth:`wait`: Add delay without triggering rerun
         """
         from .utils import rerun as utils_rerun
-        utils_rerun(wait=wait)
+        utils_rerun(scope=scope, wait=wait)
 
     def wait(self, delay: bool | float = True) -> None:
         """Request a delay before any pending rerun.
@@ -700,7 +672,7 @@ class Notebook:
             if os.path.isfile(source):
                 if not source.endswith('.py'):
                     return False
-                with open(source, 'r') as f:
+                with open(source, 'r', encoding='utf-8') as f:
                     code = f.read()
             else:
                 # Treat as code string
@@ -732,6 +704,19 @@ class Notebook:
         self.cells = []
         self.notify(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
         rerun()
+
+    def new_notebook(self, title: str = "new_notebook") -> None:
+        """Create a fresh notebook by clearing cells and resetting the title.
+
+        Args:
+            title: New notebook title. Defaults to "new_notebook".
+
+        """
+        from .templates import get_default_notebook_template
+
+        code = get_default_notebook_template(title=title)
+        self.open(code)
+        self.notify("Created new notebook", icon="📄")
 
     def _reset_run_states(self) -> None:
         """Reset run states for all cells (internal).
@@ -932,7 +917,8 @@ class Notebook:
         type: Literal["code", "markdown", "html"] = "code",
         code: str = "",
         reactive: bool = False,
-        fragment: bool = False
+        fragment: bool = False,
+        run_every: Optional[Union[int, float]] = None
     ) -> Cell:
         """Add a new cell to the notebook.
 
@@ -947,6 +933,8 @@ class Notebook:
                 Defaults to False.
             fragment: If True, the cell will run as a Streamlit fragment.
                 Defaults to False.
+            run_every: Auto-rerun interval in seconds (Streamlit 1.52+, requires fragment=True).
+                None (default) disables auto-rerun. Can be int or float.
 
         Returns:
             The newly created cell object.
@@ -959,9 +947,17 @@ class Notebook:
 
                 # Create a markdown cell
                 __notebook__.new_cell(type="markdown", code="# My Title")
+
+                # Create auto-updating fragment cell
+                __notebook__.new_cell(
+                    type="code",
+                    code="st.write(time.time())",
+                    fragment=True,
+                    run_every=1.0
+                )
         """
         key = self._gen_cell_key()
-        cell = Cell(key, type=type, code=code, reactive=reactive, fragment=fragment)
+        cell = Cell(key, type=type, code=code, reactive=reactive, fragment=fragment, run_every=run_every)
         return self.add_cell(cell)
 
     def add_cell(self, cell: Cell) -> Cell:
@@ -971,7 +967,7 @@ class Notebook:
         rerun()
         return cell
     
-    def cell(self,type="code",reactive=False,fragment=False):
+    def cell(self, type="code", reactive=False, fragment=False, run_every=None):
         """
         returns a decorator that adds a new cell created from a function's source code.
         allows programmatic creation of cells from code defined in functions.
@@ -983,13 +979,18 @@ class Notebook:
             You can write **Markdown** here.
             '''
 
+        @notebook.cell(fragment=True, run_every=1.0)
+        def live_updates():
+            st.write(f"Time: {time.time()}")
+
         Args:
             type (str): The type of cell to create ("code", "markdown", or "html").
             reactive (bool): If True, the cell will automatically re-run when changed.
             fragment (bool): If True, the cell will run as a Streamlit fragment.
+            run_every (int | float | None): Auto-rerun interval in seconds (requires fragment=True).
         Returns:
             function: A decorator that adds a new cell from the decorated function's code.
-            
+
         """
         import inspect
 
@@ -1024,7 +1025,7 @@ class Notebook:
                         lines=lines[:-1]
                         code="\n".join(lines)
 
-            return self.new_cell(type=type,code=code,reactive=reactive,fragment=fragment)
+            return self.new_cell(type=type, code=code, reactive=reactive, fragment=fragment, run_every=run_every)
         return decorator
     
     def _get_source(self, func: Callable) -> str:
@@ -1053,8 +1054,8 @@ class Notebook:
         # Retrieve source code based on filename
         if filename == '<notebook_script>':
             # Function defined in the notebook script executed by main.py
-            if 'notebook_script' in state:
-                code = state.notebook_script
+            if state_key("notebook_script") in state:
+                code = state[state_key("notebook_script")]
             else:
                 raise ValueError(
                     f"Cannot retrieve source for function '{func.__name__}': "
@@ -1062,7 +1063,7 @@ class Notebook:
                 )
         elif os.path.exists(filename):
             # Real file - read it
-            with open(filename, 'r') as f:
+            with open(filename, 'r', encoding='utf-8') as f:
                 code = f.read()
         else:
             # Invalid context - this shouldn't happen with @nb.cell()
@@ -1122,6 +1123,25 @@ class Notebook:
             # Code cell - indent the code
             return indent(dedent(cell.code), "    ")
 
+    def _get_cell_params(self, cell: Cell) -> str:
+        """Get non-default cell parameters as a formatted string.
+
+        Args:
+            cell: The cell to get parameters for.
+        Returns:
+            Comma-separated string of non-default parameters for @cell decorator.
+        """
+        from .cell import CellConfig
+        default=CellConfig()
+
+        diffed=default.diffed(cell.get_config()).exclude('code')
+
+        result = []
+        for k, v in diffed.items():
+            result.append(f"{k}={repr(v)}")
+
+        return ", ".join(result)
+
     def _get_notebook_params(self) -> str:
         """Get non-default notebook parameters as a formatted string.
 
@@ -1131,12 +1151,10 @@ class Notebook:
 
         default=NotebookConfig()
 
-        flat_diff=modict((k,v[1]) for k,v in default.diff(self.config).items() if not v is MISSING)
-
-        diff=modict.unwalk(flat_diff).to_dict()
+        diffed=default.diffed(self.config)
 
         result = []
-        for k, v in diff.items():
+        for k, v in diffed.items():
             result.append(f"{k}={repr(v)}")
 
         return ", ".join(result)
@@ -1151,13 +1169,14 @@ class Notebook:
         cell_defs = []
         for cell in self.cells:
             # Format decorator and function signature
-            header = f"@nb.cell(type='{cell.type}', reactive={cell.reactive}, fragment={cell.fragment})\ndef cell_{cell.index}():"
+            header = f"@nb.cell({self._get_cell_params(cell)})\ndef cell_{cell.index}():"
             # Get formatted cell content (already indented)
             content = self._format_cell_content(cell)
             # Combine header and content
             cell_def = f"{header}\n{content}\n"
             cell_defs.append(cell_def)
         return "\n".join(cell_defs)
+
 
     def to_python(self) -> str:
         """Convert the notebook to a Python script.
@@ -1190,7 +1209,7 @@ class Notebook:
             cells=self._format_cells()
         )
     
-    def open(self, source):
+    def open(self, source) -> None:
         """
         Opens a notebook from a .py file or code string by loading it into session state.
 
@@ -1215,18 +1234,19 @@ class Notebook:
 
         # Check if source is a file path or code string
         if os.path.isfile(source):
-            with open(source, 'r') as f:
+            with open(source, 'r', encoding='utf-8') as f:
                 code = f.read()
         else:
             # Treat as code string
             code = source
 
         # Store the notebook script in session state
-        state.notebook_script = code
+        state[state_key("notebook_script")] = code
 
         # Clear current notebook from state so it gets recreated
-        if 'notebook' in state:
-            del state.notebook
+        notebook_key = state_key("notebook")
+        if notebook_key in state:
+            del state[notebook_key]
 
         # Rerun to execute the new script (with delay to show toast if called from UI)
         rerun()
@@ -1253,7 +1273,7 @@ class Notebook:
         current_script=self.to_python()
 
         # Always update the in-memory script
-        state.notebook_script=current_script
+        state[state_key("notebook_script")] = current_script
 
         if filepath is None:
             filepath=os.path.join(os.getcwd(),f"{self.config.title}.py")
@@ -1264,7 +1284,7 @@ class Notebook:
         is_launcher_mode = os.getenv('ST_NOTEBOOK_LAUNCHER_MODE', '').lower() == 'true'
 
         # Check if trying to overwrite the forbidden path (initial notebook file in direct mode)
-        forbidden_path = state.get('forbidden_save_path')
+        forbidden_path = state.get(state_key("forbidden_save_path"))
         is_forbidden = (forbidden_path and filepath_abs == forbidden_path)
 
         if not is_launcher_mode and is_forbidden:
@@ -1273,7 +1293,7 @@ class Notebook:
             return False
 
         # Safe to save to file
-        with open(filepath,'w') as f:
+        with open(filepath,'w', encoding='utf-8') as f:
             f.write(current_script)
 
         rerun()
@@ -1359,7 +1379,7 @@ def get_notebook() -> Notebook | None:
     """
     Returns the current notebook instance from Streamlit's session state (if any).
     """
-    return st.session_state.get("notebook",None)
+    return state.get(state_key("notebook"), None)
 
 def st_notebook(
     title: str = "new_notebook",
@@ -1505,13 +1525,13 @@ def st_notebook(
         layout=layout
     )
 
-    if 'notebook' not in state:
+    if state_key("notebook") not in state:
         should_create = True
         reason="No notebook in state"
 
         # Store the forbidden filepath on first creation (for direct mode protection)
         # This is the path that would trigger Streamlit reload if overwritten
-        if 'forbidden_save_path' not in state:
+        if state_key("forbidden_save_path") not in state:
             # Try to get the actual running script path
             import inspect
             frame = inspect.currentframe()
@@ -1520,25 +1540,21 @@ def st_notebook(
 
             # If called from a real file (not <notebook_script>), use that path
             if caller_file and caller_file != '<notebook_script>' and os.path.exists(caller_file):
-                state.forbidden_save_path = os.path.abspath(caller_file)
+                state[state_key("forbidden_save_path")] = os.path.abspath(caller_file)
             else:
                 # Fallback: use the default path based on title
-                state.forbidden_save_path = os.path.abspath(os.path.join(os.getcwd(), f"{title}.py"))
+                state[state_key("forbidden_save_path")] = os.path.abspath(os.path.join(os.getcwd(), f"{title}.py"))
     else:
         # Check if parameters match the existing notebook
         # Only recreate if parameters don't match AND the notebook is not yet initialized
         # (initialized means it went through the exec pass and created cells)
-        nb = state.notebook
+        nb = state[state_key("notebook")]
         should_create= (not nb.initialized and not nb.config.deep_equals(config))
         if should_create:
             reason="Not initialized and config changed"
 
     if should_create:
         #print("Instance renewed:",reason)
-        state.notebook = Notebook(**config)
+        state[state_key("notebook")] = Notebook(**config)
 
-    return state.notebook
-
-
-
-
+    return state[state_key("notebook")]
