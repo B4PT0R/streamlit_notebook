@@ -636,7 +636,7 @@ class CellUI(Editor):
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
         self.add_toggle(name="Reactive",caption="Reactive",event="toggle_reactive",style=dict(top="0px",left="0px",fontSize="14px"),has_caption=True)
-        self.add_toggle(name="Fragment",caption="Fragment",event="toggle_fragment",style=dict(top="0px",left="100px",fontSize="14px"),has_caption=True)
+        self.add_toggle(name="Advanced",caption="Advanced",icons=["Settings","Settings"],event="toggle_advanced",style=dict(top="0px",left="100px",fontSize="14px"),has_caption=True)
         self.add_button(name="Run",caption="Run",icon="Play",event="run",style=dict(bottom="0px",right="0px",fontSize="14px"),has_caption=False,icon_size="20px")
         self.add_toggle(name="Minimized",caption="Minimized",icons=["Minimize","Maximize"],event="toggle_minimized",style=dict(top="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="16px")
         self.add_button(name="HasRun",caption="HasRun",icon="Check",event="Check",style=dict(bottom="0px",right="30px",fontSize="14px"),has_caption=False,icon_size="20px",hover=False)

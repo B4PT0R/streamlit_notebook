@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'streamlit-notebook'
 copyright = '2025, Baptiste Ferrand'
 author = 'Baptiste Ferrand'
-release = '0.1.6'
-version = '0.1.6'
+release = '0.3.4'
+version = '0.3.4'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

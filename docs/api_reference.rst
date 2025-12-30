@@ -9,57 +9,45 @@ Core Components
 Notebook
 ~~~~~~~~
 
-.. autoclass:: streamlit_notebook.notebook.Notebook
+.. autoclass:: streamlit_notebook.core.notebook.Notebook
    :members:
    :special-members: __init__
    :show-inheritance:
 
-.. autofunction:: streamlit_notebook.notebook.st_notebook
+.. autofunction:: streamlit_notebook.core.notebook.st_notebook
 
 Cells
 ~~~~~
 
-.. autoclass:: streamlit_notebook.cell.Cell
+.. autoclass:: streamlit_notebook.core.cell.Cell
    :members:
    :special-members: __init__
    :show-inheritance:
 
-.. autoclass:: streamlit_notebook.cell.CodeCell
-   :members:
-   :show-inheritance:
+Cell Types
+~~~~~~~~~~
 
-.. autoclass:: streamlit_notebook.cell.MarkdownCell
-   :members:
-   :show-inheritance:
-
-.. autoclass:: streamlit_notebook.cell.HTMLCell
-   :members:
-   :show-inheritance:
-
-Shell (Execution Engine)
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: streamlit_notebook.shell.Shell
+.. autoclass:: streamlit_notebook.core.cell_types.BaseCellType
    :members:
    :special-members: __init__
    :show-inheritance:
 
-.. autoclass:: streamlit_notebook.shell.ShellResponse
+.. autoclass:: streamlit_notebook.core.cell_types.PyType
    :members:
    :show-inheritance:
 
-.. autoclass:: streamlit_notebook.shell.Stream
+.. autoclass:: streamlit_notebook.core.cell_types.MDType
    :members:
    :show-inheritance:
 
-.. autoclass:: streamlit_notebook.shell.StdinProxy
+.. autoclass:: streamlit_notebook.core.cell_types.HTMLType
    :members:
    :show-inheritance:
 
 Utility Functions
 -----------------
 
-.. automodule:: streamlit_notebook.utils
+.. automodule:: streamlit_notebook.core.utils
    :members:
    :undoc-members:
    :show-inheritance:
@@ -67,15 +55,53 @@ Utility Functions
 UI Components
 -------------
 
-.. automodule:: streamlit_notebook.cell_ui
+Cell UI
+~~~~~~~
+
+.. automodule:: streamlit_notebook.core.cell_ui
    :members:
    :undoc-members:
+   :show-inheritance:
+
+Notebook UI
+~~~~~~~~~~~
+
+.. autoclass:: streamlit_notebook.core.notebook_ui.NotebookUI
+   :members:
+   :special-members: __init__
    :show-inheritance:
 
 Echo Context Manager
 ~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: streamlit_notebook.echo.echo
+.. autoclass:: streamlit_notebook.core.echo.echo
    :members:
    :special-members: __init__, __call__
+   :show-inheritance:
+
+Audio & Chat
+------------
+
+Auto Play
+~~~~~~~~~
+
+.. automodule:: streamlit_notebook.core.auto_play
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Chat Interface
+~~~~~~~~~~~~~~
+
+.. automodule:: streamlit_notebook.core.chat
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Templates
+---------
+
+.. automodule:: streamlit_notebook.core.templates
+   :members:
+   :undoc-members:
    :show-inheritance:

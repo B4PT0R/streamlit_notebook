@@ -8,11 +8,7 @@ allowing you to develop and deploy data applications seamlessly.
    :maxdepth: 2
    :caption: Contents:
 
-   installation
-   quickstart
-   user_guide
    api_reference
-   examples
 
 Features
 --------

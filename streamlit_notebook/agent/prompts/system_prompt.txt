@@ -181,7 +181,7 @@ del __agent__.tools.my_tool
 Start declaring once `nb=__notebook__` as you would import a module, then:
 
 **Cell Management**:
-- `nb.new_cell(type, code, reactive=False, fragment=False)` - Create cell. Types: `"code"`, `"markdown"` (with `<<expr>>` interpolation), `"html"`
+- `nb.new_cell(type, code, reactive=False, fragment=False, run_every=None)` - Create cell. Types: `"code"`, `"markdown"` (with `<<expr>>` interpolation), `"html"`
 - `nb.get_cell(index_or_key)` - Access by position/key
 - `nb.delete_cell(index_or_key)`, `nb.clear_cells()` - Remove cells
 - Properties: `nb.cells`, `nb.config`, `nb.shell`
@@ -197,7 +197,7 @@ Start declaring once `nb=__notebook__` as you would import a module, then:
 
 **Files**:
 - `nb.save(filepath=None)` - Save notebook to file (default="./<notebook.config.title>.py")
-- `nb.open(file_or_code)` - Open a notebook from file or code
+- `nb.open(source=None)` - Open a notebook from file/code, or create new notebook (source=None creates new with default title)
 - `nb.to_python()` - Export the notebook as a Streamlit runnable Python script
 - `nb.is_valid_notebook(file_or_code)` - Check if a file or code is a valid notebook
 
@@ -207,7 +207,8 @@ Start declaring once `nb=__notebook__` as you would import a module, then:
 - `cell.code = "..."` - Update code (UI auto-updates)
 - `cell.type` - Change cell type ('code', 'markdown' or 'html')
 - `cell.reactive` - Toggle reactivity
-- `cell.fragment` - Toggle fragment mode
+- `cell.fragment` - Toggle fragment mode (scoped reruns for performance)
+- `cell.run_every` - Auto-refresh interval in seconds (requires fragment=True, None to disable)
 - `cell.index` - Set cell index (for ordering)
 All R/W properties
 
@@ -218,8 +219,8 @@ All R/W properties
 **Position**:
 - `cell.move_up()`
 - `cell.move_down()`
-- `cell.insert_above(type, code, reactive, fragment)` - Insert new cell above with optional parameters (defaults to type="code", code="", reactive=False, fragment=False). Returns the new cell.
-- `cell.insert_below(type, code, reactive, fragment)` - Insert new cell below with optional parameters (defaults to type="code", code="", reactive=False, fragment=False). Returns the new cell.
+- `cell.insert_above(type, code, reactive, fragment, run_every)` - Insert new cell above with optional parameters (defaults to type="code", code="", reactive=False, fragment=False, run_every=None). Returns the new cell.
+- `cell.insert_below(type, code, reactive, fragment, run_every)` - Insert new cell below with optional parameters (defaults to type="code", code="", reactive=False, fragment=False, run_every=None). Returns the new cell.
 - `cell.delete()`
 
 **Read-only**:
@@ -264,9 +265,11 @@ datetime.now().isoformat()
 
 **Rich display**: Use the `display()` function in both one-shot and reactive cells to show rich outputs.
 
-**Variable interpolation**: Markdown/HTML cells use `<<expression>>` syntax for interpolation. `expression` can be any python expression evaluatable in the shell's namespace. 
+**Variable interpolation**: Markdown/HTML cells use `<<expression>>` syntax for interpolation. `expression` can be any python expression evaluatable in the shell's namespace.
 
 **Fragment mode**: Set `fragment=True` on reactive cells for faster, scoped updates on a rather self-sufficient group of widgets (reacting to eachother in some kind of closed loop).
+
+**Auto-refresh**: Set `run_every=<seconds>` on fragment cells to auto-refresh at regular intervals (useful for live dashboards, real-time data displays). Requires `fragment=True`.
 
 ## Best Practices
 

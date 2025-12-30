@@ -244,7 +244,7 @@ def widgets():
 
 Streamlit Notebook doesn't do anything too hacky with Streamlit's internals and only uses the stable Streamlit API for its own functionning. You can think of it as an extension, rather than a replacement. It will adapt seamlessly to any future versions of Streamlit you may want to install, thus letting you benefit from new widgets or features in your notebooks.
 
-*Note*: It uses the new `width='stretch'` instead of the now deprecated `use_container_width=True` parameter to control its own widgets layout, thus requiring Streamlit 1.52.0 or higher.
+*Note*: It uses the new `width='stretch'` instead of the now deprecated `use_container_width=True` parameter to control its own widgets layout. It also supports the `scope` parameter in its rerun mechanism as well as `run_every` for fragments, thus requiring Streamlit 1.52.0 or higher.
 
 ## Real-World Example
 
@@ -381,6 +381,8 @@ def load_data():
     display(df)
 ```
 
+Under the hood, `display(obj, backend='write', **kwargs)` is mostly equivalent to `st.<backend>(obj, **kwargs)`
+
 **Choose any Streamlit backend:**
 ```python
 @nb.cell(type='code', reactive=False)
@@ -394,7 +396,7 @@ def visualize():
     code = "def hello():\n    return 'world'"
     display(code, backend='code', language='python')
 
-    # Use st.dataframe with all its options
+    # Use st.dataframe with additional parameters
     import pandas as pd
     df = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
     display(df, backend='dataframe',
@@ -415,23 +417,6 @@ Any Streamlit display function works (without the `st.` prefix):
 - `'plotly_chart'`, `'altair_chart'`, `'pyplot'` - Chart displays with container options
 - Any other `st.*` display function
 
-**All backend parameters are supported:**
-```python
-@nb.cell(reactive=False)
-def dashboard():
-    import plotly.graph_objects as go
-
-    # Create a Plotly figure
-    fig = go.Figure(data=go.Scatter(x=[1, 2, 3], y=[4, 5, 6]))
-
-    # Display with full Plotly options
-    display(fig,
-            backend='plotly_chart',
-            width='stretch',
-            theme='streamlit',
-            config={'displayModeBar': False})
-```
-
 **Why use `display()` over `st.*()`?**
 
 `display` is designed to store the result and parameters in the cell, so that the notebook can automatically redisplay it after reruns without re-executing the cell. Direct `st.*()` commands need to rerun to stay on screen and thus work only in reactive cells.
@@ -440,7 +425,7 @@ This is particularly powerful in **non-reactive cells** where you get the perfor
 
 It also works seamlessly in reactive cells, where it behaves exactly like `st.*()` but with the added benefit of storing the result in the cell, useful for inspection and debugging.
 
-**Markdown/HTML cells** 
+### Markdown/HTML cells 
 
 Add rich formatted text or layouts to your notebook with Markdown and HTML cells. They support variable interpolation using the `<<any_expression>>` syntax. The expression will be evaluated and replaced in the code.
 If the value changes, the displayed content will change as well.
@@ -452,11 +437,11 @@ We loaded << len(df) >> rows.
 The mean value is << df['value'].mean() >>.
 ```
 
-**System commands and magics**
+### System commands and magics
 
 Ipython style commands and magics are supported.
 Let's demonstrate this by showing a simple example:
-
+`display(obj, backend='write', **kwargs)` is mostly equivalent to `st.<backend>(obj, **kwargs)`
 ```python
 #Cell 1
 
@@ -474,7 +459,7 @@ Result:
 THIS IS A TEST!
 ```
 
-The magic input is always processed as a string (the rest of the line following the %<command>)
+The magic input is always processed as a string (the rest of the line following the %<command>) but supports string templating
 
 ```python
 %upper os.listdir()
@@ -483,6 +468,18 @@ Result:
 ```
 OS.LISTDIR()
 ```
+
+vs.
+
+```python
+%upper {os.listdir()}
+```
+Result:
+```
+['ANALYSIS.PY', 'DATA.CSV', 'README.MD']
+```
+
+
 
 With `%%`, the whole cell starting at second line is considered the magic input.
 
@@ -500,39 +497,39 @@ THE CELL GOES IN THE
 MAGIC INPUT
 ```
 
-Note: Only the mechanism is supported, no predefined magics are provided (yet) so you have to declare your own magics.
+Note: A subset of most commonly used IPython magics are available.
 
-To run a system command, use `!` or `!!` instead of `%` or `%%` respectively.
+To run a system command, use `!` or `!!`.
 
 ```python
 !echo "Hello World"
 ```
-Result:
+Stdout:
 ```
 Hello World
 ```
 
-`!!` lets you run multi-line system scripts:
+`!!` captures and returns the result instead of streaming to stdout (stderr still streams):
 ```python 
-!!
-echo "Hello World"
-python -c "import sys; print(sys.version)"
+result = !!echo "Hello World"
+result
 ```
 Result:
 ```
 Hello World
-3.11.6 (main, Oct  2 2023, 10:17:14) [Clang 14.0.3 (clang-1403.0.22.14.1)]
 ```
 
-Warning: contrary to Ipython, `!` and `!!` here work the same as `%` and `%%`, namely they distinguish between single line and full-cell magics. They just execute the input as a system command/script.
+To run a full-cell bash script use the `%%bash` cell magic.
 
-Disclaimer: The shell is *NOT* meant to be an exact replica of Ipython. My goal is to provide a practical and versatile coding environment matching the common needs of interactive programming. Yet, you might encounter situations where you feel like some useful features of Ipython are missing, if so please add a feature request.
+For more information about `Pynteract` capabilities as a shell, refer [to the project's repo]().
+
+Disclaimer: The shell is *NOT* an exact replica of Ipython and external API/internal implementation will differ. My goal is to provide a practical and versatile coding environment matching the common needs of interactive programming. Yet, you might encounter situations where you feel like some useful features of Ipython are missing, if so please add a feature request.
 
 ## Advanced Features
 
 ### Streamlit Fragments
 
-You may toggle the "Fragment" option of a reactive cell to run the cell as a [Streamlit fragment](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
+You can enable the "Fragment" option in the Advanced settings panel of a reactive cell to run the cell as a [Streamlit fragment](https://docs.streamlit.io/library/api-reference/performance/st.fragment) for faster, scoped updates:
 
 ```python
 @nb.cell(type='code', reactive=True, fragment=True)
@@ -542,11 +539,24 @@ def fast_widget():
     st.write(f"Selected: {value}")
 ```
 
-This way the page reloads only the UI fragment in which the interaction happens.
-Beware that other widgets on the page won't refresh even if they depend on variables changed by the fragment.
+Fragments isolate code reruns and UI updates to just the fragment's scope. When a widget defined inside a fragment triggers a UI event, only that fragment's code is rerun and its UI updated.
+
+Beware that widgets in other reactive cells on the page won't refresh even if they depend on variables changed by the fragment.
 So, in general, it's better to group in a same fragment subsets of widgets and that are supposed to react to eachother.
 
-Note: A variable that's changed by a fragment is immediately updated in the namespace and can be used elsewhere in the notebook. The isolation is just ui-side, not backend-side.
+Note: A variable that's changed by a fragment is immediately updated in the namespace and can be used elsewhere in the notebook.
+
+To rerun a fragment cell on every given time delta use the `run_every` parameter
+
+```python
+@nb.cell(type='code', reactive=True, fragment=True, run_every=1)
+def clock():
+    # This cell will rerun every second, not rerunning uselessly the rest of the notebook interface
+    with st.empty():
+        st.write(datetime.now().strftime("%H:%M:%S"))
+```
+
+This is useful to monitor background tasks or create "real-time" widgets, for instance reading data from sensors or APIs at regular intervals and updating the display accordingly.
 
 ### Programmatic API
 
@@ -576,7 +586,8 @@ cell = nb.new_cell(
     type="code",
     code="import pandas as pd\ndf = pd.DataFrame({'x': [1,2,3]})",
     reactive=False,
-    fragment=False
+    fragment=False,
+    run_every=None
 )
 
 # Create a markdown cell
@@ -688,9 +699,14 @@ This can be useful for automation scripts or when the AI agent needs to close th
 
 The notebook provides an improved rerun API with flexible timing control, fragment support (Streamlit 1.52+), and better compatibility.
 
+Signature: `rerun(scope:Literal["app", "fragment"] = "app", wait:bool|float = True)`
+
 ```python
+
+nb=__notebook__
+
 # Full app rerun (default)
-st.rerun()  # Soft rerun as soon as possible
+nb.rerun()  # wait = True : Soft non-interrupting rerun resolved at end of current cycle
 ```
 
 This requests a rerun at the end of the current Streamlit cycle, letting it finish executing without interrupting subsequent operations.
@@ -700,44 +716,50 @@ This requests a rerun at the end of the current Streamlit cycle, letting it fini
 @st.fragment
 def my_fragment():
     if st.button("Refresh"):
-        st.rerun("fragment")  # Only reruns this fragment
+        nb.rerun(scope = "fragment")  # Only reruns this fragment
 ```
 
 Fragment reruns are immediate and don't use delay management since they're typically fast operations.
 
+The `wait` parameter controls the timing of the rerun. If you request a delay, and the script reaches end of cycle before the delay expires, the rerun will wait until the delay is over before executing.
+
 ```python
 # Delayed rerun
-st.rerun(wait=1.5)
+nb.rerun(wait=1.5)
 ```
 
-Wait for the specified duration (in seconds) before rerunning. This is useful to let animations or toasts display before the page refreshes.
+This is useful to ensure animations or toasts display have time to complete before the page refreshes.
 
 ```python
 # Hard rerun (immediate)
-st.rerun(wait=False)
+nb.rerun(wait=False)
 ```
 
-Triggers an immediate rerun, equivalent to standard `st.rerun()` where it doesn't fail (e.g., in widget callbacks). In circumstances where `st.rerun()` would fail, it falls back to a soft rerun.
+Triggers an immediate rerun, equivalent to standard `st.rerun()` where it doesn't fail (e.g., in widget callbacks). In circumstances where `st.rerun()` would fail, it falls back to requesting a soft rerun as soon as possible (cancelling any pending delays).
 
 **Note:** In the notebook environment, `st.rerun()` is automatically upgraded to use this enhanced implementation with delay management and fragment support. You can use it directly or via `nb.rerun()` - both work identically.
 
 **Control pending reruns with `wait()`:**
 
-The `wait()` function lets you control pending reruns without triggering one yourself.
+The `wait()` function lets you control any pending reruns without requesting one.
 
 ```python
-# Request a delay for any pending rerun
+# Somewhere in the code: request a rerun
+nb.rerun()
+
+# ...
+
+# Somewhere else : Request a delay before resolving the pending rerun
 st.balloons()
-nb.wait(2.0)  # Ensures any pending rerun waits 2 seconds from this point
+nb.wait(2.0)  # Ensures the pending rerun waits 2 seconds from this point
 ```
 
 The parameter works similarly to `rerun()`:
 - `wait(2.0)` - Add a 2-second delay before any pending rerun
 - `wait()` or `wait(True)` or `wait(0)` - Do nothing (no additional delay)
-- `wait(False)` - Execute any pending rerun immediately, ignoring previous delays
+- `wait(False)` - Execute the pending rerun immediately, cancelling any previous requested delays
 
 ```python
-# Example: Execute pending rerun immediately
 nb.rerun(wait=5.0)  # Request rerun with 5 second delay
 # ... some code ...
 nb.wait(False)  # Changed your mind - execute the rerun now!
@@ -752,6 +774,7 @@ nb.save("custom_name.py")  # Save with custom filename
 
 # Open/load a notebook
 nb.open("my_notebook.py")
+nb.open() # Opens a new empty notebook
 
 # Check if a file is a valid notebook
 if nb.is_valid_notebook(source_code):
@@ -801,7 +824,7 @@ for cell_state in info['cells']:
 
 # Get minimal info (only cell definitions, no execution state)
 minimal_info = nb.get_info(minimal=True)
-# Includes: notebook metadata + minimal cell data (key, type, code, reactive, fragment)
+# Includes: notebook metadata + minimal cell data (key, type, code, reactive, fragment, run_every)
 
 # Get individual cell state
 cell = nb.cells[0]
@@ -820,7 +843,7 @@ context = json.dumps(nb.get_info(), indent=2)
 #### API Reference
 
 **Notebook Methods:**
-- `new_cell(type, code, reactive, fragment)` - Create a new cell
+- `new_cell(type, code, reactive, fragment, run_every)` - Create a new cell
 - `get_cell(index_or_key)` - Get cell by position or key
 - `get_info(minimal)` - Get complete notebook info including settings and cell states (default: full state)
 - `delete_cell(key)` - Remove a cell by key
@@ -833,7 +856,7 @@ context = json.dumps(nb.get_info(), indent=2)
 - `wait(delay)` - Control pending reruns (delay, execute now, or do nothing)
 - `notify(message, icon, delay)` - Show toast notification
 - `save(filepath)` - Save notebook to file
-- `open(source)` - Load notebook from file or source code
+- `open(source)` - Load notebook from file or source code. If no source is provided, creates a new empty notebook.
 - `to_python()` - Get Python code representation
 - `is_valid_notebook(source)` - Check if source is valid notebook
 
@@ -842,8 +865,8 @@ context = json.dumps(nb.get_info(), indent=2)
 - `reset()` - Clear outputs and execution state
 - `move_up()` - Move cell up one position
 - `move_down()` - Move cell down one position
-- `insert_above(type, code, reactive, fragment)` - Insert new cell above (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False
-- `insert_below(type, code, reactive, fragment)` - Insert new cell below (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False
+- `insert_above(type, code, reactive, fragment, run_every)` - Insert new cell above (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False, run_every=None
+- `insert_below(type, code, reactive, fragment, run_every)` - Insert new cell below (returns new cell). Defaults: type="code", code="", reactive=False, fragment=False, run_every=None
 - `delete()` - Remove this cell
 - `to_dict(minimal)` - Get dictionary representation (default: minimal, set minimal=False for full state)
 
@@ -852,6 +875,7 @@ context = json.dumps(nb.get_info(), indent=2)
 - `type` (read/write) - Cell type: "code", "markdown", or "html"
 - `reactive` (read/write) - Auto-rerun on UI changes
 - `fragment` (read/write) - Run as Streamlit fragment
+- `run_every` (read/write) - Auto-rerun interval in seconds (requires fragment=True, Streamlit 1.52+)
 - `index` (read/write) - Cell position in notebook
 - `key` (read-only) - Unique cell identifier
 - `id` (read-only) - Readable cell identifier combining index and key like `Cell[index](key)`
@@ -897,7 +921,7 @@ The AI agent comes with powerful capabilities:
 
 ### Quick Start
 
-1. **Set your OpenAI API key** in a `.env` file:
+1. **Set your OpenAI API key** in your .bashrc or a `.env` file:
    ```bash
    OPENAI_API_KEY=sk-...
    ```
@@ -1245,133 +1269,7 @@ MIT License—see [LICENSE](LICENSE).
 
 ## Changelog
 
-### 2025-12 (Latest)
-
-**v0.3.2:**
-
-- **Shell code extraction to `pynteract`**: The former `streamlit_notebook.shell` sub-package has been moved to a standalone package (`pynteract`: [here](https://github.com/B4PT0R/pynteract)) to improve maintainability and separation of concerns.
-
-
-- Explicit UTF-8 encoding for file IO to fix Windows compatibility issues.
-- Internal `st.session_state` keys are now consistently prefixed with `_streamlit_notebook_` to avoid collisions with user-defined keys.
-- Sidebar title inputs now properly stays in sync with the current notebook title.
-- Threads spawned by the agent stream processing pipeline are registered in a global pool and joined after response generation to avoid stray background threads.
-- Added `audioop-lts` as an explicit dependency to ensure pydub compatibility with Python >= 3.13 (the standard lib `audioop` package on which pydub relies has been deprecated and removed from latest python versions). Tested working with 3.14.
-
-- `nb.new_notebook()` now regenerates a new notebook instance from the default template instead of clearing the current one (same behavior as open).
-
-- Streamlit import/patching is deferred to avoid `missing ScriptRunContext` in CLI startup.
-
-- `rerun()` now supports Streamlit 1.52+ fragment scope: `rerun("fragment")` for fragment-only reruns, `rerun("app")` for full app reruns (default). Fragment reruns bypass delay management for immediate execution.
-
-
-
-**v0.3.0:**
-- Improved UI/UX : better cell UI interface, possibility to minimize cells to free up screen space, new Quit button to close the Streamlit server elegantly (having to hit Ctrl+C in the terminal was not ideal…), and other little stuff.
-    
-- new `layout` parameter in the st_notebook factory. Basically equivalent to st.set_page_config, but letting you choose the initial layout width (in %) of the main display, rather than just ‘centered’ or ‘wide’). I also added a slider in the sidebar to adapt the width live from the interface. Note: **You don’t need to call st.set_page_config anymore in your notebook files, and attempting to do so will raise an error**.
-- most features now working properly (many bug fixes)
-- better modularity, organization and documentation of the codebase
-- moved the modict utility used throughout the project to a separate package ([here](https://github.com/B4PT0R/modict)).
-
-
-**v0.2.0 Release:**
-
-**New Features:**
-- **Enhanced AI Agent**: Added comprehensive document reading capabilities
-  - Support for PDF, DOCX, XLSX, PPTX, ODT, HTML, and more
-  - Web page content extraction with `read()` tool
-  - Automatic text extraction from URLs and local files
-  - Lightweight fallback mode when optional dependencies unavailable
-- **Voice Integration**: Added audio autoplay component for seamless voice interaction
-  - Cross-browser compatible audio playback
-  - Auto-detection of audio formats (MP3, WAV, OGG, etc.)
-  - Silent UI integration for voice responses
-
-**Code Quality & Structure:**
-- **Module Reorganization**: Moved core modules into `streamlit_notebook/core/` package
-  - Better separation between core notebook functionality and agent features
-  - Cleaner import structure and namespace organization
-- **Agent Modules**: Consolidated AI agent code in `streamlit_notebook/agent/` package
-  - Modular tool system with `Tool` class
-  - Separate modules for voice, image, and message handling
-  - Enhanced `modict` utility for flexible configuration
-- **Bug Fixes**:
-  - Fixed typo in `has_fragment_toggle` property setter
-  - Improved error handling in AI streaming
-  - Better handling of cell display metadata
-
-**Developer Experience:**
-- Added comprehensive module-level documentation
-- Improved type hints throughout codebase
-- Enhanced error messages and debugging output
-- Better fallback strategies for optional dependencies
-
-### 2025-11
-
-**Installation Changes:**
-- **Optional Dependencies**: Data science packages (matplotlib, pandas, numpy, etc.) are now optional
-  - Install with `[datascience]` extra for full stack, or install core only and add libraries manually
-  - Reduces base install size significantly for lightweight deployments
-
-**Code Quality & API Improvements:**
-- **Cell Types**: Improved type management using internal `CellType` mixins (instead of direct `Cell` subclasses), making it straightforward to support new cell types with custom behaviour while still being able to change a cell's type dynamically without having to recreate the cell instance.
-- **UI/Logic Separation**: Moved all UI rendering logic to dedicated `NotebookUI` class (following the `Cell`/`CellUI` pattern)
-- **Public/Private API Distinction**: Renamed internal methods with `_` prefix for clear API boundaries
-- **Template-Based Code Generation**: Refactored `to_python()` to use clean string templates instead of manual concatenation
-- **Enhanced Documentation**: Added comprehensive Google-style docstrings with examples for all public methods (~85% coverage)
-- **Streamlit Patches**: Centralized all Streamlit module patches in `_apply_patches()` method:
-  - `st.echo` - Transparent patching for code execution tracking
-  - `st.rerun` - UserWarning guiding users to `__notebook__.rerun()` or package-level import
-  - `st.stop` - RuntimeError to properly stop cell execution
-- **Rerun API Enhancements**:
-  - Unified API: `rerun(wait)` and `wait(delay)` now accept bool/float for flexible control
-  - `wait=True` (soft rerun), `wait=False` (hard rerun), `wait=<number>` (delayed rerun)
-  - Exposed `rerun()` and `wait()` as both public notebook methods and package-level exports
-  - Improved delay merging logic with clear documentation
-- **AI Agent Integration**:
-  - Agent now accessible in shell namespace as `__agent__`
-  - Enables dynamic tool registration and programmatic agent control
-  - Full documentation added to README with examples
-
-**Bug Fixes & UX Improvements:**
-
-- Cell type can now be manually changed after creation ('code', 'markdown', or 'html')
-- Fixed bug when inserting new cells above/below existing ones
-- Safer UI behavior for dynamic cell creation and execution
-- Programmatic cell code modifications now automatically reflect in the editor UI
-- Updated `.gitignore` to track Sphinx documentation source files while ignoring build artifacts
-
-**Breaking Changes:**
-
-- Saved notebook `.py` files now use simpler API with `st_notebook()` factory and `nb.render()` method directly, instead of previous `get_notebook()` and `render_notebook()` helpers
-  - **Migration**: Update existing notebook files to use new pattern shown in Quick Start
-
-### 2025-10
-
-**Major update:** Notebooks are now pure Python files (`.py`), not JSON.
-
-- Pure Python format with `@nb.cell()` decorator syntax
-- Self-contained notebook .py files
-- Run directly with `streamlit run notebook.py`
-- Locked App mode deployment option
-- Removed `.stnb` JSON format entirely
-
-### 2024-09 
-- Improved shell behaviour
-- Implemented basic magic commands support
-
-### 2024-07
-
-- `.stnb` JSON format as default
-- `st_notebook` accepts file paths or JSON strings
-
-### 2024-06
-
-- Custom shell with AST-based execution
-- Expression display modes
-- HTML cells
-- Demo notebooks
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
 
 ---
 

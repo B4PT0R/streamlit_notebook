@@ -365,14 +365,13 @@ def init_chat():
     return True
 
 def avatar(role):
-    """
-    description: |
-        Returns the avatar image path for a given conversation role.
-    parameters:
-        role:
-            description: The role in the conversation (user, assistant, tool, etc.)
-    required:
-        - role
+    """Returns the avatar image path for a given conversation role.
+
+    Args:
+        role (str): The role in the conversation (user, assistant, tool, etc.)
+
+    Returns:
+        str or None: Path to avatar image, or None for default avatar
     """
     if role == 'user':
         return root_join('app_images', 'user_avatar.png')
@@ -384,14 +383,12 @@ def avatar(role):
         return None  # Use Streamlit default for other roles
 
 def show_message(msg):
-    """
-    description: |
-        Displays a message (user, assistant, or tool) in the UI, adapting layout according to its role and optionally expanding tool calls.
-    parameters:
-        msg:
-            description: The message object to be displayed.
-    required:
-        - msg
+    """Displays a message (user, assistant, or tool) in the UI.
+
+    Adapts layout according to the message role and optionally expands tool calls.
+
+    Args:
+        msg: The message object to be displayed.
     """
     if not state.get(state_key("chat_initialized")):
         return
@@ -440,10 +437,7 @@ def show_message(msg):
 
 
 def show_session():
-    """
-    description: |
-        Iterates through the session message history and displays each message in the UI.
-    """
+    """Iterates through the session message history and displays each message in the UI."""
     agent = state[state_key("agent")]
     for msg in agent.messages:
         if msg.session_id==agent.current_session_id:

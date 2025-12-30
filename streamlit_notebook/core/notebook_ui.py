@@ -196,7 +196,7 @@ class NotebookUI:
 
             # New notebook button
             if st.button("New notebook", width='stretch', key=state_key("button_new_notebook")):
-                self.notebook.new_notebook()
+                self.notebook.open()
 
             # Save button
             self.save_notebook()

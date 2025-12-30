@@ -95,7 +95,7 @@ class BaseCellType:
         self._run_every = run_every
         self._language = "python"
         self._has_reactive_toggle=True
-        self._has_fragment_toggle=True
+        self._show_advanced = False
         self.prepare_ui()
 
     #Properties
@@ -243,14 +243,6 @@ class BaseCellType:
                 rerun()
 
     @property
-    def has_fragment_toggle(self):
-        return self._has_fragment_toggle
-    
-    @has_fragment_toggle.setter
-    def has_fragment_toggle(self, value: Any) -> None:
-        raise AttributeError("has_fragment_toggle is a read-only property")
-
-    @property
     def fragment(self) -> bool:
         """Whether the cell runs as a Streamlit fragment."""
         return self._fragment
@@ -332,8 +324,8 @@ class BaseCellType:
         self.ui.submit_callback=self._submit_callback
         self.ui.buttons["Reactive"].callback=self._toggle_reactive
         self.ui.buttons["Reactive"].toggled=self.reactive
-        self.ui.buttons["Fragment"].callback=self._toggle_fragment
-        self.ui.buttons["Fragment"].toggled=self.fragment
+        self.ui.buttons["Advanced"].callback=self._toggle_advanced
+        self.ui.buttons["Advanced"].toggled=self._show_advanced
         self.ui.buttons["Minimized"].callback=self._toggle_minimized
         self.ui.buttons["Minimized"].toggled=self.minimized
         self.ui.buttons["Up"].callback=self.move_up
@@ -352,7 +344,6 @@ class BaseCellType:
         """
         self.ui.lang=self.language
         self.ui.key=f"cell_ui_{self.ui_key}"
-        self.ui.buttons['Fragment'].visible=self.has_fragment_toggle
         self.ui.buttons['Reactive'].visible=self.has_reactive_toggle
         self.ui.buttons['HasRun'].visible=self.has_run_once
         self.ui.minimized=self.minimized
@@ -383,6 +374,7 @@ class BaseCellType:
         Prepares the various containers used to display the cell UI and its outputs.
         """
         self.container=st.container()
+        self._advanced_area=st.empty()
         self.output_area=st.empty()
         self.ready=True
         # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
@@ -402,12 +394,69 @@ class BaseCellType:
                 self.update_ui()
                 self.ui.show()
 
+            # Show advanced panel if toggled
+            self.show_advanced()
+
         # Rerun only if the cell has been run at least once with the current code OR a run was requested
         # This prevents premature execution when toggling "reactive" on a cell that hasn't run yet
         if self.reactive and self.should_run:
             self.run()
 
         self.show_outputs()
+
+    def show_advanced(self):
+        """
+        Displays the advanced settings panel for the cell.
+
+        This panel includes controls for advanced cell parameters like run_every.
+        """
+        if self._show_advanced:
+            with self._advanced_area.container(border=True):
+                st.caption("Advanced Cell Settings")
+
+                from .utils import state_key, state
+
+                a, b = st.columns(2)
+
+                with a:
+                    # fragment control
+                    st.space(size="small")
+
+                    def on_fragment_change():
+                        fragment_value = state.get(state_key(f"fragment_advanced_{self.key}"), self.fragment)
+                        if fragment_value != self.fragment:
+                            self.fragment = fragment_value
+
+                    st.checkbox(
+                        "Fragment",
+                        value=self.fragment,
+                        help="Whether the cell runs as a Streamlit fragment.",
+                        key=state_key(f"fragment_advanced_{self.key}"),
+                        on_change=on_fragment_change,
+                        disabled=not self.reactive
+                    )
+
+                with b:
+                    # run_every control
+                    def on_run_every_change():
+                        run_every_value = state.get(state_key(f"run_every_{self.key}"), 0.0)
+                        if run_every_value > 0:
+                            self.run_every = run_every_value
+                        else:
+                            self.run_every = None
+
+                    st.number_input(
+                        "Run every (seconds)",
+                        min_value=0.0,
+                        value=float(self.run_every) if self.run_every is not None else 0.0,
+                        step=0.5,
+                        help="Auto-rerun interval in seconds (requires Fragment to be enabled). Set to 0 to disable.",
+                        key=state_key(f"run_every_{self.key}"),
+                        disabled=not self.fragment,
+                        on_change=on_run_every_change
+                    )
+        else:
+            self._advanced_area.empty()
 
     def show_displays(self):
         if self.displays:
@@ -452,11 +501,14 @@ class BaseCellType:
         This method executes the cell's content, captures the output,
         and updates the cell's state accordingly.
 
-        Reactive cells: If already run this turn, tries execution. If duplicate widget error occurs,
-                       defers to next turn. This allows immediate execution when code changed enough.
-                       If not ready (no UI skeleton), defers to next turn to avoid widgets displaying
-                       in wrong context.
-        One-shot cells: Can re-run multiple times in same turn (no Streamlit widgets except display()).
+        Reactive cells:
+            If already run this turn, tries execution. If duplicate widget error occurs,
+            defers to next turn. This allows immediate execution when code changed enough.
+            If not ready (no UI skeleton), defers to next turn to avoid widgets displaying
+            in wrong context.
+
+        One-shot cells:
+            Can re-run multiple times in same turn (no Streamlit widgets except display()).
         """
         # Reactive cells without UI skeleton: defer to next turn
         # Avoids widgets displaying in wrong context (wherever the active container is)
@@ -499,6 +551,7 @@ class BaseCellType:
                 with self.display_area:
                     self._exec()
                 if never_ran:
+                    # First run ever - rerun to ensure proper UI "checkmark" update 
                     rerun()  
             else:
                 # The cell skeleton isn't on screen yet
@@ -508,11 +561,52 @@ class BaseCellType:
 
     def _exec(self):
         """
-        Executes the code returned by self.get_exec_code()
+        Executes the cell code.
+
+        This method chooses between normal execution and fragment execution
+        based on the cell's fragment attribute, and applies run_every if specified.
+        """
+        if self.fragment:
+            # Apply fragment decorator dynamically with run_every support
+            if self.run_every is not None:
+                # Create fragment with run_every parameter
+                fragment_decorator = st.fragment(run_every=self.run_every)
+                fragment_func = fragment_decorator(self._exec_code)
+                fragment_func()
+            else:
+                # Use static decorator (pre-defined method)
+                self._exec_as_fragment()
+        else:
+            self._exec_normally()
+
+    def _exec_code(self):
+        """
+        Core execution logic for both fragment and normal execution.
+
+        This method contains the actual code execution logic that can be
+        wrapped by the fragment decorator when needed.
         """
         with self.cell:
-            response=self.notebook.shell.run(self._get_exec_code(),filename=f"<{self.id}>")
+            response = self.notebook.shell.run(self._get_exec_code(), filename=f"<{self.id}>")
         self._set_output(response)
+
+    @st.fragment
+    def _exec_as_fragment(self):
+        """
+        Executes the cell as a Streamlit fragment (without run_every).
+
+        This method is decorated with @st.fragment and executes
+        the cell's code within a Streamlit fragment context.
+        """
+        self._exec_code()
+
+    def _exec_normally(self):
+        """
+        Executes the cell normally.
+
+        This method runs the cell's code in the normal execution context.
+        """
+        self._exec_code()
 
 
     def _get_exec_code(self):
@@ -556,13 +650,13 @@ class BaseCellType:
         """Toggles the 'Auto-Rerun' feature for the cell (internal)."""
         self._reactive = self.ui.buttons["Reactive"].toggled
 
-    def _toggle_fragment(self):
-        """Toggles the 'Fragment' feature for the cell (internal)."""
-        self._fragment = self.ui.buttons["Fragment"].toggled
-
     def _toggle_minimized(self):
-        """Toggles the 'Fragment' feature for the cell (internal)."""
+        """Toggles the 'Minimized' feature for the cell (internal)."""
         self._minimized = self.ui.buttons["Minimized"].toggled
+
+    def _toggle_advanced(self):
+        """Toggles the 'Advanced' settings panel for the cell (internal)."""
+        self._show_advanced = self.ui.buttons["Advanced"].toggled
 
     def _set_type(self, new_type):
         """
@@ -755,55 +849,6 @@ class PyType(BaseCellType):
     def _get_exec_code(self):
         return self.cell.code
 
-    def _exec(self):
-        """
-        Executes the cell code.
-
-        This method chooses between normal execution and fragment execution
-        based on the cell's fragment attribute, and applies run_every if specified.
-        """
-        if self.fragment:
-            # Apply fragment decorator dynamically with run_every support
-            if self.run_every is not None:
-                # Create fragment with run_every parameter
-                fragment_decorator = st.fragment(run_every=self.run_every)
-                fragment_func = fragment_decorator(self._exec_code)
-                fragment_func()
-            else:
-                # Use static decorator (pre-defined method)
-                self._exec_as_fragment()
-        else:
-            self._exec_normally()
-
-    def _exec_code(self):
-        """
-        Core execution logic for both fragment and normal execution.
-
-        This method contains the actual code execution logic that can be
-        wrapped by the fragment decorator when needed.
-        """
-        with self.cell:
-            response = self.notebook.shell.run(self._get_exec_code(), filename=f"<{self.id}>")
-        self._set_output(response)
-
-    @st.fragment
-    def _exec_as_fragment(self):
-        """
-        Executes the cell as a Streamlit fragment (without run_every).
-
-        This method is decorated with @st.fragment and executes
-        the cell's code within a Streamlit fragment context.
-        """
-        self._exec_code()
-
-    def _exec_normally(self):
-        """
-        Executes the cell normally.
-
-        This method runs the cell's code in the normal execution context.
-        """
-        self._exec_code()
-
 class MDType(BaseCellType):
     """Markdown rendering cell type."""
 
@@ -820,7 +865,6 @@ class MDType(BaseCellType):
         super().__init__(cell,key,type,code,reactive,fragment,minimized,run_every)
         self._language='markdown'
         self._type="markdown"
-        self._has_fragment_toggle=False
         self._has_reactive_toggle=True
 
     def _get_exec_code(self):
@@ -853,7 +897,6 @@ class HTMLType(BaseCellType):
         super().__init__(cell,key,type,code,reactive,fragment,minimized,run_every)
         self._language='markdown'
         self._type="html"
-        self._has_fragment_toggle=False
         self._has_reactive_toggle=True
 
     def _get_exec_code(self):
