@@ -6,6 +6,17 @@ from shutil import which
 import os
 
 def get_webdriver():
+    """Get a headless Firefox WebDriver instance.
+
+    Automatically installs geckodriver if not found in PATH.
+    Configures Firefox in headless mode with standard options.
+
+    Returns:
+        selenium.webdriver.Firefox: Configured headless Firefox WebDriver.
+
+    Note:
+        Requires Firefox browser to be installed on the system.
+    """
     from .utils import root_join
     tmp_path=root_join("tmp")
     if not os.path.isdir(tmp_path):

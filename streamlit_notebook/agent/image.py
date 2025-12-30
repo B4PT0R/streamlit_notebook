@@ -7,6 +7,14 @@ import re
 from PIL import Image as PILImage
 
 def ext_to_mime(ext):
+    """Convert file extension to MIME type for images.
+
+    Args:
+        ext: File extension (jpg, jpeg, png, webp, gif).
+
+    Returns:
+        MIME type string or None if unknown extension.
+    """
     if ext in ['jpg','jpeg']:
         return 'image/jpeg'
     elif ext in ['png']:
@@ -17,13 +25,34 @@ def ext_to_mime(ext):
         return 'image/gif'
     else:
         return None
-    
+
 def guess_mime_from_bytes(data: BytesIO):
+    """Guess MIME type from image bytes using PIL.
+
+    Args:
+        data: BytesIO containing image data.
+
+    Returns:
+        MIME type string inferred from image format.
+    """
     img = PILImage.open(data)
     format = img.format.lower()
     return f'image/{ "jpeg" if format == "jpg" else format }'
-    
+
 def get_data_url(src=None):
+    """Convert image source to base64 data URL.
+
+    Supports file paths, BytesIO objects, and HTTP URLs.
+
+    Args:
+        src: Image source (file path, BytesIO, or URL).
+
+    Returns:
+        Data URL string with base64-encoded image.
+
+    Raises:
+        Exception: If image cannot be accessed or converted.
+    """
     if isinstance(src,str) and os.path.isfile(src):
         ext = src.split('.')[-1]
         with open(src, "rb") as image_file:
@@ -61,6 +90,22 @@ def get_data_url(src=None):
         
 
 class Image(Message):
+    """Image object suitable for AI vision implementation.
+
+    Extends Message to represent images that can be sent to vision models.
+    Handles image loading from various sources and conversion to base64 data URLs.
+
+    Attributes:
+        detail: Vision detail level (auto, low, high).
+        description: Optional text description of the image.
+        b64_string: Base64-encoded data URL of the image.
+        image_name: Display name for the image.
+        image_path: File path to image for reloading.
+        embedding: Optional embedding vector for the image.
+        name: Message name (default: 'image').
+        role: Message role (default: 'system').
+        type: Message type (default: 'image').
+    """
 
     detail="auto"
     description=None
@@ -72,11 +117,14 @@ class Image(Message):
     role="system"
     type="image"
 
-    """
-    Image object suitable for AI vision implementation
-    """
-
     def __init__(self,*args,source=None,**kwargs):
+        """Initialize Image from source.
+
+        Args:
+            source: Image source (file path, BytesIO, or URL).
+            *args: Positional arguments passed to Message.__init__.
+            **kwargs: Keyword arguments passed to Message.__init__.
+        """
         super().__init__(*args,**kwargs)
 
         # If we have image_path but no b64_string, reload from file
@@ -93,23 +141,49 @@ class Image(Message):
             self.image_path = source
 
     def get_data_url(self,source):
+        """Convert source to data URL, handling errors gracefully.
+
+        Args:
+            source: Image source to convert.
+
+        Returns:
+            Data URL string or None if conversion fails.
+        """
         try:
             return get_data_url(source)
         except:
             return None
-        
+
     def get_image_name(self,source):
+        """Extract or infer a name for the image.
+
+        Args:
+            source: Image source (file path, BytesIO, URL, etc.).
+
+        Returns:
+            Image name string.
+        """
         if isinstance(source,BytesIO) and hasattr(source,'name') and source.name:
             return source.name
         elif source:
             return source
         return 'Unnamed image'
-    
+
     @Message.computed(cache=True,deps=['description','detail','b64_string','image_name'])
     def content(self):
+        """Computed property for message content.
+
+        Returns:
+            Content in OpenAI vision format.
+        """
         return self.get_content()
-        
+
     def get_content(self):
+        """Generate message content for vision API.
+
+        Returns:
+            List of content parts (image_url and text) or error string.
+        """
         desc=self.get('description')
         description=f"\nAlong with the following description:\n{desc}\n\n" if desc else ""
         if self.b64_string:
@@ -135,9 +209,12 @@ class Image(Message):
         return content
     
     def as_bytesio(self):
-        """
-        Return image content as file-like BytesIO object, 
-        decoded from self.b64_string if available.
+        """Return image content as BytesIO object.
+
+        Decodes the base64 data URL back to raw image bytes.
+
+        Returns:
+            BytesIO containing image data, or None if unavailable.
         """
         if self.b64_string:
             # Extraire la partie base64 du data URI
@@ -148,10 +225,11 @@ class Image(Message):
                 #bio.name=self.image_name
                 return bio
         return None
-    
+
     def show(self):
-        """
-        Affiche l'image via PIL.Image.show().
+        """Display the image using PIL's default viewer.
+
+        Opens the image in the system's default image viewer.
         """
         img_bytes = self.as_bytesio()
         if img_bytes:

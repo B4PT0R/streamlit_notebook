@@ -5,6 +5,7 @@ tmp/
 compile_package.py
 compiled/
 all.txt
+deploy.py
 
 
 # Byte-compiled / optimized / DLL files

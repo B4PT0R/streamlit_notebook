@@ -7,6 +7,13 @@ from pydub import AudioSegment
 from pydub.playback import _play_with_simpleaudio, _play_with_pyaudio
 
 def silent_play(audio):
+    """Play audio using the best available backend without console output.
+
+    Tries backends in order: simpleaudio, pyaudio, ffplay.
+
+    Args:
+        audio: AudioSegment object to play.
+    """
     # Sur Windows, ffplay rare, simpleaudio/pyaudio par défaut
     # Sur Linux/Mac, ffplay fréquent
     try:
@@ -36,12 +43,24 @@ def silent_play(audio):
         print("Aucun backend audio fonctionnel trouvé.")
 
 class PlayAudio(Task):
+    """Task for playing audio asynchronously.
+
+    Args:
+        agent: The agent instance.
+        args: Positional arguments for the task.
+        kwargs: Keyword arguments for the task.
+    """
 
     def __init__(self,agent,args=None,kwargs=None):
         super().__init__(args=args,kwargs=kwargs)
         self.agent=agent
 
     def target(self,audio):
+        """Play audio using hook if available, otherwise use silent_play.
+
+        Args:
+            audio: AudioSegment to play.
+        """
         if audio is not None:
             if self.agent.hooks.get('audio_playback_hook'):
                 self.agent.hooks.audio_playback_hook(audio)
@@ -49,9 +68,17 @@ class PlayAudio(Task):
                 silent_play(audio)
 
 class MuteTagProcessor(Streamer):
+    """Stream processor that wraps code blocks, LaTeX formulas, and links in MUTE tags.
+
+    These tagged sections will be skipped during text-to-speech conversion.
+
+    Args:
+        agent: The agent instance.
+    """
+
     def __init__(self,agent):
         super().__init__()
-        self.agent=agent 
+        self.agent=agent
         self.token_streamer = TokenStreamer([
             #Intentionally muted blocs -> aggregate in buffer and pass through
             (fenced('<MUTE>','</MUTE>',flags=re.DOTALL|re.MULTILINE), lambda m: m.group()),
@@ -65,18 +92,24 @@ class MuteTagProcessor(Streamer):
             # Mute links
             (r'https?://\S+', lambda m: f'<MUTE>{m.group()}</MUTE>'),
         ], threaded=False)
-        
+
     def stream_processor(self, stream):
+        """Process stream and add MUTE tags around code/formulas/links."""
         return self.token_streamer.process(stream)
 
 class MuteAnalyzer(Streamer):
+    """Splits token stream into muted and non-muted parts.
+
+    Args:
+        agent: The agent instance.
+    """
 
     def __init__(self,agent):
         super().__init__()
         self.agent=agent
 
-    """Splits token stream into muted and non-muted parts"""
-    def stream_processor(self, stream):       
+    def stream_processor(self, stream):
+        """Split stream into tuples of (mode, text) where mode is 'mute' or 'speak'."""
         for token in stream:
             if token.startswith('<MUTE>') and token.endswith('</MUTE>'):
                 yield ('mute', token[6:-7])  # Strip <MUTE>...</MUTE> tags
@@ -84,12 +117,28 @@ class MuteAnalyzer(Streamer):
                 yield ('speak',token)
 
 class LineAgregator(Streamer):
+    """Aggregates tokens into lines for voice processing.
+
+    Buffers tokens until newline characters are encountered or token count
+    exceeds threshold, then yields complete lines with their mode (mute/speak).
+
+    Args:
+        agent: The agent instance.
+    """
 
     def __init__(self,agent):
         super().__init__()
         self.agent=agent
 
     def stream_processor(self,stream):
+        """Aggregate tokens into lines based on newlines and token count.
+
+        Args:
+            stream: Input stream of (mode, token) tuples.
+
+        Yields:
+            Tuples of (mode, line_text) for each aggregated line.
+        """
         lines=""
         token_count=0
         last_mode=None
@@ -117,12 +166,25 @@ class LineAgregator(Streamer):
             yield (last_mode,lines)
 
 class LineToAudio(Streamer):
+    """Converts text lines to audio segments using text-to-speech.
+
+    Args:
+        agent: The agent instance with AI client for TTS.
+    """
 
     def __init__(self,agent):
         super().__init__()
         self.agent=agent
-    
+
     def text_to_audio(self,text):
+        """Convert text to audio using configured TTS model.
+
+        Args:
+            text: Text string to convert to speech.
+
+        Returns:
+            AudioSegment object or None if text is empty.
+        """
         # Create MP3 audio
         
         if text.strip():
@@ -141,6 +203,14 @@ class LineToAudio(Streamer):
             return None
 
     def stream_processor(self,stream):
+        """Process stream of lines, converting non-muted text to audio.
+
+        Args:
+            stream: Stream of (mode, line) tuples.
+
+        Yields:
+            Tuples of (line, audio) where audio is AudioSegment or None for muted lines.
+        """
         for mode,line in stream:
             if not line:
                 continue
@@ -153,12 +223,28 @@ class LineToAudio(Streamer):
             yield (line,audio)
 
 class AudioPlayer(Streamer):
+    """Plays audio while streaming tokens at synchronized pace.
+
+    Plays audio segments in background while yielding tokens at a rate
+    synchronized with the audio playback duration.
+
+    Args:
+        agent: The agent instance.
+    """
 
     def __init__(self,agent):
         super().__init__()
         self.agent=agent
 
     def stream_processor(self,stream):
+        """Play audio and yield tokens synchronized with playback.
+
+        Args:
+            stream: Stream of (line, audio) tuples.
+
+        Yields:
+            Individual tokens with timing synchronized to audio playback.
+        """
         for line,audio in stream:
             tokenized=utf8_safe_tokenize(line)
             if audio is not None:
@@ -175,12 +261,28 @@ class AudioPlayer(Streamer):
                     time.sleep(0.02)
 
 class Throttler(Streamer):
+    """Buffers and batches tokens to control output rate.
+
+    Accumulates tokens in a buffer and yields them in batches to prevent
+    overwhelming downstream consumers.
+
+    Args:
+        agent: The agent instance with buffer size configuration.
+    """
 
     def __init__(self,agent):
         super().__init__()
         self.agent=agent
 
     def stream_processor(self,stream):
+        """Buffer and batch tokens before yielding.
+
+        Args:
+            stream: Input token stream.
+
+        Yields:
+            Batched token strings.
+        """
         buffer=''
         buffer_size=self.agent.config.get('voice_buffer_size',3) # Number of tokens to buffer before yielding the result
         for i,token in enumerate(stream):
@@ -194,12 +296,18 @@ class Throttler(Streamer):
 
 
 class VoiceProcessor(Streamer):
-    """
-    Class handling TTS.
-    Uses the speak method as entry point.
-    Takes a token stream as input.
-    Speaks the stream as it goes.
-    Returns a token stream synchronized with speech.
+    """Orchestrates text-to-speech processing for token streams.
+
+    Coordinates multiple processing stages:
+    1. Tags code blocks, formulas, and links as muted
+    2. Analyzes and splits into muted/spoken sections
+    3. Aggregates tokens into lines
+    4. Converts spoken lines to audio
+    5. Plays audio synchronized with token output
+    6. Throttles output for controlled streaming
+
+    Args:
+        agent: The agent instance with voice configuration.
     """
 
     def __init__(self,agent):
@@ -213,12 +321,28 @@ class VoiceProcessor(Streamer):
         self.throttler=Throttler(self.agent)
 
     def __call__(self,stream):
+        """Process stream with voice if enabled, otherwise pass through.
+
+        Args:
+            stream: Input token stream.
+
+        Returns:
+            Processed token stream (with or without voice).
+        """
         if self.agent.config.get('voice_enabled',False):
             return self.process(stream)
         else:
             return stream
-        
+
     def stream_processor(self, stream):
+        """Chain all voice processing stages together.
+
+        Args:
+            stream: Input token stream.
+
+        Returns:
+            Token stream synchronized with speech output.
+        """
         tagged_stream = self.mute_tag_processor.process(stream)
         analyzed_stream= self.mute_analyzer.process(tagged_stream)
         marked_lines = self.line_splitter.process(analyzed_stream)

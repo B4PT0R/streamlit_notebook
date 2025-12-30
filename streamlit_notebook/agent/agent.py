@@ -18,14 +18,11 @@ from typing import List
 
 
 def default_process_text_chunk(token,content):
-    """
-    description: |
-        Default function that prints streamed response tokens to stdout for visualization purposes.
-    parameters:
-        token:
-            description: The latest token streamed by the model.
-        content:
-            description: The entire content seen so far in the stream.
+    """Default function that prints streamed response tokens to stdout for visualization purposes.
+
+    Args:
+        token: The latest token streamed by the model.
+        content: The entire content seen so far in the stream.
     """
     print(token,end='',flush=True)
 
@@ -63,12 +60,11 @@ class AgentConfig(modict):
 class Agent:
 
     def __init__(self,shell=None,**kwargs):
-        """
-        description: |
-            Initializes the Agent instance with given or default configuration, OpenAI client, Editor, hooks, tools, and message history.
-        parameters:
-            kwargs:
-                description: Additional keyword arguments to update the agent configuration.
+        """Initializes the Agent instance with configuration, OpenAI client, hooks, tools, and message history.
+
+        Args:
+            shell: Optional shell instance for code execution. If None, creates a new Shell.
+            **kwargs: Additional keyword arguments to update the agent configuration.
         """
         self.config=AgentConfig(kwargs)
         self.hooks=modict()
@@ -120,10 +116,9 @@ class Agent:
             self.config.update(self.config.load(config_file))
 
     def init_native_tools(self):
-        """
-        description: |
-            Initialize native tools that are built into the agent.
-            These tools are automatically available to the agent.
+        """Initialize native tools that are built into the agent.
+
+        These tools (read, run_code, observe) are automatically available to the agent.
         """
         self.add_tool(self.read)
         self.add_tool(self.run_code)
@@ -171,9 +166,10 @@ class Agent:
             json.dump(messages_to_save,f,ensure_ascii=False,indent=2)
         
     def get_system_message(self):
-        """
-        description: |
-            Returns the system message for the agent, either from a file or a string, according to the configuration.
+        """Returns the system message for the agent from file or string according to configuration.
+
+        Returns:
+            Message: The system message with role='system'.
         """
         if not self.config.get('system'):
             return Message(role="system",content="You are a helpful AI assistant.")
@@ -185,14 +181,12 @@ class Agent:
             raise ValueError(f"Invalid system message configuration. Expected path or string, got {type(self.config.system)}")
 
     def add_message(self,msg,pending=False):
-        """
-        description: |
-            Adds a message to the agent's message list and triggers show_message hook if present.
-        parameters:
-            msg:
-                description: The message object to add.
-            pending:
-                description: if True, the message is temporarily stored in the pending list (pending messages are processed after tool calls only)
+        """Adds a message to the agent's message list and triggers show_message hook if present.
+
+        Args:
+            msg: The message object to add.
+            pending: If True, the message is temporarily stored in the pending list.
+                Pending messages are processed after tool calls only.
         """
         if pending:
             self.pending.append(msg)
@@ -208,12 +202,14 @@ class Agent:
     
 
     def new_message(self,pending=False,**kwargs):
-        """
-        description: |
-            Helper to create and add a message based on provided keyword arguments.
-        parameters:
-            kwargs:
-                description: Message fields as keyword arguments.
+        """Helper to create and add a message based on provided keyword arguments.
+
+        Args:
+            pending: If True, stores message in pending list instead of main messages.
+            **kwargs: Message fields as keyword arguments (role, content, etc.).
+
+        Returns:
+            The created message object.
         """
         msg=Message(kwargs)
         return self.add_message(msg,pending=pending)
@@ -227,21 +223,19 @@ class Agent:
             self.add_message(img,pending=pending)
 
     def add_tool(self,func,name=None,description=None,parameters=None,required=None):
-        """
-        description: |
-            Registers a new tool for the agent, wrapping a function and its metadata.
-            Can be used as a decorator or called directly.
-        parameters:
-            func:
-                description: The function implementing the tool.
-            name:
-                description: Optional name for the tool.
-            description:
-                description: Optional description for the tool.
-            parameters:
-                description: Optional parameters schema for the tool.
-            required:
-                description: Optional required fields for the tool.
+        """Registers a new tool for the agent, wrapping a function and its metadata.
+
+        Can be used as a decorator or called directly.
+
+        Args:
+            func: The function implementing the tool.
+            name: Optional name for the tool. If None, uses function name.
+            description: Optional description for the tool.
+            parameters: Optional parameters schema for the tool.
+            required: Optional required fields for the tool.
+
+        Returns:
+            The function (to support decorator syntax).
         """
         tool=Tool(func, name, description, parameters, required)
         self.tools[tool.name]=tool
@@ -253,10 +247,12 @@ class Agent:
         return list(self.messages)
 
     def get_context(self):
-        """
-        description: |
-            Builds and returns the full prompt context, including system message, images, and windowed message history.
-            Truncates individual non-image messages to max_input_tokens to prevent accidents.
+        """Builds and returns the full prompt context with system message, images, and windowed history.
+
+        Truncates individual non-image messages to max_input_tokens to prevent token overflow.
+
+        Returns:
+            List of formatted messages forming the complete context.
         """
         max_input_tokens = self.config.get('max_input_tokens', 8000)
 
@@ -293,13 +289,12 @@ class Agent:
         return list(msg.format(context=self.shell.namespace) for msg in context) 
 
     def get_tools(self, filter=None)->List[Tool]:
-        """
-        description: |
-            Retrieves tools from the agent's tool registry, optionally filtered by a predicate function.
-        parameters:
-            filter:
-                description: Optional predicate function to filter tools.
-        returns:
+        """Retrieves tools from the agent's tool registry, optionally filtered by a predicate function.
+
+        Args:
+            filter: Optional predicate function to filter tools.
+
+        Returns:
             List of Tool objects matching the filter criteria.
         """
         filter=filter or (lambda tool: True)
@@ -334,10 +329,13 @@ class Agent:
 
 
     def get_response(self):
-        """
-        description: |
-            Streams and aggregates the response content from OpenAI, forwarding each token via hook if defined.
-            If tool calls are present, records them along with the reply.
+        """Streams and aggregates the response content from OpenAI.
+
+        Forwards each token via hook if defined. If tool calls are present, records them along
+        with the reply.
+
+        Returns:
+            Message: The aggregated assistant message with content and/or tool calls.
         """
         streams=self.ai.stream(
             messages=self.get_context(),
@@ -402,10 +400,7 @@ class Agent:
         return called_tools
 
     def add_pending(self):
-        """
-        description: |
-            Adds all pending messages to the message history.
-        """
+        """Adds all pending messages to the message history."""
         if self.pending:
             for msg in self.pending:
                 msg.timestamp=timestamp()
@@ -413,9 +408,10 @@ class Agent:
             self.pending=[]
                         
     def process(self):
-        """
-        description: |
-            Processes a full turn: gets a response, handles tool calls, and repeats if needed.
+        """Processes a full turn: gets a response, handles tool calls, and repeats if needed.
+
+        Returns:
+            bool: True if agent has finished, False if it needs another turn for tool processing.
         """
 
         self.add_pending()
@@ -665,25 +661,22 @@ class Agent:
         return os.path.abspath(dest_path)
 
     def __call__(self,prompt=None)->bool:
-        """
-        description: |
-            Adds the user prompt to the message history and processes the conversation turn.
-        parameters:
-            prompt:
-                description: The user prompt or query.
-        required:
-            - prompt
-        return:
-            description: Returns True if the agent has finished, False if it needs to continue
+        """Adds the user prompt to the message history and processes the conversation turn.
+
+        Args:
+            prompt: The user prompt or query.
+
+        Returns:
+            bool: True if the agent has finished, False if it needs to continue.
         """
         if prompt:
             self.new_message(role="user",content=prompt)
         return self.process()
 
     def interact(self):
-        """
-        description: |
-            Starts an interactive command-line loop, sending user prompts to the agent until 'exit' or 'quit' is typed.
+        """Starts an interactive command-line loop for user prompts until 'exit' or 'quit' is typed.
+
+        Uses Alt+Enter for multi-line input submission.
         """
         import prompt_toolkit
         print("Starting interactive agent. Type 'exit' or 'quit' to stop.")

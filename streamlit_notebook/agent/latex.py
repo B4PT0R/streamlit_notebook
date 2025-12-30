@@ -143,7 +143,11 @@ def format_latex(md: str) -> str:
     return "".join(out_parts)
 
 class LaTeXProcessor(Streamer):
-    
+    """Stream processor for formatting LaTeX/KaTeX formulas in markdown text.
+
+    Escapes special characters in LaTeX formulas while preserving code blocks.
+    """
+
     def __init__(self):
         super().__init__()
         self.token_streamer = TokenStreamer([
@@ -155,6 +159,7 @@ class LaTeXProcessor(Streamer):
             (fenced(r'\\\(',r'\\\)',flags=re.DOTALL|re.MULTILINE), lambda m: f'{format_latex(m.group())}'),
             (r'\$[^$\n]+?\$', lambda m: f'{format_latex(m.group())}'),
         ], threaded=False)
-        
+
     def stream_processor(self, stream):
+        """Process stream and format LaTeX formulas."""
         return self.token_streamer.process(stream)

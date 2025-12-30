@@ -11,6 +11,12 @@ import time
 from .stream_utils import MappingStreamProcessor, END
 
 class ChunkStreamer(MappingStreamProcessor):
+    """Stream processor for AI response chunks, handling content, reasoning, and tool calls.
+
+    Args:
+        agent: The agent instance.
+        threaded: Whether to process streams in separate threads.
+    """
 
     def __init__(self,agent, threaded=True):
         self.agent=agent
@@ -18,19 +24,21 @@ class ChunkStreamer(MappingStreamProcessor):
 
 
 class AIClientError(Exception):
+    """Base exception for AI client errors."""
     pass
 
 class APIAuthenticationError(AIClientError):
+    """Exception raised for OpenAI API authentication failures."""
     pass
 
 class AIClient:
+    """Client for interacting with OpenAI API for chat completions, TTS, and STT."""
 
     def __init__(self, agent):
-        """
-        Initialize AI client with OpenAI API key.
+        """Initialize AI client with OpenAI API key from agent config.
 
         Args:
-            api_key: OpenAI API key. If None, will use OPENAI_API_KEY environment variable.
+            agent: The agent instance containing configuration and API key.
         """
         self.agent=agent
         self._client = None

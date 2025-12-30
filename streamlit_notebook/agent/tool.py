@@ -8,24 +8,16 @@ class Tool:
     """
 
     def __init__(self,obj,name=None,description=None,parameters=None,required=None, type=None, mode=None):
-        """
-        description: |
-            Initializes the Tool object, parsing its docstring YAML for description, parameters, and required fields.
-        parameters:
-            obj:
-                description: The object implementing the tool (generally a function).
-            name:
-                description: Optional name for the tool (defaults to func.__name__).
-            description:
-                description: Optional description for the tool (overrides docstring YAML).
-            parameters:
-                description: Optional parameters schema for the tool (overrides docstring YAML).
-            required:
-                description: Optional required fields for the tool (overrides docstring YAML).
-            type:
-                description: Optional type for the tool (overrides docstring YAML). 'function' or 'object'
-            mode:
-                description: Optional mode for the tool (overrides docstring YAML). 'api' or 'parsed'
+        """Initializes the Tool object, parsing its docstring YAML for description, parameters, and required fields.
+
+        Args:
+            obj: The object implementing the tool (generally a function).
+            name: Optional name for the tool (defaults to obj.__name__).
+            description: Optional description for the tool (overrides docstring YAML).
+            parameters: Optional parameters schema for the tool (overrides docstring YAML).
+            required: Optional required fields for the tool (overrides docstring YAML).
+            type: Optional type for the tool (overrides docstring YAML). 'function' or 'object'.
+            mode: Optional mode for the tool (overrides docstring YAML). 'api' or 'parsed'.
         """
         self.obj=obj
         self.type=type
@@ -47,13 +39,10 @@ class Tool:
         return self.obj(**kwargs)
 
     def parse_doc(self):
-        """
-        description: |
-            Parses the YAML docstring of the tool's function to extract description, parameters, and required fields.
-        returns:
-            description: str - The tool's description.
-            parameters: dict - The parameters schema.
-            required: list - The required parameter names.
+        """Parses the YAML docstring of the tool's function to extract metadata.
+
+        Returns:
+            modict: Schema containing description, parameters, and required fields.
         """
         import yaml
         from textwrap import dedent
@@ -78,11 +67,10 @@ class Tool:
         return modict(schema)
 
     def to_llm_client_format(self):
-        """
-        description: |
-            Converts the Tool object into a function tool schema dictionary suitable for OpenAI function calling.
-        returns:
-            tool: dict - The dictionary representation of the tool's callable schema.
+        """Converts the Tool object into a function tool schema suitable for OpenAI function calling.
+
+        Returns:
+            dict: The dictionary representation of the tool's callable schema.
         """
         properties=dict()
         for name,param in self.schema.get('parameters',{}).items():
@@ -108,10 +96,9 @@ class Tool:
         return tool
     
     def to_system_message(self):
-        """
-        description: |
-            Converts the Tool object into a system message dictionary suitable for OpenAI chat completions.
-        returns:
-            message: dict - The dictionary representation of the tool's system message.
+        """Converts the Tool object into a system message suitable for OpenAI chat completions.
+
+        Returns:
+            Message: System message containing the tool's schema.
         """
         return Message(role="system",content=f"Tool: {self.name}\nSchema:\n{json.dumps(self.to_llm_client_format(), indent=2, ensure_ascii=False)}")

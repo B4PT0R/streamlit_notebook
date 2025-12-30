@@ -105,3 +105,89 @@ Templates
    :members:
    :undoc-members:
    :show-inheritance:
+
+Agent Module
+------------
+
+The agent module provides AI assistant capabilities for streamlit-notebook, including
+conversational AI, tool calling, vision processing, and voice features.
+
+Agent
+~~~~~
+
+.. autoclass:: streamlit_notebook.agent.agent.Agent
+   :members:
+   :special-members: __init__
+   :show-inheritance:
+
+.. autoclass:: streamlit_notebook.agent.agent.AgentConfig
+   :members:
+   :show-inheritance:
+
+Message
+~~~~~~~
+
+.. autoclass:: streamlit_notebook.agent.message.Message
+   :members:
+   :special-members: __init__
+   :show-inheritance:
+
+.. autoclass:: streamlit_notebook.agent.message.MessageChunk
+   :members:
+   :show-inheritance:
+
+Image
+~~~~~
+
+.. autoclass:: streamlit_notebook.agent.image.Image
+   :members:
+   :special-members: __init__
+   :show-inheritance:
+
+Tool
+~~~~
+
+.. autoclass:: streamlit_notebook.agent.tool.Tool
+   :members:
+   :special-members: __init__
+   :show-inheritance:
+
+AI Client
+~~~~~~~~~
+
+.. automodule:: streamlit_notebook.agent.ai
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Voice Processing
+~~~~~~~~~~~~~~~~
+
+.. automodule:: streamlit_notebook.agent.voice
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+LaTeX Processing
+~~~~~~~~~~~~~~~~
+
+.. automodule:: streamlit_notebook.agent.latex
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Stream Utils
+~~~~~~~~~~~~
+
+.. automodule:: streamlit_notebook.agent.stream_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Agent Utilities
+~~~~~~~~~~~~~~~
+
+.. automodule:: streamlit_notebook.agent.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
