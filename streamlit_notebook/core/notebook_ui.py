@@ -89,8 +89,10 @@ class NotebookUI:
         self._prepare_skeleton()
 
         with self.main_container:
-            
-            self.logo()
+
+            if self.notebook.config.show_logo:
+                with self.logo_container:
+                    self.logo()
 
             for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
                 if cell in self.notebook.cells: # may have been removed by the time we get here
@@ -107,12 +109,10 @@ class NotebookUI:
         """
         Render the notebook logo.
         """
-        if self.notebook.config.show_logo:
-            with self.logo_container:
-                with st.container(horizontal=True, horizontal_alignment='center'):
-                    st.space(size='stretch')
-                    st.image(root_join("app_images", "st_notebook.png"),width=300)
-                    st.space(size='stretch')
+        with st.container(horizontal=True, horizontal_alignment='center'):
+            st.space(size='stretch')
+            st.image(root_join("app_images", "st_notebook.png"),width=300)
+            st.space(size='stretch')
 
     def _ensure_title_state(self) -> None:
         current_title = self.notebook.config.title
