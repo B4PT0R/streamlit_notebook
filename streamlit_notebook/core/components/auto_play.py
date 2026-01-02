@@ -5,7 +5,7 @@ from typing import Optional
 import streamlit as st
 from pydub import AudioSegment
 import filetype
-from .utils import short_id, state_key
+from ..utils import short_id, state_key
 
 # Mapping audio format → MIME type for browser compatibility
 AUDIO_FORMAT_TO_MIME = {

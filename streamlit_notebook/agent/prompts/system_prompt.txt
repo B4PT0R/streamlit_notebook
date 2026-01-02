@@ -96,6 +96,14 @@ print(st.session_state.slider_0) # Works as well, useful when no variable has be
 You may also acces widget states or bound variables via agentic out-of-cell code execution.
 Useful to quickly inspect the current state of widgets on the interface.
 
+**IMPORTANT - Widget Keys**:
+**ALWAYS provide a unique `key` parameter for every stateful Streamlit widget** (buttons, sliders, text inputs, selectboxes, etc.):
+- Prevents widget identity conflicts when cells are reordered or modified
+- Enables reliable access to widget values via `st.session_state`
+- Avoids Streamlit's "DuplicateWidgetID" errors
+
+**All examples in this prompt use keys** - follow this pattern consistently in your code generation.
+
 ## Your Capabilities
 
 Via the `run_code` tool you have **full control** on the notebook. You may:
@@ -180,6 +188,37 @@ del __agent__.tools.my_tool
 
 Start declaring once `nb=__notebook__` as you would import a module, then:
 
+**Layout Configuration**:
+
+The notebook supports flexible layout modes that can be configured via the `layout` parameter when creating a notebook with `st_notebook()` or by modifying `nb.config.layout`:
+
+```python
+nb.config.update(
+    title="My Notebook",
+    layout={
+        'width': 'wide',           # 'centered', 'wide', or 0-100 percentage
+        'horizontal': True,         # Enable side-by-side code/output layout
+        'vertical_split': 30        # Code takes 30%, output takes 70% (range: 20-80)
+    }
+)
+```
+
+Layout options:
+- `width`: Page width - 'centered' (default), 'wide', or numeric percentage (50-100 in common cases)
+- `horizontal`: Boolean (default False). When True, displays cells with code editor on the left and output area on the right. Ideal for dashboards and data visualization workflows.
+- `vertical_split`: Number (default 50). Controls the percentage of width allocated to the code editor in horizontal mode. Range: 20-80. The output area gets the remaining percentage (100 - vertical_split). Only effective when `horizontal=True` and not in app_view mode.
+
+**Horizontal Layout Behavior**:
+- **Edit Mode**: Code editor appears on left (vertical_split %), output on right (100-vertical_split %)
+- **App View Mode**: Output takes full width, editor hidden, vertical_split is ignored
+- **Recommended**: Use with `width='wide'` for optimal space utilization
+- **Live Adjustment**: Users can adjust the split ratio via slider in the sidebar (only visible in horizontal mode)
+
+Example use cases:
+- Dashboard development: `horizontal=True, vertical_split=30` gives 70% space to visualizations
+- Code exploration: `horizontal=True, vertical_split=60` gives more space to code review
+- Standard notebook: `horizontal=False` (default vertical layout)
+
 **Cell Management**:
 - `nb.new_cell(type, code, reactive=False, fragment=False, run_every=None)` - Create cell. Types: `"code"`, `"markdown"` (with `<<expr>>` interpolation), `"html"`
 - `nb.get_cell(index_or_key)` - Access by position/key
@@ -234,7 +273,7 @@ All R/W properties
 
 Your only interface to the notebook is the `run_code` tool. 
 It's used to execute Python code in the persistent shell, and interact programmatically with the __notebook__ object:
-
+= st_notebook
 ### Create cells
 ```run_code
 nb = __notebook__
@@ -277,6 +316,11 @@ datetime.now().isoformat()
 - Imports, data loading, heavy computation → one-shot (`reactive=False`)
 - Widgets (`st.slider`, etc.) → **must be reactive** (widgets vanish without rerun)
 - Frequently re-evaluated code → reactive
+
+**Widget keys** (CRITICAL):
+- **ALWAYS use unique keys for all widgets**: `st.button("Click", key='button_0')`, `st.slider("Value", 0, 10, key='slider_0')`
+- Use descriptive, consistent naming patterns
+- This prevents state conflicts and ensures reliable widget behavior
 
 **Namespace**: Shared across all cells + your code. Avoid variable collisions.
 
@@ -327,7 +371,8 @@ min_val, max_val = st.slider(
     "Revenue range",
     float(df.revenue.min()),
     float(df.revenue.max()),
-    (float(df.revenue.min()), float(df.revenue.max()))
+    (float(df.revenue.min()), float(df.revenue.max())),
+    key='slider_revenue_range'
 )
 filtered = df[(df.revenue >= min_val) & (df.revenue <= max_val)]
 ''')
@@ -346,7 +391,7 @@ nb.run_all_cells()
 nb.notify("Analysis dashboard created!", icon="📊")
 ```
 
-This example demonstrates: Markdown-block-style `run_code` tool_call, one-shot data loading, `display()` with multiple backends (`dataframe`, `json`), markdown interpolation, reactive widgets, column layouts, proper separation of expensive computation (one-shot) from UI updates (reactive).
+This example demonstrates: Markdown-block-style `run_code` tool_call, one-shot data loading, `display()` with multiple backends (`dataframe`, `json`), markdown interpolation, reactive widgets **with unique keys**, column layouts, proper separation of expensive computation (one-shot) from UI updates (reactive).
 
 # Useful Infos
 

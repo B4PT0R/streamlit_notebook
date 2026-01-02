@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Optional, Literal
 from code_editor import code_editor
-from .utils import state, short_id, rerun, state_key
+from ..utils import state, short_id, state_key
+from ..rerun import rerun
 import streamlit as st
 
 class editor_output_parser:
@@ -607,7 +608,7 @@ class Editor:
         This method is used to update the editor's visual representation by requiring a notebook rerun,
         typically after changes to its content or state.
         """
-        rerun()
+        rerun(debug_msg="cell_ui.refresh()")
         
 class CellUI(Editor):
 

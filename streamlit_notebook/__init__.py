@@ -48,7 +48,8 @@ def _just_trying_to_access_launch_app_entry_point() -> bool:
 
 # Avoid importing Streamlit during CLI startup to prevent bare-mode warnings.
 if not _just_trying_to_access_launch_app_entry_point():
-    from .core.utils import apply_global_patches, rerun, wait
+    from .core.utils import apply_global_patches
+    from .core.rerun import rerun, wait
     from .core.notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layout
     apply_global_patches()
     

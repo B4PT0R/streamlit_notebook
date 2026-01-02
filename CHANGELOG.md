@@ -2,20 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
-## 2025-12 (Latest)
+### v0.3.6
+
+- **Improved Horizontal Layout Mode**:
+  - output area of cells now pile up vertically in horizontal mode for better readability
+  
+- **Improved Shutdown Experience**:
+  - Enhanced shutdown dialog with centered spinners and progress indicators
+  - Clearer messages during cleanup and shutdown phases
+  - Smooth transition to goodbye message before server stops
+
+- **Improved rerun Mechanism and Debugging**:
+  - Added optional `debug_msg` parameter to `rerun()` for custom debug messages
+  - Prints debug info to console when `DEBUG` flag is enabled in `rerun.py`
+  - Helps trace rerun triggers during development
+  - fixed issue of to many reruns when opening a new notebook
+
+- **Demo Notebook Loading Fix**:
+  - Fixed issue where loading a notebook caused multiple reloads
+  - Now tracks last opened demo to prevent redundant loads
+  - Ensures smooth demo selection experience
+
+- **New Horizontal Layout Mode**: Display cells with code on left and output on right
+  - Enable via `layout={'horizontal': True}` or Settings panel
+  - Adjustable split ratio via `vertical_split` parameter (20-80%, default 50%)
+  - Live adjustment slider in sidebar (only visible in horizontal mode)
+  - Ideal for dashboard development and side-by-side code/visualization
+  - In app_view mode, output area takes full width (editor hidden, split ignored)
+  - In edit mode, configurable split between code editor and output areas
+  - Recommended to use with `layout={'width': 'wide'}` for optimal space
+
+- **Demo Notebooks (11 Progressive Tutorials)**:
+  - Complete tutorial series covering all features from basics to advanced usage
+  - Each notebook focuses on specific concepts with interactive examples
+
+- **Agent System Prompt Updates**:
+  - Added dedicated section emphasizing importance of widget keys
+  - All examples in agent prompt now include unique widget keys
+  - Best practices section updated to highlight widget key requirement
+
+- **Minimize/Expand All Cells**:
+  - New sidebar buttons to minimize or expand all cells at once
+  - `minimize_all()` method: Collapse all cells to hide code editors
+  - `expand_all()` method: Expand all cells to show code editors
+  - Available in both notebook and app modes
+  - Useful for presentations or focusing on outputs
+
+### v0.3.5
+
+Improved sphinx documentation
 
 ### v0.3.4
 
 - New Advanced settings panel with toggle button in cell UI
   - Fragment toggle moved from main UI to Advanced panel (saves UI space)
   - Added `run_every` parameter control for auto-refreshing fragments
-  
+
 - All notebook widgets use `state_key()` prefixer to avoid key collisions with user defined widgets in cells.
 
 - **API Change**: `nb.new_notebook()` removed - use `nb.open()` without arguments to create a new notebook
   - `nb.open()` creates new notebook with default title "new_notebook" (editable from UI)
   - `nb.open(path_or_code)` loads existing notebook from file path or code string
   - Cleaner, more intuitive API without parameter ambiguity
+
+- **Documentation**: Complete Sphinx documentation for agent module with Google-style docstrings
+
+### v0.3.3
+
+Minor bug fixes for v0.3.2 release cloud deployment
 
 ### v0.3.2
 
@@ -71,7 +125,9 @@ All notable changes to this project will be documented in this file.
 - Enhanced error messages and debugging output
 - Better fallback strategies for optional dependencies
 
-## 2025-11
+## older changes (can't remember exact versions)
+
+### 2025-11
 
 **Installation Changes:**
 - **Optional Dependencies**: Data science packages (matplotlib, pandas, numpy, etc.) are now optional
@@ -111,7 +167,7 @@ All notable changes to this project will be documented in this file.
 - Saved notebook `.py` files now use simpler API with `st_notebook()` factory and `nb.render()` method directly, instead of previous `get_notebook()` and `render_notebook()` helpers
   - **Migration**: Update existing notebook files to use new pattern shown in Quick Start
 
-## 2025-10
+### 2025-10
 
 **Major update:** Notebooks are now pure Python files (`.py`), not JSON.
 
@@ -121,16 +177,16 @@ All notable changes to this project will be documented in this file.
 - Locked App mode deployment option
 - Removed `.stnb` JSON format entirely
 
-## 2024-09
+### 2024-09
 - Improved shell behaviour
 - Implemented basic magic commands support
 
-## 2024-07
+### 2024-07
 
 - `.stnb` JSON format as default
 - `st_notebook` accepts file paths or JSON strings
 
-## 2024-06
+### 2024-06
 
 - Custom shell with AST-based execution
 - Expression display modes

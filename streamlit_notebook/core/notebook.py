@@ -45,7 +45,9 @@ from __future__ import annotations
 
 from .cell import Cell
 from .echo import echo
-from .utils import display, format, rerun, check_rerun, root_join, state, wait, state_key
+from .utils import format, root_join, state, state_key
+from .display import display
+from .rerun import rerun, check_rerun, wait
 from pynteract import Shell
 import streamlit as st
 import os
@@ -67,6 +69,10 @@ class Layout(modict):
             Defaults to "auto".
         menu_items: Dictionary of menu items to customize the hamburger menu.
             Can include "Get Help", "Report a bug", and "About" keys.
+        horizontal: Display cells horizontally (code left, output right). Ideal for dashboards.
+            Defaults to False. Note: In app_view mode, output takes full width regardless of split.
+        vertical_split: Relative width percentage of left column in horizontal mode (0-100).
+            50 means equal split. Defaults to 50. Ignored in app_view mode.
 
     Examples:
         Configure page layout::
@@ -75,11 +81,13 @@ class Layout(modict):
                 title="My Dashboard",
                 layout=Layout(
                     width="wide",
+                    horizontal=True,
+                    vertical_split=40,  # 40% code, 60% output
                     initial_sidebar_state="collapsed"
                 )
             )
 
-        
+
     """
     _config=modict.config(
         extra='ignore',
@@ -89,6 +97,8 @@ class Layout(modict):
     width: Union[int,float,Literal["centered", "wide"]] = "centered"
     initial_sidebar_state: Literal["auto", "expanded", "collapsed"] = "auto"
     menu_items: Optional[dict[str, str]] = None
+    horizontal: bool = False
+    vertical_split: Union[int, float] = 50
 
 class NotebookConfig(modict):
 
@@ -113,7 +123,10 @@ class NotebookConfig(modict):
             title="My Notebook",
             app_mode=True,
             no_quit=True,
-            layout={'width': "wide"}
+            layout={
+                'width': "wide",
+                'horizontal': True
+            }
         )
         nb = Notebook(**config)
     """
@@ -278,6 +291,7 @@ class Notebook:
         self._current_cell: Optional[Cell] = None
         self.current_code: Optional[str] = None
         self.initialized = False
+        self._layout_columns: Optional[tuple[Any, Any]] = None
 
         # Apply patches to Streamlit module
         self._apply_patches()
@@ -566,7 +580,7 @@ class Notebook:
 
         state[state_key("notebook")]._render()
 
-    def rerun(self, scope: str = "app", wait: bool | float = True) -> None:
+    def rerun(self, scope: str = "app", wait: bool | float = True, debug_msg: str = None) -> None:
         """Trigger a rerun of the notebook.
 
         This is the recommended way to trigger reruns in notebook cells,
@@ -613,8 +627,7 @@ class Notebook:
             :func:`~streamlit_notebook.utils.rerun`: Underlying implementation
             :meth:`wait`: Add delay without triggering rerun
         """
-        from .utils import rerun as utils_rerun
-        utils_rerun(scope=scope, wait=wait)
+        rerun(scope=scope, wait=wait, debug_msg=debug_msg)
 
     def wait(self, delay: bool | float = True) -> None:
         """Request a delay before any pending rerun.
@@ -653,8 +666,7 @@ class Notebook:
             :meth:`rerun`: Trigger a rerun
             :meth:`notify`: Show toast with automatic wait
         """
-        from .utils import wait as utils_wait
-        utils_wait(delay)
+        wait(delay)
 
     @staticmethod
     def is_valid_notebook(source: str) -> bool:
@@ -703,7 +715,7 @@ class Notebook:
         count = len(self.cells)
         self.cells = []
         self.notify(f"Cleared {count} cell{'s' if count != 1 else ''}", icon="🗑️")
-        rerun()
+        rerun(debug_msg="notebook.clear_cells()")
 
 
     def _reset_run_states(self) -> None:
@@ -789,7 +801,45 @@ class Notebook:
         self._reset_cells()
         self._init_shell()
         self.notify("Session restarted", icon="🔄")
-        rerun()
+        rerun(debug_msg="notebook.restart_session()")
+
+    def minimize_all(self) -> None:
+        """Minimize all cells in the notebook.
+
+        Sets all cells to minimized state, hiding their code editors.
+        This is useful for focusing on outputs or presenting results.
+
+        Provides user feedback via toast notification.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Minimize all cells programmatically
+                __notebook__.minimize_all()
+        """
+        for cell in self.cells:
+            cell.minimized = True
+        self.notify("All cells minimized", icon="🔽")
+        rerun(debug_msg="notebook.minimize_all()")
+
+    def expand_all(self) -> None:
+        """Expand all cells in the notebook.
+
+        Sets all cells to expanded state, showing their code editors.
+        This is useful for reviewing or editing code.
+
+        Provides user feedback via toast notification.
+
+        Examples:
+            From a code cell using ``__notebook__``::
+
+                # Expand all cells programmatically
+                __notebook__.expand_all()
+        """
+        for cell in self.cells:
+            cell.minimized = False
+        self.notify("All cells expanded", icon="🔼")
+        rerun(debug_msg="notebook.expand_all()")
 
     def quit(self) -> None:
         """Quit the Streamlit server cleanly.
@@ -832,12 +882,15 @@ class Notebook:
                 spinner_zone = st.empty()
                 st.space(size='stretch')
                 with spinner_zone:
-                    with st.spinner("Cleaning up...", width=120):
+                    with st.spinner("Cleaning up...", width=140):
                         # Allow time for UI to display
                         time.sleep(3)
-
-            # This won't actually display since the process will be killed
+                    with st.spinner("Shutting down...", width=140):
+                        # Allow time for UI to display
+                        time.sleep(1)
+                
             st.success("See you soon! ✨")
+            time.sleep(0.5)
 
         # Display the dialog
         show_goodbye()
@@ -906,7 +959,9 @@ class Notebook:
         code: str = "",
         reactive: bool = False,
         fragment: bool = False,
-        run_every: Optional[Union[int, float]] = None
+        minimized: bool = False,
+        run_every: Optional[Union[int, float]] = None,
+        _rerun_after: bool = True
     ) -> Cell:
         """Add a new cell to the notebook.
 
@@ -920,6 +975,8 @@ class Notebook:
             reactive: If True, the cell will automatically re-run when changed.
                 Defaults to False.
             fragment: If True, the cell will run as a Streamlit fragment.
+                Defaults to False.
+            minimized: If True, the cell code area will be minimized initially.
                 Defaults to False.
             run_every: Auto-rerun interval in seconds (Streamlit 1.52+, requires fragment=True).
                 None (default) disables auto-rerun. Can be int or float.
@@ -945,17 +1002,18 @@ class Notebook:
                 )
         """
         key = self._gen_cell_key()
-        cell = Cell(key, type=type, code=code, reactive=reactive, fragment=fragment, run_every=run_every)
-        return self.add_cell(cell)
+        cell = Cell(key, type=type, code=code, reactive=reactive, fragment=fragment, minimized=minimized, run_every=run_every)
+        return self.add_cell(cell, _rerun_after=_rerun_after)
 
-    def add_cell(self, cell: Cell) -> Cell:
+    def add_cell(self, cell: Cell, _rerun_after: bool = True) -> Cell:
         """Add an existing cell to the notebook."""
         cell.notebook=self
         self.cells.append(cell)
-        rerun()
+        if _rerun_after:
+            rerun(debug_msg=f"cell added: {cell.id}")
         return cell
     
-    def cell(self, type="code", reactive=False, fragment=False, run_every=None):
+    def cell(self, type="code", reactive=False, fragment=False, minimized=False, run_every=None):
         """
         Returns a decorator that adds a new cell created from a function's source code.
         Allows programmatic creation of cells from code defined in functions.
@@ -977,6 +1035,7 @@ class Notebook:
             type (str): The type of cell to create ("code", "markdown", or "html").
             reactive (bool): If True, the cell will automatically re-run when changed.
             fragment (bool): If True, the cell will run as a Streamlit fragment.
+            minimized (bool): If True, the cell code area will be minimized initially.
             run_every (int | float | None): Auto-rerun interval in seconds (requires fragment=True).
 
         Returns:
@@ -1015,7 +1074,8 @@ class Notebook:
                         lines=lines[:-1]
                         code="\n".join(lines)
 
-            return self.new_cell(type=type, code=code, reactive=reactive, fragment=fragment, run_every=run_every)
+            self.new_cell(type=type, code=code, reactive=reactive, fragment=fragment, minimized=minimized, run_every=run_every, _rerun_after=False)
+            return func
         return decorator
     
     def _get_source(self, func: Callable) -> str:
@@ -1246,8 +1306,7 @@ class Notebook:
         if notebook_key in state:
             del state[notebook_key]
 
-        # Rerun to execute the new script (with delay to show toast if called from UI)
-        rerun()
+        rerun(debug_msg=f"notebook.open()")
     
     def save(self, filepath=None) -> bool:
         """
@@ -1294,7 +1353,7 @@ class Notebook:
         with open(filepath,'w', encoding='utf-8') as f:
             f.write(current_script)
 
-        rerun()
+        rerun(debug_msg="notebook.save()")
 
         return True
             

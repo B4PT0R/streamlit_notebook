@@ -40,7 +40,7 @@ Examples:
 See Also:
     :class:`~streamlit_notebook.notebook.Notebook`: Notebook orchestrator
     :class:`~streamlit_notebook.cell.Cell`: Main Cell wrapper
-    :class:`~streamlit_notebook.cell_ui.CellUI`: Cell UI components
+    :class:`~streamlit_notebook.core.components.cell_ui.CellUI`: Cell UI components
 """
 
 from __future__ import annotations

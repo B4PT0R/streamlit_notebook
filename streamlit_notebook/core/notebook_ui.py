@@ -14,7 +14,7 @@ The :class:`NotebookUI` class handles:
 
 See Also:
     :class:`~streamlit_notebook.notebook.Notebook`: Core notebook orchestration
-    :class:`~streamlit_notebook.cell_ui.CellUI`: Cell UI components
+    :class:`~streamlit_notebook.core.components.cell_ui.CellUI`: Cell UI components
 """
 
 from __future__ import annotations
@@ -22,8 +22,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import streamlit as st
 import os
-from .utils import root_join, state, rerun, state_key
-from .chat import show_chat, init_chat, avatar, show_message
+from .utils import root_join, state, state_key
+from .rerun import rerun
+from .components.float_container import float_container
+from .chat import show_chat
 
 if TYPE_CHECKING:
     from .notebook import Notebook
@@ -33,7 +35,7 @@ class NotebookUI:
     """UI component handler for Notebook.
 
     This class manages all user interface elements for the notebook,
-    following the same pattern as :class:`~streamlit_notebook.cell_ui.CellUI`.
+    following the same pattern as :class:`~streamlit_notebook.core.components.cell_ui.CellUI`.
 
     Attributes:
         notebook: The parent :class:`~streamlit_notebook.notebook.Notebook` instance.
@@ -57,6 +59,23 @@ class NotebookUI:
         """
         self.notebook = notebook
 
+    def _prepare_skeleton(self) -> None:
+        """Prepare the UI skeleton for the notebook."""
+
+        self.main_container = st.container()
+        with self.main_container:
+            self.logo_container = st.empty()
+            if self.notebook.config.layout.horizontal and not self.notebook.config.app_view:
+                split = self.notebook.config.layout.vertical_split
+                left_weight = split / 100
+                right_weight = 1 - left_weight
+                editor_col, output_col = st.columns([left_weight, right_weight])
+                self.notebook._layout_columns = (editor_col, output_col)
+            else:
+                main_col = st.container()
+                self.notebook._layout_columns = (main_col, None)
+        
+
     def show(self) -> None:
         """Render the complete notebook UI.
 
@@ -66,14 +85,19 @@ class NotebookUI:
             3. Cells (delegated to each cell)
             4. Control bar (in notebook mode)
         """
-        if self.notebook.config.show_logo:
+
+        self._prepare_skeleton()
+
+        with self.main_container:
+            
             self.logo()
 
-        for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
-            if cell in self.notebook.cells: # may have been removed by the time we get here
-                cell.show()
+            for cell in list(self.notebook.cells):  # list to prevent issues if cells are modified during iteration
+                if cell in self.notebook.cells: # may have been removed by the time we get here
+                    cell.show()
 
-        self.control_bar()
+
+            self.control_bar()
 
         # we draw the sidebar after the cells so that any long running operation from the sidebar (eg. chat) does not block the main UI
         # the user may thus look at the cells while the agent explains the code
@@ -83,10 +107,12 @@ class NotebookUI:
         """
         Render the notebook logo.
         """
-        with st.container(horizontal=True, horizontal_alignment='center'):
-            st.space(size='stretch')
-            st.image(root_join("app_images", "st_notebook.png"),width=300)
-            st.space(size='stretch')
+        if self.notebook.config.show_logo:
+            with self.logo_container:
+                with st.container(horizontal=True, horizontal_alignment='center'):
+                    st.space(size='stretch')
+                    st.image(root_join("app_images", "st_notebook.png"),width=300)
+                    st.space(size='stretch')
 
     def _ensure_title_state(self) -> None:
         current_title = self.notebook.config.title
@@ -161,10 +187,26 @@ class NotebookUI:
 
             def on_change():
                 self.notebook.config.layout.width=state[state_key("slider_width")]
-                #rerun()
+
             width=self.notebook.config.layout.width
             current_width=68 if width=="centered" else 100 if width=="wide" else width
             st.slider("Layout Width (%)", min_value=60, max_value=100, value=current_width, step=1, key=state_key("slider_width"), on_change=on_change)
+
+            # Vertical split slider (only visible in horizontal layout mode)
+            if self.notebook.config.layout.horizontal:
+                def on_split_change():
+                    self.notebook.config.layout.vertical_split = state[state_key("slider_vertical_split")]
+                st.slider(
+                    "Code/Output Split (%)",
+                    min_value=20,
+                    max_value=80,
+                    value=int(self.notebook.config.layout.vertical_split),
+                    step=5,
+                    key=state_key("slider_vertical_split"),
+                    on_change=on_split_change,
+                    help="Adjust the relative width of code editor vs output area"
+                )
+
             st.divider()
 
             if self.notebook.config.app_mode:
@@ -192,6 +234,9 @@ class NotebookUI:
 
             # Demo notebooks
             if st.button("Demo notebooks", width='stretch', key=state_key("button_load_demo")):
+                state[state_key("show_open_demo")] = not state.get(state_key("show_open_demo"), False)
+
+            if state.get(state_key("show_open_demo"), False):    
                 self.load_demo()
 
             # New notebook button
@@ -203,8 +248,7 @@ class NotebookUI:
 
             # Open button with expandable section
             if st.button("Open notebook", width='stretch', key=state_key("button_open_notebook_trigger")):
-                show_open_key = state_key("show_open_dialog")
-                state[show_open_key] = not state.get(show_open_key, False)
+                state[state_key("show_open_dialog")] = not state.get(state_key("show_open_dialog"), False)
 
             if state.get(state_key("show_open_dialog"), False):
                 with st.container():
@@ -231,12 +275,36 @@ class NotebookUI:
                     self.notebook.config.show_logo = not self.notebook.config.show_logo
                 st.toggle("Show logo", value=self.notebook.config.show_logo, on_change=on_change, key=state_key("toggle_show_logo"))
 
+            # Minimize/Expand all cells buttons
+            c,d=st.columns(2,gap='small')
+            with c:
+                if st.button("🔽 Minimize All", key=state_key("button_minimize_all_notebook"), type="tertiary"):
+                    self.notebook.minimize_all()
+            with d:
+                if st.button("🔼 Expand All", key=state_key("button_expand_all_notebook"), type="tertiary"):
+                    self.notebook.expand_all()
+
             def on_change():
                 self.notebook.config.layout.width=state[state_key("slider_width")]
-                #rerun()
+
             width=self.notebook.config.layout.width
             current_width=68 if width=="centered" else 100 if width=="wide" else width
             st.slider("Layout Width (%)", min_value=60, max_value=100, value=current_width, step=1, key=state_key("slider_width"), on_change=on_change)
+
+            # Vertical split slider (only visible in horizontal layout mode)
+            if self.notebook.config.layout.horizontal:
+                def on_split_change():
+                    self.notebook.config.layout.vertical_split = state[state_key("slider_vertical_split")]
+                st.slider(
+                    "Code/Output Split (%)",
+                    min_value=20,
+                    max_value=80,
+                    value=int(self.notebook.config.layout.vertical_split),
+                    step=5,
+                    key=state_key("slider_vertical_split"),
+                    on_change=on_split_change,
+                    help="Adjust the relative width of code editor vs output area"
+                )
 
             st.divider()
 
@@ -282,8 +350,12 @@ class NotebookUI:
                 self.notebook.config.show_stderr = state[state_key("toggle_show_stderr")]
             st.toggle("Show stderr output", value=self.notebook.config.show_stderr, on_change=on_change, key=state_key("toggle_show_stderr"))
 
+            def on_change():
+                self.notebook.config.layout.horizontal = state[state_key("toggle_horizontal_layout")]
+            st.toggle("Horizontal layout", value=self.notebook.config.layout.horizontal, on_change=on_change, key=state_key("toggle_horizontal_layout"), help="Display cells horizontally: code on left, output on right (ideal for dashboards)")
+
             if st.button("Close", width='stretch', type="primary", key=state_key("settings_close")):
-                rerun(wait=False)
+                rerun(wait=False, debug_msg="settings dialog close button")
 
         if st.button("⚙️ Settings", width='stretch', key=state_key("button_open_settings")):
             show_settings()
@@ -314,7 +386,40 @@ class NotebookUI:
             Only shown in edit mode (hidden in app view).
         """
         if not self.notebook.config.app_view:
-            with st.container(gap="small", border=True):
+            float_css = """
+                position: fixed;
+                left: __parent__.geometry.center;
+                transform: translateX(-50%);
+                bottom: 0.75rem;
+                z-index: 1000;
+                width: 33vw;
+                max-width: 640px;
+                min-width: 360px;
+                background-color: __theme__.background-color-alpha;
+                backdrop-filter: blur(10px);
+                border: 1px solid __theme__.border-color;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                border-radius: 12px;
+                padding: 1rem 1rem 1rem;
+            """
+            document_css = """
+                @media (max-width: 640px) {
+                    __child__ {
+                        width: 90vw;
+                        min-width: unset;
+                        max-width: 90vw;
+                        bottom: 0.5rem;
+                    }
+                }
+            """
+            with st.container(gap="small", border=False):
+                float_container(
+                    ref="notebook-main",
+                    container_css=float_css,
+                    document_css=document_css,
+                    padding_bottom="7.5rem",
+                    alpha=0.35,
+                )
                 a,b,c=st.columns(3,gap="small")
                 with a:
                     def on_click():
@@ -352,22 +457,29 @@ class NotebookUI:
 
         Provides user feedback via toast notifications for success and errors.
         """
+
+        source = None
+        name = "unknown"
+
         demo_folder = root_join("demo_notebooks")
-        demos = [f for f in os.listdir(demo_folder) if f.endswith('.py')]
+        demos = sorted([f for f in os.listdir(demo_folder) if f.endswith('.py')])
+        selected=st.selectbox("Choose a demo notebook.", options=demos, index=None, key=state_key("demo_choice"))
 
-        def on_change():
-            demo_choice_key = state_key("demo_choice")
-            if state.get(demo_choice_key):
-                filepath = os.path.join(demo_folder, state[demo_choice_key])
-                try:
-                    self.notebook.open(filepath)
-                    self.notebook.notify(f"Loaded demo: {state[demo_choice_key]}", icon="📚")
-                except ValueError as e:
-                    self.notebook.notify(str(e), icon="⚠️")
-                except Exception as e:
-                    self.notebook.notify(f"Failed to load demo: {str(e)}", icon="⚠️")
-
-        st.selectbox("Choose a demo notebook.", options=demos, index=None, on_change=on_change, key=state_key("demo_choice"))
+        if selected and not selected == state.get(state_key("last_opened_notebook"), None):
+            # Clear immediately to prevent re-triggering
+            source = os.path.join(demo_folder, selected)
+            name = selected
+            state[state_key("last_opened_notebook")] = source
+            
+        if source is not None:
+            try:
+                self.notebook.open(source)
+                self.notebook.notify(f"Loaded demo: {name}", icon="📚")
+                state[state_key("show_open_demo")] = False
+            except ValueError as e:
+                self.notebook.notify(str(e), icon="⚠️")
+            except Exception as e:
+                self.notebook.notify(f"Failed to load demo: {str(e)}", icon="⚠️")
 
     def save_notebook(self) -> None:
         """Render the save notebook button with menu.
@@ -417,7 +529,7 @@ class NotebookUI:
                         file_name=filename,
                         mime="text/x-python",
                         key=state_key("button_download_notebook"),
-                        use_container_width=True
+                        width="stretch"
                     )
 
     def open_notebook(self) -> None:
@@ -435,8 +547,13 @@ class NotebookUI:
         See Also:
             :meth:`~streamlit_notebook.notebook.Notebook.open`: Core open logic
         """
+        
+        source = None
+        name = "unknown"
+        
         # File uploader for drag and drop (only if not in locked app mode)
         if not self.notebook.config.app_mode:
+
             uploaded_file = st.file_uploader(
                 "📎 Drop a notebook file here or browse",
                 type=['py'],
@@ -447,13 +564,8 @@ class NotebookUI:
             if uploaded_file is not None:
                 try:
                     # Read the uploaded file
-                    code = uploaded_file.read().decode('utf-8')
-
-                    # Open the notebook from the code string
-                    self.notebook.open(code)
-                    self.notebook.notify(f"Opened notebook: {uploaded_file.name}", icon="📂")
-                    # Close the open dialog
-                    state[state_key("show_open_dialog")] = False
+                    source = uploaded_file.read().decode('utf-8')
+                    name = uploaded_file.name
                 except ValueError as e:
                     self.notebook.notify(str(e), icon="⚠️")
                 except Exception as e:
@@ -472,26 +584,29 @@ class NotebookUI:
 
         if not notebook_files:
             st.info("No notebook files (.py) found in current directory")
-            return
+        else:        
+            selected = st.selectbox(
+                "Or select from current directory",
+                options=notebook_files,
+                index=None,
+                key=state_key("open_notebook_choice")
+            )
 
-        def on_change():
-            open_choice_key = state_key("open_notebook_choice")
-            if state.get(open_choice_key):
-                filepath = os.path.join(cwd, state[open_choice_key])
-                try:
-                    self.notebook.open(filepath)
-                    self.notebook.notify(f"Opened notebook: {state[open_choice_key]}", icon="📂")
-                    # Close the open dialog
-                    state[state_key("show_open_dialog")] = False
-                except ValueError as e:
-                    self.notebook.notify(str(e), icon="⚠️")
-                except Exception as e:
-                    self.notebook.notify(f"Failed to open: {str(e)}", icon="⚠️")
+            if selected and not selected == state.get(state_key("last_opened_notebook"), None):
+                source = os.path.join(cwd, selected)
+                name = selected
+                state[state_key("last_opened_notebook")] = source
 
-        st.selectbox(
-            "Or select from current directory",
-            options=notebook_files,
-            index=None,
-            on_change=on_change,
-            key=state_key("open_notebook_choice")
-        )
+        if source is not None:
+            # Now safely open the notebook
+            try:
+                self.notebook.open(source)
+                self.notebook.notify(f"Opened notebook: {name}", icon="📂")
+                # Close the open dialog
+                state[state_key("show_open_dialog")] = False
+            except ValueError as e:
+                self.notebook.notify(str(e), icon="⚠️")
+            except Exception as e:
+                self.notebook.notify(f"Failed to open: {str(e)}", icon="⚠️")
+
+            

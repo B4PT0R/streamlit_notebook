@@ -1,10 +1,11 @@
 import streamlit as st
-from .utils import root_join, rerun, short_id, state_key
+from .utils import root_join, short_id, state_key
+from .rerun import rerun
 import os
 import json
 from ..core.notebook import get_notebook
 from datetime import datetime
-from .auto_play import auto_play
+from .components.auto_play import auto_play
 from modict import modict
 
 # Optional agent imports
@@ -304,11 +305,11 @@ def settings_dialog():
                 save_settings(agent, new_settings)
 
                 st.success("Settings saved!")
-                rerun(wait=False)
+                rerun(wait=False, debug_msg="chat settings saved")
 
         with col2:
             if st.button("Cancel", width='stretch', key=state_key("chat_settings_cancel")):
-                rerun(wait=False)
+                rerun(wait=False, debug_msg="chat settings cancelled")
     
         st.space(size='stretch')
 
@@ -494,14 +495,14 @@ def show_chat():
                 # Load selected session if different from current
                 if selected_session != agent.current_session_id:
                     agent.load_session(selected_session)
-                    rerun()
+                    rerun(debug_msg="chat session loaded")
 
         with col2:
             # New session button
             st.caption("Or create a new one")
             if st.button("➕ New Session", width='stretch', help="Démarrer une nouvelle session", key=state_key("chat_new_session_button")):
                 agent.start_new_session()
-                rerun()
+                rerun(debug_msg="new chat session started")
 
         if st.button("⚙️ Settings", width='stretch', help="Chat and AI settings", key=state_key("chat_settings_button")):
             settings_dialog()

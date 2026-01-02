@@ -6,7 +6,9 @@ cell management, UI rendering, and utilities.
 
 from .notebook import Notebook, st_notebook, get_notebook, NotebookConfig, Layout
 from .cell import Cell
-from .utils import rerun, wait, display, format, check_rerun, root_join, state
+from .utils import format, root_join, state
+from .rerun import rerun, wait
+from .display import display
 from .echo import echo
 from pynteract import Shell
 

@@ -18,8 +18,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, Literal
 import streamlit as st
 from streamlit.errors import DuplicateWidgetID, StreamlitDuplicateElementKey
-from .utils import format, short_id, rerun, display
-from .cell_ui import CellUI, Code
+from .utils import format, short_id
+from .rerun import rerun
+from .display import display
+from .components.cell_ui import CellUI, Code
 
 if TYPE_CHECKING:
     from .cell import Cell
@@ -182,7 +184,7 @@ class BaseCellType:
         self._code.from_backend(value)
         self.ui_key = short_id() # Force rerender of the ui
         self.reset()
-        rerun()
+        rerun(debug_msg=f"cell code changed: {self.key}")
 
     @property
     def has_run_once(self) -> bool:
@@ -240,7 +242,7 @@ class BaseCellType:
             # Trigger UI update if needed
             if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Reactive' in self.ui.buttons:
                 self.ui.buttons['Reactive'].toggled = value
-                rerun()
+                rerun(debug_msg=f"cell reactive toggled: {self.key}")
 
     @property
     def fragment(self) -> bool:
@@ -255,7 +257,7 @@ class BaseCellType:
             # Trigger UI update if needed
             if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Fragment' in self.ui.buttons:
                 self.ui.buttons['Fragment'].toggled = value
-                rerun()
+                rerun(debug_msg=f"cell fragment toggled: {self.key}")
 
     @property
     def minimized(self) -> bool:
@@ -270,7 +272,7 @@ class BaseCellType:
             # Trigger UI update if needed
             if hasattr(self, 'ui') and hasattr(self.ui, 'buttons') and 'Minimized' in self.ui.buttons:
                 self.ui.buttons['Minimized'].toggled = value
-                rerun()
+                rerun(debug_msg=f"cell minimized toggled: {self.key}")
 
     @property
     def run_every(self) -> Optional[int | float]:
@@ -283,7 +285,7 @@ class BaseCellType:
         if self._run_every != value:
             self._run_every = value
             # Trigger rerun to update fragment decorator
-            rerun()
+            rerun(debug_msg=f"cell run_every changed: {self.key}")
 
     def get_config(self):
         """Get a CellConfig object representing the current cell configuration.
@@ -373,9 +375,16 @@ class BaseCellType:
         """
         Prepares the various containers used to display the cell UI and its outputs.
         """
-        self.container=st.container()
-        self._advanced_area=st.empty()
-        self.output_area=st.empty()
+
+        editor_col, output_col = self.notebook._layout_columns if self.notebook._layout_columns else (None, None)
+        output_col= output_col if output_col is not None else editor_col
+
+        with editor_col:
+            self.container=st.container()
+            self._advanced_area=st.empty()
+        with output_col:
+            self.output_area=st.container()
+
         self.ready=True
         # flag used by self.run() and shell hooks to signal that the cell has prepared the adequate containers to receive outputs
         self.initialize_output_area()
@@ -551,13 +560,13 @@ class BaseCellType:
                 with self.display_area:
                     self._exec()
                 if never_ran:
-                    # First run ever - rerun to ensure proper UI "checkmark" update 
-                    rerun()  
+                    # First run ever - rerun to ensure proper UI "checkmark" update
+                    rerun(debug_msg=f"first run completed: {self.key}")
             else:
                 # The cell skeleton isn't on screen yet
                 # The code runs anyway, but the outputs will be shown after a refresh
                 self._exec()
-                rerun()   
+                rerun(debug_msg=f"cell ran before skeleton ready: {self.key}")   
 
     def _exec(self):
         """
@@ -637,14 +646,12 @@ class BaseCellType:
         if self.notebook.config.run_on_submit:
             self.has_run=False
             self.run()
-            #self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def _run_callback(self):
         """
         Callback used to deal with the "run" event from the ui.
         """
         self.run()
-        #self.notebook.notify(f"Executed `{self.id}`", icon="▶️")
 
     def _toggle_reactive(self):
         """Toggles the 'Auto-Rerun' feature for the cell (internal)."""
@@ -674,7 +681,7 @@ class BaseCellType:
             self.cell._cell_type = Cell._supported_types[new_type](self.cell, self.key, new_type, self.code, self.reactive, self.fragment, self.minimized)
         else:
             raise ValueError(f"Invalid cell type: {new_type}. Must be 'code', 'markdown', or 'html'")
-        rerun()
+        rerun(debug_msg=f"cell type changed to {new_type}: {self.key}")
 
     def _reindex(self,index:int):
         """
@@ -688,7 +695,7 @@ class BaseCellType:
             self.notebook.cells.remove(self.cell)
             # Insert at new position
             self.notebook.cells.insert(index, self.cell)
-            rerun()
+            rerun(debug_msg=f"cell moved to index {index}: {self.key}")
 
     # Public methods
 
@@ -724,7 +731,7 @@ class BaseCellType:
         cell.notebook=self.notebook
         # Insert at current index
         self.notebook.cells.insert(self.index, cell)
-        rerun()
+        rerun(debug_msg=f"cell inserted above: {self.key}")
         return cell
 
     def insert_below(self, type: str = "code", code: str = "", reactive: bool = False, fragment: bool = False):
@@ -743,7 +750,7 @@ class BaseCellType:
         cell.notebook=self.notebook
         # Insert after current position
         self.notebook.cells.insert(self.index + 1, cell)
-        rerun()
+        rerun(debug_msg=f"cell inserted below: {self.key}")
         return cell
 
     def delete(self):
@@ -751,8 +758,8 @@ class BaseCellType:
         Deletes the cell from the notebook.
         """
         if self.cell in self.notebook.cells:
+            rerun(debug_msg=f"cell deleted: {self.key}")
             self.notebook.cells.remove(self.cell)
-            rerun()
 
     def reset(self):
         """
